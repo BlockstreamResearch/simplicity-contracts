@@ -1,0 +1,16 @@
+[package]
+name = "contracts"
+version = "0.1.0"
+edition = "2024"
+description = "Simplicity contract templates and helpers (DCD, Options)"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+bincode = "2.0.1"
+
+hex = { workspace = true }
+anyhow = { workspace = true }
+
+simplicityhl = { workspace = true }
+
+simplicityhl-core = { path = "../simplicityhl-core", features = ["encoding"] }
