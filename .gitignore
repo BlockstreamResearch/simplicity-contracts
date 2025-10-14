@@ -1,0 +1,12 @@
+# Build output
+/target/
+
+# IDE/editors (optional but common minimal)
+**/.DS_Store
+.idea/
+.vscode/
+.cache
+
+# Debugging data
+logs.md
+tmp_vendor

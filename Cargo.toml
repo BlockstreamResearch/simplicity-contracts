@@ -1,0 +1,18 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/*"
+]
+
+[workspace.package]
+license = "MIT OR Apache-2.0"
+edition = "2024"
+
+[workspace.dependencies]
+ring = "0.17.14"
+sha2 = { version = "0.10.9", features = ["compress"] }
+
+hex = "0.4.3"
+anyhow = "1"
+
+simplicityhl = { version = "0.2.0", features = ["serde"] }

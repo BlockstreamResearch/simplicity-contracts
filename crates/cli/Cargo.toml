@@ -1,0 +1,23 @@
+[package]
+name = "cli"
+version = "0.1.0"
+edition = "2024"
+description = "Simplicity helper CLI for Liquid testnet"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+
+[dependencies]
+sled = "0.34.7"
+
+dotenvy = "0.15"
+clap = { version = "4.5", features = ["derive"] }
+config = { version = "0.15.16", default-features = true }
+
+hex = { workspace = true }
+anyhow = { workspace = true }
+
+contracts = { path = "../contracts" }
+
+simplicityhl = { workspace = true }
+
+simplicityhl-core = { path = "../simplicityhl-core" }
