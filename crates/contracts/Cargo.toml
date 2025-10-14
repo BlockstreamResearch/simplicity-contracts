@@ -2,7 +2,7 @@
 name = "contracts"
 version = "0.1.0"
 edition = "2024"
-description = "Simplicity contract templates and helpers (DCD, Options)"
+description = "Simplicity contract templates and helpers"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
