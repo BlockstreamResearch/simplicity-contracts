@@ -7,15 +7,12 @@ use contracts::build_witness::TokenBranch;
 use contracts::{OptionsArguments, finalize_options_funding_path_transaction, get_options_program};
 
 use std::str::FromStr;
-use std::sync::Arc;
 
-use simplicityhl::simplicity::bitcoin::XOnlyPublicKey;
 use simplicityhl::simplicity::bitcoin::secp256k1::SecretKey;
 use simplicityhl_core::{
-    Encodable, LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_GENESIS, RunnerLogLevel,
-    TaprootPubkeyGen, broadcast_tx, control_block, create_p2tr_address, fetch_utxo,
-    finalize_p2pk_transaction, get_new_asset_entropy, get_p2pk_address, get_random_seed,
-    run_program,
+    Encodable, LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_GENESIS, TaprootPubkeyGen,
+    broadcast_tx, fetch_utxo, finalize_p2pk_transaction, finalize_transaction,
+    get_new_asset_entropy, get_p2pk_address, get_random_seed,
 };
 
 use simplicityhl::simplicity::elements::confidential::{AssetBlindingFactor, ValueBlindingFactor};
@@ -24,18 +21,15 @@ use simplicityhl::simplicity::elements::pset::{Input, Output, PartiallySignedTra
 use simplicityhl::simplicity::elements::secp256k1_zkp::Secp256k1;
 use simplicityhl::simplicity::elements::secp256k1_zkp::rand::thread_rng;
 use simplicityhl::simplicity::elements::{
-    AddressParams, AssetId, LockTime, Script, Sequence, Transaction, TxInWitness, TxOut,
-    TxOutSecrets,
+    AddressParams, AssetId, LockTime, Script, Sequence, Transaction, TxOutSecrets,
 };
 use simplicityhl::simplicity::hashes::sha256;
 
-use simplicityhl::CompiledProgram;
 use simplicityhl::elements::bitcoin::secp256k1;
 use simplicityhl::elements::pset::serialize::Serialize;
 use simplicityhl::elements::{OutPoint, confidential};
 use simplicityhl::simplicity::ToXOnlyPubkey;
 use simplicityhl::simplicity::hex::DisplayHex;
-use simplicityhl::simplicity::jet::elements::{ElementsEnv, ElementsUtxo};
 
 #[derive(Subcommand, Debug)]
 pub enum Options {
@@ -845,18 +839,24 @@ impl Options {
 
                 let utxos = vec![cov_utxo, option_utxo, asset_utxo_out, fee_utxo_out];
                 let options_program = get_options_program(&option_arguments)?;
-                let tx = finalize_options_spend_transaction(
-                    pst.extract_tx()?,
-                    &taproot_pubkey_gen.pubkey.to_x_only_pubkey(),
-                    &options_program,
-                    &utxos,
-                    0,
+
+                let witness_values = contracts::build_witness::build_option_witness(
                     TokenBranch::OptionToken,
                     contracts::build_witness::OptionBranch::Exercise {
                         amount_to_burn: *amount_to_burn,
                         collateral_amount_to_get,
                         asset_amount: asset_amount_to_pay,
                     },
+                );
+                let tx = finalize_transaction(
+                    pst.extract_tx()?,
+                    &options_program,
+                    &taproot_pubkey_gen.pubkey.to_x_only_pubkey(),
+                    &utxos,
+                    0,
+                    witness_values,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
                 )?;
                 let tx = finalize_p2pk_transaction(
                     tx,
@@ -1031,18 +1031,23 @@ impl Options {
                 let utxos = vec![target_utxo, grantor_utxo, fee_lbtc_utxo];
                 let options_program = get_options_program(&option_arguments)?;
 
-                let tx = finalize_options_spend_transaction(
-                    tx,
-                    &taproot_pubkey_gen.pubkey.to_x_only_pubkey(),
-                    &options_program,
-                    &utxos,
-                    0,
+                let witness_values = contracts::build_witness::build_option_witness(
                     TokenBranch::GrantorToken,
                     contracts::build_witness::OptionBranch::Exercise {
                         amount_to_burn: *grantor_token_amount_to_burn,
                         collateral_amount_to_get: 0,
                         asset_amount,
                     },
+                );
+                let tx = finalize_transaction(
+                    tx,
+                    &options_program,
+                    &taproot_pubkey_gen.pubkey.to_x_only_pubkey(),
+                    &utxos,
+                    0,
+                    witness_values,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
                 )?;
 
                 // sign grantor token input
@@ -1191,18 +1196,23 @@ impl Options {
                 tx.input[2].sequence = Sequence::ENABLE_LOCKTIME_NO_RBF;
 
                 let utxos = vec![cov_utxo, grantor_utxo, fee_utxo_out];
-                let options_program = get_options_program(&option_arguments)?;
-                let tx = finalize_options_spend_transaction(
-                    tx,
-                    &taproot_pubkey_gen.pubkey.to_x_only_pubkey(),
-                    &options_program,
-                    &utxos,
-                    0,
+                let witness_values = contracts::build_witness::build_option_witness(
                     TokenBranch::GrantorToken,
                     contracts::build_witness::OptionBranch::Expiry {
                         grantor_token_amount_to_burn: *grantor_token_amount_to_burn,
                         collateral_amount_to_withdraw: collateral_amount,
                     },
+                );
+                let options_program = get_options_program(&option_arguments)?;
+                let tx = finalize_transaction(
+                    tx,
+                    &options_program,
+                    &taproot_pubkey_gen.pubkey.to_x_only_pubkey(),
+                    &utxos,
+                    0,
+                    witness_values,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
                 )?;
                 let tx = finalize_p2pk_transaction(
                     tx,
@@ -1372,17 +1382,23 @@ impl Options {
 
                 let utxos = vec![cov_utxo, option_utxo, grantor_utxo, fee_utxo_out];
                 let options_program = get_options_program(&option_arguments)?;
-                let tx = finalize_options_spend_transaction(
-                    tx,
-                    &taproot_pubkey_gen.pubkey.to_x_only_pubkey(),
-                    &options_program,
-                    &utxos,
-                    0,
+
+                let witness_values = contracts::build_witness::build_option_witness(
                     TokenBranch::OptionToken,
                     contracts::build_witness::OptionBranch::Cancellation {
                         amount_to_burn: *amount_to_burn,
                         collateral_amount_to_withdraw,
                     },
+                );
+                let tx = finalize_transaction(
+                    tx,
+                    &options_program,
+                    &taproot_pubkey_gen.pubkey.to_x_only_pubkey(),
+                    &utxos,
+                    0,
+                    witness_values,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
                 )?;
 
                 // sign option token input
@@ -1423,69 +1439,4 @@ impl Options {
             }
         }
     }
-}
-
-/// Attach a Simplicity witness for an options spend path on the specified input
-fn finalize_options_spend_transaction(
-    mut tx: Transaction,
-    options_public_key: &XOnlyPublicKey,
-    options_program: &CompiledProgram,
-    utxos: &[TxOut],
-    input_index: usize,
-    token_branch: TokenBranch,
-    branch: contracts::build_witness::OptionBranch,
-) -> anyhow::Result<Transaction> {
-    let cmr = options_program.commit().cmr();
-
-    anyhow::ensure!(
-        utxos.len() > input_index,
-        "UTXOs must be greater than input index"
-    );
-
-    let target_utxo = &utxos[input_index];
-    let script_pubkey =
-        create_p2tr_address(cmr, options_public_key, &AddressParams::LIQUID_TESTNET)
-            .script_pubkey();
-
-    anyhow::ensure!(
-        target_utxo.script_pubkey == script_pubkey,
-        "Expected the UTXO to be spent by Options to have the same script"
-    );
-
-    let env: ElementsEnv<Arc<Transaction>> = ElementsEnv::new(
-        Arc::new(tx.clone()),
-        utxos
-            .iter()
-            .map(|utxo| ElementsUtxo {
-                script_pubkey: utxo.script_pubkey.clone(),
-                asset: utxo.asset,
-                value: utxo.value,
-            })
-            .collect(),
-        input_index as u32,
-        cmr,
-        control_block(cmr, *options_public_key),
-        None,
-        *LIQUID_TESTNET_GENESIS,
-    );
-
-    let witness_values = contracts::build_witness::build_option_witness(token_branch, branch);
-    let pruned = run_program(options_program, witness_values, env, RunnerLogLevel::None)?.0;
-
-    let (simplicity_program_bytes, simplicity_witness_bytes) = pruned.to_vec_with_witness();
-    let cmr = pruned.cmr();
-
-    tx.input[input_index].witness = TxInWitness {
-        amount_rangeproof: None,
-        inflation_keys_rangeproof: None,
-        script_witness: vec![
-            simplicity_witness_bytes,
-            simplicity_program_bytes,
-            cmr.as_ref().to_vec(),
-            control_block(cmr, *options_public_key).serialize(),
-        ],
-        pegin_witness: vec![],
-    };
-
-    Ok(tx)
 }
