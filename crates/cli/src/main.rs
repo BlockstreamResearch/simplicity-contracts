@@ -2,7 +2,7 @@
 //!
 //! This binary exposes multiple subcommand groups to work with Liquid testnet:
 //! - `basic`: P2PK utilities such as deriving addresses and building simple transfers.
-//! - `options`: Utilities for the options prototype (address derivation and funding paths).
+//! - `options`: Utilities for the options contract (address derivation and funding paths).
 //!
 //! Run `simplicity-cli --help` or any subcommand with `--help` for usage.
 
@@ -35,7 +35,7 @@ enum Commands {
         #[command(subcommand)]
         basic: Box<Basic>,
     },
-    /// Options prototype utilities (creation and funding paths)
+    /// Options contract utilities (creation and funding paths)
     Options {
         #[command(subcommand)]
         options: Box<Options>,

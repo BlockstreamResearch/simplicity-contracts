@@ -96,7 +96,7 @@ pub enum Options {
         #[arg(long = "broadcast")]
         broadcast: bool,
     },
-    /// Exercise path: burn option tokens and settle against target asset (prototype)
+    /// Exercise path: burn option tokens and settle against target asset
     ExerciseOption {
         /// Collateral UTXO at the options address (LBTC)
         #[arg(long = "collateral-utxo")]
@@ -126,7 +126,7 @@ pub enum Options {
         #[arg(long = "broadcast")]
         broadcast: bool,
     },
-    /// Settlement path: burn grantor tokens against target asset held by the covenant (prototype)
+    /// Settlement path: burn grantor tokens against target asset held by the covenant (contract)
     SettlementOption {
         /// Target asset UTXO at the options address
         #[arg(long = "target-asset-utxo")]
@@ -153,7 +153,7 @@ pub enum Options {
         #[arg(long = "broadcast")]
         broadcast: bool,
     },
-    /// Expiry path: burn grantor tokens and withdraw collateral to P2PK (prototype)
+    /// Expiry path: burn grantor tokens and withdraw collateral to P2PK (contract)
     ExpiryOption {
         /// Collateral UTXO at the options address (LBTC)
         #[arg(long = "collateral-utxo")]
@@ -180,7 +180,7 @@ pub enum Options {
         #[arg(long = "broadcast")]
         broadcast: bool,
     },
-    /// Cancellation path: burn both tokens and withdraw some collateral to P2PK (prototype)
+    /// Cancellation path: burn both tokens and withdraw some collateral to P2PK (contract)
     CancellationOption {
         /// Collateral UTXO at the options address (LBTC)
         #[arg(long = "collateral-utxo")]
