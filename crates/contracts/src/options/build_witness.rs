@@ -26,15 +26,21 @@ pub enum OptionBranch {
         expected_asset_amount: u64,
     },
     Exercise {
+        is_change_needed: bool,
+        index_to_spend: u32,
         amount_to_burn: u64,
         collateral_amount_to_get: u64,
         asset_amount: u64,
     },
     Expiry {
+        is_change_needed: bool,
+        index_to_spend: u32,
         grantor_token_amount_to_burn: u64,
         collateral_amount_to_withdraw: u64,
     },
     Cancellation {
+        is_change_needed: bool,
+        index_to_spend: u32,
         amount_to_burn: u64,
         collateral_amount_to_withdraw: u64,
     },
@@ -42,8 +48,8 @@ pub enum OptionBranch {
 
 pub fn build_option_witness(token_branch: TokenBranch, branch: OptionBranch) -> WitnessValues {
     let single = ResolvedType::parse_from_str("u64").unwrap();
-    let triple = ResolvedType::parse_from_str("(u64, u64, u64)").unwrap();
-    let pair = ResolvedType::parse_from_str("(u64, u64)").unwrap();
+    let triple = ResolvedType::parse_from_str("(bool, u32, u64, u64, u64)").unwrap();
+    let pair = ResolvedType::parse_from_str("(bool, u32, u64, u64)").unwrap();
 
     let left_type = ResolvedType::either(single.clone(), triple.clone());
     let right_type = ResolvedType::either(pair.clone(), pair.clone());
@@ -56,23 +62,35 @@ pub fn build_option_witness(token_branch: TokenBranch, branch: OptionBranch) -> 
             format!("Left(Left({expected_asset_amount}))")
         }
         OptionBranch::Exercise {
+            is_change_needed,
+            index_to_spend,
             amount_to_burn,
             collateral_amount_to_get: collateral_amount,
             asset_amount,
         } => {
-            format!("Left(Right(({amount_to_burn}, {collateral_amount}, {asset_amount})))")
+            format!(
+                "Left(Right(({is_change_needed}, {index_to_spend}, {amount_to_burn}, {collateral_amount}, {asset_amount})))"
+            )
         }
         OptionBranch::Expiry {
+            is_change_needed,
+            index_to_spend,
             grantor_token_amount_to_burn,
             collateral_amount_to_withdraw: collateral_amount,
         } => {
-            format!("Right(Left(({grantor_token_amount_to_burn}, {collateral_amount})))")
+            format!(
+                "Right(Left(({is_change_needed}, {index_to_spend}, {grantor_token_amount_to_burn}, {collateral_amount})))"
+            )
         }
         OptionBranch::Cancellation {
+            is_change_needed,
+            index_to_spend,
             amount_to_burn,
             collateral_amount_to_withdraw: collateral_amount,
         } => {
-            format!("Right(Right(({amount_to_burn}, {collateral_amount})))")
+            format!(
+                "Right(Right(({is_change_needed}, {index_to_spend}, {amount_to_burn}, {collateral_amount})))",
+            )
         }
     };
 

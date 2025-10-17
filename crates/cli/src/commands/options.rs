@@ -843,6 +843,8 @@ impl Options {
                 let witness_values = contracts::build_witness::build_option_witness(
                     TokenBranch::OptionToken,
                     contracts::build_witness::OptionBranch::Exercise {
+                        is_change_needed: true,
+                        index_to_spend: 0,
                         amount_to_burn: *amount_to_burn,
                         collateral_amount_to_get,
                         asset_amount: asset_amount_to_pay,
@@ -1034,6 +1036,8 @@ impl Options {
                 let witness_values = contracts::build_witness::build_option_witness(
                     TokenBranch::GrantorToken,
                     contracts::build_witness::OptionBranch::Exercise {
+                        is_change_needed: true,
+                        index_to_spend: 0,
                         amount_to_burn: *grantor_token_amount_to_burn,
                         collateral_amount_to_get: 0,
                         asset_amount,
@@ -1199,6 +1203,8 @@ impl Options {
                 let witness_values = contracts::build_witness::build_option_witness(
                     TokenBranch::GrantorToken,
                     contracts::build_witness::OptionBranch::Expiry {
+                        is_change_needed: true,
+                        index_to_spend: 0,
                         grantor_token_amount_to_burn: *grantor_token_amount_to_burn,
                         collateral_amount_to_withdraw: collateral_amount,
                     },
@@ -1386,6 +1392,8 @@ impl Options {
                 let witness_values = contracts::build_witness::build_option_witness(
                     TokenBranch::OptionToken,
                     contracts::build_witness::OptionBranch::Cancellation {
+                        is_change_needed: true,
+                        index_to_spend: 0,
                         amount_to_burn: *amount_to_burn,
                         collateral_amount_to_withdraw,
                     },
