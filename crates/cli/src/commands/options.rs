@@ -773,15 +773,24 @@ impl Options {
                 pst.add_input(Input::from_prevout(*fee_utxo));
                 pst.inputs_mut()[3].sequence = Some(Sequence::ENABLE_LOCKTIME_NO_RBF);
 
-                // Output 0: change (collateral) back to covenant
-                pst.add_output(Output::new_explicit(
-                    taproot_pubkey_gen.address.script_pubkey(),
-                    total_collateral - collateral_amount_to_get,
-                    LIQUID_TESTNET_BITCOIN_ASSET,
-                    None,
-                ));
+                // Compute which changes are needed
+                let is_collateral_change_needed = total_collateral != collateral_amount_to_get;
+                let is_option_token_change_needed = total_option_token_amount != *amount_to_burn;
+                let is_asset_change_needed = total_asset_amount != asset_amount_to_pay;
+                let is_lbtc_change_needed = total_input_fee != *fee_amount;
 
-                // Output 1: burn option tokens
+                // Conditionally add outputs in the order expected by the covenant
+                if is_collateral_change_needed {
+                    // change (collateral) back to covenant at index 0 when change is needed
+                    pst.add_output(Output::new_explicit(
+                        taproot_pubkey_gen.address.script_pubkey(),
+                        total_collateral - collateral_amount_to_get,
+                        LIQUID_TESTNET_BITCOIN_ASSET,
+                        None,
+                    ));
+                }
+
+                // burn option tokens (index 0 if no change; index 1 if change exists)
                 pst.add_output(Output::new_explicit(
                     Script::new_op_return(b"burn"),
                     *amount_to_burn,
@@ -789,7 +798,7 @@ impl Options {
                     None,
                 ));
 
-                // Output 2: settlement payment in target asset to covenant
+                // settlement payment in target asset to covenant (immediately after burn)
                 pst.add_output(Output::new_explicit(
                     taproot_pubkey_gen.address.script_pubkey(),
                     asset_amount_to_pay,
@@ -797,39 +806,45 @@ impl Options {
                     None,
                 ));
 
-                // Output 3: option token change
+                // option token change (only if needed)
+                if is_option_token_change_needed {
+                    pst.add_output(Output::new_explicit(
+                        change_recipient.script_pubkey(),
+                        total_option_token_amount - amount_to_burn,
+                        option_token_id,
+                        None,
+                    ));
+                }
+
+                // asset change (only if needed)
+                if is_asset_change_needed {
+                    pst.add_output(Output::new_explicit(
+                        change_recipient.script_pubkey(),
+                        total_asset_amount - asset_amount_to_pay,
+                        target_asset_id,
+                        None,
+                    ));
+                }
+
+                // LBTC change (only if needed)
+                if is_lbtc_change_needed {
+                    pst.add_output(Output::new_explicit(
+                        change_recipient.script_pubkey(),
+                        total_input_fee - *fee_amount,
+                        LIQUID_TESTNET_BITCOIN_ASSET,
+                        None,
+                    ));
+                }
+
+                // collateral amount to user
                 pst.add_output(Output::new_explicit(
                     change_recipient.script_pubkey(),
-                    total_option_token_amount - amount_to_burn,
-                    option_token_id,
-                    None,
-                ));
-
-                // Output 4: asset change
-                pst.add_output(Output::new_explicit(
-                    change_recipient.script_pubkey(),
-                    total_asset_amount - asset_amount_to_pay,
-                    target_asset_id,
-                    None,
-                ));
-
-                // Output 5: LBTC change
-                pst.add_output(Output::new_explicit(
-                    change_recipient.script_pubkey(),
-                    total_input_fee - *fee_amount,
-                    LIQUID_TESTNET_BITCOIN_ASSET,
-                    None,
-                ));
-
-                // Output 6: collateral
-                pst.add_output(Output::new_explicit(
-                    taproot_pubkey_gen.address.script_pubkey(),
                     collateral_amount_to_get,
                     LIQUID_TESTNET_BITCOIN_ASSET,
                     None,
                 ));
 
-                // Output 7: fee
+                // fee output
                 pst.add_output(Output::new_explicit(
                     Script::new(),
                     *fee_amount,
@@ -843,7 +858,7 @@ impl Options {
                 let witness_values = contracts::build_witness::build_option_witness(
                     TokenBranch::OptionToken,
                     contracts::build_witness::OptionBranch::Exercise {
-                        is_change_needed: true,
+                        is_change_needed: is_collateral_change_needed,
                         index_to_spend: 0,
                         amount_to_burn: *amount_to_burn,
                         collateral_amount_to_get,
@@ -944,6 +959,7 @@ impl Options {
 
                 let available_target_asset = target_utxo.value.explicit().unwrap();
                 let total_input_fee = fee_lbtc_utxo.value.explicit().unwrap();
+                let total_grantor_token_amount = grantor_utxo.value.explicit().unwrap();
 
                 let asset_amount = (*grantor_token_amount_to_burn)
                     .saturating_mul(option_arguments.grantor_token_strike_price);
@@ -956,6 +972,11 @@ impl Options {
                     "fee exceeds fee input value"
                 );
 
+                let change_recipient = get_p2pk_address(
+                    &keypair.x_only_public_key().0,
+                    &AddressParams::LIQUID_TESTNET,
+                )?;
+
                 // Build PST
                 let mut pst = PartiallySignedTransaction::new_v2();
                 pst.global.tx_data.fallback_locktime =
@@ -964,16 +985,23 @@ impl Options {
                 pst.add_input(Input::from_prevout(*grantor_asset_utxo));
                 pst.add_input(Input::from_prevout(*fee_utxo));
 
-                // Output 0: change (target asset) back to covenant
-                // TODO: fix full redeem of the contract.
-                pst.add_output(Output::new_explicit(
-                    taproot_pubkey_gen.address.script_pubkey(),
-                    available_target_asset - asset_amount,
-                    target_asset_id,
-                    None,
-                ));
+                // Compute change needs
+                let is_target_change_needed = available_target_asset != asset_amount;
+                let is_grantor_change_needed =
+                    total_grantor_token_amount != *grantor_token_amount_to_burn;
+                let is_lbtc_change_needed = total_input_fee != *fee_amount;
 
-                // Output 1: burn grantor tokens
+                // change (target asset) back to covenant if needed
+                if is_target_change_needed {
+                    pst.add_output(Output::new_explicit(
+                        taproot_pubkey_gen.address.script_pubkey(),
+                        available_target_asset - asset_amount,
+                        target_asset_id,
+                        None,
+                    ));
+                }
+
+                // burn grantor tokens
                 pst.add_output(Output::new_explicit(
                     Script::new_op_return(b"burn"),
                     *grantor_token_amount_to_burn,
@@ -981,43 +1009,35 @@ impl Options {
                     None,
                 ));
 
-                // Output 2: settlement asset forwarded (target asset)
+                // settlement asset to user (target asset)
                 pst.add_output(Output::new_explicit(
-                    taproot_pubkey_gen.address.script_pubkey(),
+                    change_recipient.script_pubkey(),
                     asset_amount,
                     target_asset_id,
                     None,
                 ));
 
-                // Output 3: grantor token change (remaining)
-                pst.add_output(Output::new_explicit(
-                    get_p2pk_address(
-                        &keypair.x_only_public_key().0,
-                        &AddressParams::LIQUID_TESTNET,
-                    )?
-                    .script_pubkey(),
-                    grantor_utxo
-                        .value
-                        .explicit()
-                        .unwrap()
-                        .saturating_sub(*grantor_token_amount_to_burn),
-                    grantor_token_id,
-                    None,
-                ));
+                // grantor token change (remaining) if any
+                if is_grantor_change_needed {
+                    pst.add_output(Output::new_explicit(
+                        change_recipient.script_pubkey(),
+                        total_grantor_token_amount - *grantor_token_amount_to_burn,
+                        grantor_token_id,
+                        None,
+                    ));
+                }
 
-                // Output 4: LBTC change
-                pst.add_output(Output::new_explicit(
-                    get_p2pk_address(
-                        &keypair.x_only_public_key().0,
-                        &AddressParams::LIQUID_TESTNET,
-                    )?
-                    .script_pubkey(),
-                    total_input_fee - *fee_amount,
-                    LIQUID_TESTNET_BITCOIN_ASSET,
-                    None,
-                ));
+                // LBTC change if any
+                if is_lbtc_change_needed {
+                    pst.add_output(Output::new_explicit(
+                        change_recipient.script_pubkey(),
+                        total_input_fee - *fee_amount,
+                        LIQUID_TESTNET_BITCOIN_ASSET,
+                        None,
+                    ));
+                }
 
-                // Output 5: fee
+                // fee
                 pst.add_output(Output::new_explicit(
                     Script::new(),
                     *fee_amount,
@@ -1036,7 +1056,7 @@ impl Options {
                 let witness_values = contracts::build_witness::build_option_witness(
                     TokenBranch::GrantorToken,
                     contracts::build_witness::OptionBranch::Exercise {
-                        is_change_needed: true,
+                        is_change_needed: is_target_change_needed,
                         index_to_spend: 0,
                         amount_to_burn: *grantor_token_amount_to_burn,
                         collateral_amount_to_get: 0,
@@ -1125,6 +1145,8 @@ impl Options {
                     "collateral exceeds input value"
                 );
 
+                let total_grantor_token_amount = grantor_utxo.value.explicit().unwrap();
+
                 // Asset id for grantor token
                 let grantor_token_id =
                     AssetId::from_str(&option_arguments.grantor_token_asset_id_hex_le)?;
@@ -1142,15 +1164,23 @@ impl Options {
                 pst.add_input(Input::from_prevout(*grantor_asset_utxo));
                 pst.add_input(Input::from_prevout(*fee_utxo));
 
-                // Output 0: change (collateral) back to covenant
-                pst.add_output(Output::new_explicit(
-                    taproot_pubkey_gen.address.script_pubkey(),
-                    total_collateral - collateral_amount,
-                    LIQUID_TESTNET_BITCOIN_ASSET,
-                    None,
-                ));
+                // Compute change needs
+                let is_collateral_change_needed = total_collateral != collateral_amount;
+                let is_grantor_change_needed =
+                    total_grantor_token_amount != *grantor_token_amount_to_burn;
+                let is_lbtc_change_needed = total_fee != *fee_amount;
 
-                // Output 1: burn grantor tokens
+                // change (collateral) back to covenant if needed
+                if is_collateral_change_needed {
+                    pst.add_output(Output::new_explicit(
+                        taproot_pubkey_gen.address.script_pubkey(),
+                        total_collateral - collateral_amount,
+                        LIQUID_TESTNET_BITCOIN_ASSET,
+                        None,
+                    ));
+                }
+
+                // burn grantor tokens
                 pst.add_output(Output::new_explicit(
                     Script::new_op_return(b"burn"),
                     *grantor_token_amount_to_burn,
@@ -1158,7 +1188,7 @@ impl Options {
                     None,
                 ));
 
-                // Output 2: withdraw collateral to recipient
+                // withdraw collateral to recipient
                 pst.add_output(Output::new_explicit(
                     change_address.script_pubkey(),
                     collateral_amount,
@@ -1166,27 +1196,27 @@ impl Options {
                     None,
                 ));
 
-                // Output 3: grantor token change to recipient
-                pst.add_output(Output::new_explicit(
-                    change_address.script_pubkey(),
-                    grantor_utxo
-                        .value
-                        .explicit()
-                        .unwrap()
-                        .saturating_sub(*grantor_token_amount_to_burn),
-                    grantor_token_id,
-                    None,
-                ));
+                // grantor token change if any
+                if is_grantor_change_needed {
+                    pst.add_output(Output::new_explicit(
+                        change_address.script_pubkey(),
+                        total_grantor_token_amount - *grantor_token_amount_to_burn,
+                        grantor_token_id,
+                        None,
+                    ));
+                }
 
-                // Output 4: change
-                pst.add_output(Output::new_explicit(
-                    change_address.script_pubkey(),
-                    total_fee - *fee_amount,
-                    LIQUID_TESTNET_BITCOIN_ASSET,
-                    None,
-                ));
+                // LBTC change if any
+                if is_lbtc_change_needed {
+                    pst.add_output(Output::new_explicit(
+                        change_address.script_pubkey(),
+                        total_fee - *fee_amount,
+                        LIQUID_TESTNET_BITCOIN_ASSET,
+                        None,
+                    ));
+                }
 
-                // Output 4: fee
+                // fee
                 pst.add_output(Output::new_explicit(
                     Script::new(),
                     *fee_amount,
@@ -1203,7 +1233,7 @@ impl Options {
                 let witness_values = contracts::build_witness::build_option_witness(
                     TokenBranch::GrantorToken,
                     contracts::build_witness::OptionBranch::Expiry {
-                        is_change_needed: true,
+                        is_change_needed: is_collateral_change_needed,
                         index_to_spend: 0,
                         grantor_token_amount_to_burn: *grantor_token_amount_to_burn,
                         collateral_amount_to_withdraw: collateral_amount,
@@ -1296,6 +1326,9 @@ impl Options {
                 let grantor_token_id =
                     AssetId::from_str(&option_arguments.grantor_token_asset_id_hex_le)?;
 
+                let total_option_token_amount = option_utxo.value.explicit().unwrap();
+                let total_grantor_token_amount = grantor_utxo.value.explicit().unwrap();
+
                 let recipient = get_p2pk_address(
                     &keypair.x_only_public_key().0,
                     &AddressParams::LIQUID_TESTNET,
@@ -1308,15 +1341,23 @@ impl Options {
                 pst.add_input(Input::from_prevout(*grantor_asset_utxo));
                 pst.add_input(Input::from_prevout(*fee_utxo));
 
-                // Output 0: change (collateral) back to covenant
-                pst.add_output(Output::new_explicit(
-                    taproot_pubkey_gen.address.script_pubkey(),
-                    total_collateral - collateral_amount_to_withdraw,
-                    LIQUID_TESTNET_BITCOIN_ASSET,
-                    None,
-                ));
+                // Compute change needs
+                let is_collateral_change_needed = total_collateral != collateral_amount_to_withdraw;
+                let is_option_change_needed = total_option_token_amount != *amount_to_burn;
+                let is_grantor_change_needed = total_grantor_token_amount != *amount_to_burn;
+                let is_lbtc_change_needed = total_fee != *fee_amount;
 
-                // Output 1: burn option tokens
+                // change (collateral) back to covenant if needed
+                if is_collateral_change_needed {
+                    pst.add_output(Output::new_explicit(
+                        taproot_pubkey_gen.address.script_pubkey(),
+                        total_collateral - collateral_amount_to_withdraw,
+                        LIQUID_TESTNET_BITCOIN_ASSET,
+                        None,
+                    ));
+                }
+
+                // burn option tokens
                 pst.add_output(Output::new_explicit(
                     Script::new_op_return(b"burn"),
                     *amount_to_burn,
@@ -1324,7 +1365,7 @@ impl Options {
                     None,
                 ));
 
-                // Output 2: burn grantor tokens
+                // burn grantor tokens
                 pst.add_output(Output::new_explicit(
                     Script::new_op_return(b"burn"),
                     *amount_to_burn,
@@ -1332,7 +1373,7 @@ impl Options {
                     None,
                 ));
 
-                // Output 3: withdraw collateral to recipient
+                // withdraw collateral to recipient
                 pst.add_output(Output::new_explicit(
                     recipient.script_pubkey(),
                     collateral_amount_to_withdraw,
@@ -1340,39 +1381,35 @@ impl Options {
                     None,
                 ));
 
-                // Output 4: option token change to recipient
-                pst.add_output(Output::new_explicit(
-                    recipient.script_pubkey(),
-                    option_utxo
-                        .value
-                        .explicit()
-                        .unwrap()
-                        .saturating_sub(*amount_to_burn),
-                    option_token_id,
-                    None,
-                ));
+                // token changes if any
+                if is_option_change_needed {
+                    pst.add_output(Output::new_explicit(
+                        recipient.script_pubkey(),
+                        total_option_token_amount - *amount_to_burn,
+                        option_token_id,
+                        None,
+                    ));
+                }
+                if is_grantor_change_needed {
+                    pst.add_output(Output::new_explicit(
+                        recipient.script_pubkey(),
+                        total_grantor_token_amount - *amount_to_burn,
+                        grantor_token_id,
+                        None,
+                    ));
+                }
 
-                // Output 5: grantor token change to recipient
-                pst.add_output(Output::new_explicit(
-                    recipient.script_pubkey(),
-                    grantor_utxo
-                        .value
-                        .explicit()
-                        .unwrap()
-                        .saturating_sub(*amount_to_burn),
-                    grantor_token_id,
-                    None,
-                ));
+                // LBTC change if any
+                if is_lbtc_change_needed {
+                    pst.add_output(Output::new_explicit(
+                        recipient.script_pubkey(),
+                        total_fee - *fee_amount,
+                        LIQUID_TESTNET_BITCOIN_ASSET,
+                        None,
+                    ));
+                }
 
-                // Output 6: change
-                pst.add_output(Output::new_explicit(
-                    recipient.script_pubkey(),
-                    total_fee - *fee_amount,
-                    LIQUID_TESTNET_BITCOIN_ASSET,
-                    None,
-                ));
-
-                // Output 7: fee
+                // fee
                 pst.add_output(Output::new_explicit(
                     Script::new(),
                     *fee_amount,
@@ -1392,7 +1429,7 @@ impl Options {
                 let witness_values = contracts::build_witness::build_option_witness(
                     TokenBranch::OptionToken,
                     contracts::build_witness::OptionBranch::Cancellation {
-                        is_change_needed: true,
+                        is_change_needed: is_collateral_change_needed,
                         index_to_spend: 0,
                         amount_to_burn: *amount_to_burn,
                         collateral_amount_to_withdraw,

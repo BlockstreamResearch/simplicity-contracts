@@ -160,6 +160,7 @@ pub fn finalize_p2pk_transaction(
     Ok(tx)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn finalize_transaction(
     mut tx: Transaction,
     program: &CompiledProgram,
