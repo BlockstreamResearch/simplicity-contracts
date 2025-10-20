@@ -72,7 +72,7 @@ use simplicityhl::simplicity::jet::Elements;
 use simplicityhl::simplicity::jet::elements::{ElementsEnv, ElementsUtxo};
 use simplicityhl::str::WitnessName;
 use simplicityhl::value::ValueConstructible;
-use simplicityhl::{CompiledProgram, Value, elements};
+use simplicityhl::{CompiledProgram, Value, WitnessValues, elements};
 
 /// Embedded Simplicity source for a basic P2PK program used to sign a single input.
 pub const P2PK_SOURCE: &str = include_str!("source_simf/p2pk.simf");
@@ -130,38 +130,15 @@ pub fn finalize_p2pk_transaction(
 ) -> anyhow::Result<Transaction> {
     let p2pk_program = get_p2pk_program(&keypair.x_only_public_key().0)?;
 
-    let cmr = p2pk_program.commit().cmr();
-
-    assert!(
-        utxos.len() > input_index,
-        "UTXOs must be greater than input index"
-    );
-
-    let target_utxo = &utxos[input_index];
-    let script_pubkey =
-        create_p2tr_address(cmr, &keypair.x_only_public_key().0, params).script_pubkey();
-
-    assert_eq!(
-        target_utxo.script_pubkey, script_pubkey,
-        "Expected for the UTXO to be spent by P2PK to be owned by the user."
-    );
-
-    let env: ElementsEnv<Arc<Transaction>> = ElementsEnv::new(
-        Arc::new(tx.clone()),
-        utxos
-            .iter()
-            .map(|utxo| ElementsUtxo {
-                script_pubkey: utxo.script_pubkey.clone(),
-                asset: utxo.asset,
-                value: utxo.value,
-            })
-            .collect(),
-        input_index as u32,
-        cmr,
-        control_block(cmr, keypair.x_only_public_key().0),
-        None,
+    let env = get_and_verify_env(
+        &tx,
+        &p2pk_program,
+        &keypair.x_only_public_key().0,
+        utxos,
+        params,
         genesis_hash,
-    );
+        input_index,
+    )?;
 
     let pruned = execute_p2pk_program(&p2pk_program, keypair, env, RunnerLogLevel::None)?;
 
@@ -181,4 +158,87 @@ pub fn finalize_p2pk_transaction(
     };
 
     Ok(tx)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn finalize_transaction(
+    mut tx: Transaction,
+    program: &CompiledProgram,
+    program_public_key: &XOnlyPublicKey,
+    utxos: &[TxOut],
+    input_index: usize,
+    witness_values: WitnessValues,
+    params: &'static AddressParams,
+    genesis_hash: elements::BlockHash,
+) -> anyhow::Result<Transaction> {
+    let env = get_and_verify_env(
+        &tx,
+        program,
+        program_public_key,
+        utxos,
+        params,
+        genesis_hash,
+        input_index,
+    )?;
+
+    let pruned = run_program(program, witness_values, env, RunnerLogLevel::None)?.0;
+
+    let (simplicity_program_bytes, simplicity_witness_bytes) = pruned.to_vec_with_witness();
+    let cmr = pruned.cmr();
+
+    tx.input[input_index].witness = TxInWitness {
+        amount_rangeproof: None,
+        inflation_keys_rangeproof: None,
+        script_witness: vec![
+            simplicity_witness_bytes,
+            simplicity_program_bytes,
+            cmr.as_ref().to_vec(),
+            control_block(cmr, *program_public_key).serialize(),
+        ],
+        pegin_witness: vec![],
+    };
+
+    Ok(tx)
+}
+
+pub fn get_and_verify_env(
+    tx: &Transaction,
+    program: &CompiledProgram,
+    program_public_key: &XOnlyPublicKey,
+    utxos: &[TxOut],
+    params: &'static AddressParams,
+    genesis_hash: elements::BlockHash,
+    input_index: usize,
+) -> anyhow::Result<ElementsEnv<Arc<Transaction>>> {
+    let cmr = program.commit().cmr();
+
+    anyhow::ensure!(
+        utxos.len() > input_index,
+        "UTXOs must be greater than input index"
+    );
+
+    let target_utxo = &utxos[input_index];
+    let script_pubkey = create_p2tr_address(cmr, program_public_key, params).script_pubkey();
+
+    anyhow::ensure!(
+        target_utxo.script_pubkey == script_pubkey,
+        "Expected the UTXO to be spent by Options to have the same script"
+    );
+
+    Ok(ElementsEnv::new(
+        Arc::new(tx.clone()),
+        utxos
+            .iter()
+            .map(|utxo| ElementsUtxo {
+                script_pubkey: utxo.script_pubkey.clone(),
+                asset: utxo.asset,
+                value: utxo.value,
+            })
+            .collect(),
+        input_index as u32,
+        cmr,
+        control_block(cmr, *program_public_key),
+        None,
+        genesis_hash,
+    ))
 }

@@ -7,15 +7,12 @@ use contracts::build_witness::TokenBranch;
 use contracts::{OptionsArguments, finalize_options_funding_path_transaction, get_options_program};
 
 use std::str::FromStr;
-use std::sync::Arc;
 
-use simplicityhl::simplicity::bitcoin::XOnlyPublicKey;
 use simplicityhl::simplicity::bitcoin::secp256k1::SecretKey;
 use simplicityhl_core::{
-    Encodable, LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_GENESIS, RunnerLogLevel,
-    TaprootPubkeyGen, broadcast_tx, control_block, create_p2tr_address, fetch_utxo,
-    finalize_p2pk_transaction, get_new_asset_entropy, get_p2pk_address, get_random_seed,
-    run_program,
+    Encodable, LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_GENESIS, TaprootPubkeyGen,
+    broadcast_tx, fetch_utxo, finalize_p2pk_transaction, finalize_transaction,
+    get_new_asset_entropy, get_p2pk_address, get_random_seed,
 };
 
 use simplicityhl::simplicity::elements::confidential::{AssetBlindingFactor, ValueBlindingFactor};
@@ -24,18 +21,15 @@ use simplicityhl::simplicity::elements::pset::{Input, Output, PartiallySignedTra
 use simplicityhl::simplicity::elements::secp256k1_zkp::Secp256k1;
 use simplicityhl::simplicity::elements::secp256k1_zkp::rand::thread_rng;
 use simplicityhl::simplicity::elements::{
-    AddressParams, AssetId, LockTime, Script, Sequence, Transaction, TxInWitness, TxOut,
-    TxOutSecrets,
+    AddressParams, AssetId, LockTime, Script, Sequence, Transaction, TxOutSecrets,
 };
 use simplicityhl::simplicity::hashes::sha256;
 
-use simplicityhl::CompiledProgram;
 use simplicityhl::elements::bitcoin::secp256k1;
 use simplicityhl::elements::pset::serialize::Serialize;
 use simplicityhl::elements::{OutPoint, confidential};
 use simplicityhl::simplicity::ToXOnlyPubkey;
 use simplicityhl::simplicity::hex::DisplayHex;
-use simplicityhl::simplicity::jet::elements::{ElementsEnv, ElementsUtxo};
 
 #[derive(Subcommand, Debug)]
 pub enum Options {
@@ -102,7 +96,7 @@ pub enum Options {
         #[arg(long = "broadcast")]
         broadcast: bool,
     },
-    /// Exercise path: burn option tokens and settle against target asset (prototype)
+    /// Exercise path: burn option tokens and settle against target asset
     ExerciseOption {
         /// Collateral UTXO at the options address (LBTC)
         #[arg(long = "collateral-utxo")]
@@ -132,7 +126,7 @@ pub enum Options {
         #[arg(long = "broadcast")]
         broadcast: bool,
     },
-    /// Settlement path: burn grantor tokens against target asset held by the covenant (prototype)
+    /// Settlement path: burn grantor tokens against target asset held by the covenant (contract)
     SettlementOption {
         /// Target asset UTXO at the options address
         #[arg(long = "target-asset-utxo")]
@@ -159,7 +153,7 @@ pub enum Options {
         #[arg(long = "broadcast")]
         broadcast: bool,
     },
-    /// Expiry path: burn grantor tokens and withdraw collateral to P2PK (prototype)
+    /// Expiry path: burn grantor tokens and withdraw collateral to P2PK (contract)
     ExpiryOption {
         /// Collateral UTXO at the options address (LBTC)
         #[arg(long = "collateral-utxo")]
@@ -186,7 +180,7 @@ pub enum Options {
         #[arg(long = "broadcast")]
         broadcast: bool,
     },
-    /// Cancellation path: burn both tokens and withdraw some collateral to P2PK (prototype)
+    /// Cancellation path: burn both tokens and withdraw some collateral to P2PK (contract)
     CancellationOption {
         /// Collateral UTXO at the options address (LBTC)
         #[arg(long = "collateral-utxo")]
@@ -779,15 +773,24 @@ impl Options {
                 pst.add_input(Input::from_prevout(*fee_utxo));
                 pst.inputs_mut()[3].sequence = Some(Sequence::ENABLE_LOCKTIME_NO_RBF);
 
-                // Output 0: change (collateral) back to covenant
-                pst.add_output(Output::new_explicit(
-                    taproot_pubkey_gen.address.script_pubkey(),
-                    total_collateral - collateral_amount_to_get,
-                    LIQUID_TESTNET_BITCOIN_ASSET,
-                    None,
-                ));
+                // Compute which changes are needed
+                let is_collateral_change_needed = total_collateral != collateral_amount_to_get;
+                let is_option_token_change_needed = total_option_token_amount != *amount_to_burn;
+                let is_asset_change_needed = total_asset_amount != asset_amount_to_pay;
+                let is_lbtc_change_needed = total_input_fee != *fee_amount;
 
-                // Output 1: burn option tokens
+                // Conditionally add outputs in the order expected by the covenant
+                if is_collateral_change_needed {
+                    // change (collateral) back to covenant at index 0 when change is needed
+                    pst.add_output(Output::new_explicit(
+                        taproot_pubkey_gen.address.script_pubkey(),
+                        total_collateral - collateral_amount_to_get,
+                        LIQUID_TESTNET_BITCOIN_ASSET,
+                        None,
+                    ));
+                }
+
+                // burn option tokens (index 0 if no change; index 1 if change exists)
                 pst.add_output(Output::new_explicit(
                     Script::new_op_return(b"burn"),
                     *amount_to_burn,
@@ -795,7 +798,7 @@ impl Options {
                     None,
                 ));
 
-                // Output 2: settlement payment in target asset to covenant
+                // settlement payment in target asset to covenant (immediately after burn)
                 pst.add_output(Output::new_explicit(
                     taproot_pubkey_gen.address.script_pubkey(),
                     asset_amount_to_pay,
@@ -803,39 +806,45 @@ impl Options {
                     None,
                 ));
 
-                // Output 3: option token change
+                // option token change (only if needed)
+                if is_option_token_change_needed {
+                    pst.add_output(Output::new_explicit(
+                        change_recipient.script_pubkey(),
+                        total_option_token_amount - amount_to_burn,
+                        option_token_id,
+                        None,
+                    ));
+                }
+
+                // asset change (only if needed)
+                if is_asset_change_needed {
+                    pst.add_output(Output::new_explicit(
+                        change_recipient.script_pubkey(),
+                        total_asset_amount - asset_amount_to_pay,
+                        target_asset_id,
+                        None,
+                    ));
+                }
+
+                // LBTC change (only if needed)
+                if is_lbtc_change_needed {
+                    pst.add_output(Output::new_explicit(
+                        change_recipient.script_pubkey(),
+                        total_input_fee - *fee_amount,
+                        LIQUID_TESTNET_BITCOIN_ASSET,
+                        None,
+                    ));
+                }
+
+                // collateral amount to user
                 pst.add_output(Output::new_explicit(
                     change_recipient.script_pubkey(),
-                    total_option_token_amount - amount_to_burn,
-                    option_token_id,
-                    None,
-                ));
-
-                // Output 4: asset change
-                pst.add_output(Output::new_explicit(
-                    change_recipient.script_pubkey(),
-                    total_asset_amount - asset_amount_to_pay,
-                    target_asset_id,
-                    None,
-                ));
-
-                // Output 5: LBTC change
-                pst.add_output(Output::new_explicit(
-                    change_recipient.script_pubkey(),
-                    total_input_fee - *fee_amount,
-                    LIQUID_TESTNET_BITCOIN_ASSET,
-                    None,
-                ));
-
-                // Output 6: collateral
-                pst.add_output(Output::new_explicit(
-                    taproot_pubkey_gen.address.script_pubkey(),
                     collateral_amount_to_get,
                     LIQUID_TESTNET_BITCOIN_ASSET,
                     None,
                 ));
 
-                // Output 7: fee
+                // fee output
                 pst.add_output(Output::new_explicit(
                     Script::new(),
                     *fee_amount,
@@ -845,18 +854,26 @@ impl Options {
 
                 let utxos = vec![cov_utxo, option_utxo, asset_utxo_out, fee_utxo_out];
                 let options_program = get_options_program(&option_arguments)?;
-                let tx = finalize_options_spend_transaction(
-                    pst.extract_tx()?,
-                    &taproot_pubkey_gen.pubkey.to_x_only_pubkey(),
-                    &options_program,
-                    &utxos,
-                    0,
+
+                let witness_values = contracts::build_witness::build_option_witness(
                     TokenBranch::OptionToken,
                     contracts::build_witness::OptionBranch::Exercise {
+                        is_change_needed: is_collateral_change_needed,
+                        index_to_spend: 0,
                         amount_to_burn: *amount_to_burn,
                         collateral_amount_to_get,
                         asset_amount: asset_amount_to_pay,
                     },
+                );
+                let tx = finalize_transaction(
+                    pst.extract_tx()?,
+                    &options_program,
+                    &taproot_pubkey_gen.pubkey.to_x_only_pubkey(),
+                    &utxos,
+                    0,
+                    witness_values,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
                 )?;
                 let tx = finalize_p2pk_transaction(
                     tx,
@@ -942,6 +959,7 @@ impl Options {
 
                 let available_target_asset = target_utxo.value.explicit().unwrap();
                 let total_input_fee = fee_lbtc_utxo.value.explicit().unwrap();
+                let total_grantor_token_amount = grantor_utxo.value.explicit().unwrap();
 
                 let asset_amount = (*grantor_token_amount_to_burn)
                     .saturating_mul(option_arguments.grantor_token_strike_price);
@@ -954,6 +972,11 @@ impl Options {
                     "fee exceeds fee input value"
                 );
 
+                let change_recipient = get_p2pk_address(
+                    &keypair.x_only_public_key().0,
+                    &AddressParams::LIQUID_TESTNET,
+                )?;
+
                 // Build PST
                 let mut pst = PartiallySignedTransaction::new_v2();
                 pst.global.tx_data.fallback_locktime =
@@ -962,16 +985,23 @@ impl Options {
                 pst.add_input(Input::from_prevout(*grantor_asset_utxo));
                 pst.add_input(Input::from_prevout(*fee_utxo));
 
-                // Output 0: change (target asset) back to covenant
-                // TODO: fix full redeem of the contract.
-                pst.add_output(Output::new_explicit(
-                    taproot_pubkey_gen.address.script_pubkey(),
-                    available_target_asset - asset_amount,
-                    target_asset_id,
-                    None,
-                ));
+                // Compute change needs
+                let is_target_change_needed = available_target_asset != asset_amount;
+                let is_grantor_change_needed =
+                    total_grantor_token_amount != *grantor_token_amount_to_burn;
+                let is_lbtc_change_needed = total_input_fee != *fee_amount;
 
-                // Output 1: burn grantor tokens
+                // change (target asset) back to covenant if needed
+                if is_target_change_needed {
+                    pst.add_output(Output::new_explicit(
+                        taproot_pubkey_gen.address.script_pubkey(),
+                        available_target_asset - asset_amount,
+                        target_asset_id,
+                        None,
+                    ));
+                }
+
+                // burn grantor tokens
                 pst.add_output(Output::new_explicit(
                     Script::new_op_return(b"burn"),
                     *grantor_token_amount_to_burn,
@@ -979,43 +1009,35 @@ impl Options {
                     None,
                 ));
 
-                // Output 2: settlement asset forwarded (target asset)
+                // settlement asset to user (target asset)
                 pst.add_output(Output::new_explicit(
-                    taproot_pubkey_gen.address.script_pubkey(),
+                    change_recipient.script_pubkey(),
                     asset_amount,
                     target_asset_id,
                     None,
                 ));
 
-                // Output 3: grantor token change (remaining)
-                pst.add_output(Output::new_explicit(
-                    get_p2pk_address(
-                        &keypair.x_only_public_key().0,
-                        &AddressParams::LIQUID_TESTNET,
-                    )?
-                    .script_pubkey(),
-                    grantor_utxo
-                        .value
-                        .explicit()
-                        .unwrap()
-                        .saturating_sub(*grantor_token_amount_to_burn),
-                    grantor_token_id,
-                    None,
-                ));
+                // grantor token change (remaining) if any
+                if is_grantor_change_needed {
+                    pst.add_output(Output::new_explicit(
+                        change_recipient.script_pubkey(),
+                        total_grantor_token_amount - *grantor_token_amount_to_burn,
+                        grantor_token_id,
+                        None,
+                    ));
+                }
 
-                // Output 4: LBTC change
-                pst.add_output(Output::new_explicit(
-                    get_p2pk_address(
-                        &keypair.x_only_public_key().0,
-                        &AddressParams::LIQUID_TESTNET,
-                    )?
-                    .script_pubkey(),
-                    total_input_fee - *fee_amount,
-                    LIQUID_TESTNET_BITCOIN_ASSET,
-                    None,
-                ));
+                // LBTC change if any
+                if is_lbtc_change_needed {
+                    pst.add_output(Output::new_explicit(
+                        change_recipient.script_pubkey(),
+                        total_input_fee - *fee_amount,
+                        LIQUID_TESTNET_BITCOIN_ASSET,
+                        None,
+                    ));
+                }
 
-                // Output 5: fee
+                // fee
                 pst.add_output(Output::new_explicit(
                     Script::new(),
                     *fee_amount,
@@ -1031,18 +1053,25 @@ impl Options {
                 let utxos = vec![target_utxo, grantor_utxo, fee_lbtc_utxo];
                 let options_program = get_options_program(&option_arguments)?;
 
-                let tx = finalize_options_spend_transaction(
-                    tx,
-                    &taproot_pubkey_gen.pubkey.to_x_only_pubkey(),
-                    &options_program,
-                    &utxos,
-                    0,
+                let witness_values = contracts::build_witness::build_option_witness(
                     TokenBranch::GrantorToken,
                     contracts::build_witness::OptionBranch::Exercise {
+                        is_change_needed: is_target_change_needed,
+                        index_to_spend: 0,
                         amount_to_burn: *grantor_token_amount_to_burn,
                         collateral_amount_to_get: 0,
                         asset_amount,
                     },
+                );
+                let tx = finalize_transaction(
+                    tx,
+                    &options_program,
+                    &taproot_pubkey_gen.pubkey.to_x_only_pubkey(),
+                    &utxos,
+                    0,
+                    witness_values,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
                 )?;
 
                 // sign grantor token input
@@ -1116,6 +1145,8 @@ impl Options {
                     "collateral exceeds input value"
                 );
 
+                let total_grantor_token_amount = grantor_utxo.value.explicit().unwrap();
+
                 // Asset id for grantor token
                 let grantor_token_id =
                     AssetId::from_str(&option_arguments.grantor_token_asset_id_hex_le)?;
@@ -1133,15 +1164,23 @@ impl Options {
                 pst.add_input(Input::from_prevout(*grantor_asset_utxo));
                 pst.add_input(Input::from_prevout(*fee_utxo));
 
-                // Output 0: change (collateral) back to covenant
-                pst.add_output(Output::new_explicit(
-                    taproot_pubkey_gen.address.script_pubkey(),
-                    total_collateral - collateral_amount,
-                    LIQUID_TESTNET_BITCOIN_ASSET,
-                    None,
-                ));
+                // Compute change needs
+                let is_collateral_change_needed = total_collateral != collateral_amount;
+                let is_grantor_change_needed =
+                    total_grantor_token_amount != *grantor_token_amount_to_burn;
+                let is_lbtc_change_needed = total_fee != *fee_amount;
 
-                // Output 1: burn grantor tokens
+                // change (collateral) back to covenant if needed
+                if is_collateral_change_needed {
+                    pst.add_output(Output::new_explicit(
+                        taproot_pubkey_gen.address.script_pubkey(),
+                        total_collateral - collateral_amount,
+                        LIQUID_TESTNET_BITCOIN_ASSET,
+                        None,
+                    ));
+                }
+
+                // burn grantor tokens
                 pst.add_output(Output::new_explicit(
                     Script::new_op_return(b"burn"),
                     *grantor_token_amount_to_burn,
@@ -1149,7 +1188,7 @@ impl Options {
                     None,
                 ));
 
-                // Output 2: withdraw collateral to recipient
+                // withdraw collateral to recipient
                 pst.add_output(Output::new_explicit(
                     change_address.script_pubkey(),
                     collateral_amount,
@@ -1157,27 +1196,27 @@ impl Options {
                     None,
                 ));
 
-                // Output 3: grantor token change to recipient
-                pst.add_output(Output::new_explicit(
-                    change_address.script_pubkey(),
-                    grantor_utxo
-                        .value
-                        .explicit()
-                        .unwrap()
-                        .saturating_sub(*grantor_token_amount_to_burn),
-                    grantor_token_id,
-                    None,
-                ));
+                // grantor token change if any
+                if is_grantor_change_needed {
+                    pst.add_output(Output::new_explicit(
+                        change_address.script_pubkey(),
+                        total_grantor_token_amount - *grantor_token_amount_to_burn,
+                        grantor_token_id,
+                        None,
+                    ));
+                }
 
-                // Output 4: change
-                pst.add_output(Output::new_explicit(
-                    change_address.script_pubkey(),
-                    total_fee - *fee_amount,
-                    LIQUID_TESTNET_BITCOIN_ASSET,
-                    None,
-                ));
+                // LBTC change if any
+                if is_lbtc_change_needed {
+                    pst.add_output(Output::new_explicit(
+                        change_address.script_pubkey(),
+                        total_fee - *fee_amount,
+                        LIQUID_TESTNET_BITCOIN_ASSET,
+                        None,
+                    ));
+                }
 
-                // Output 4: fee
+                // fee
                 pst.add_output(Output::new_explicit(
                     Script::new(),
                     *fee_amount,
@@ -1191,18 +1230,25 @@ impl Options {
                 tx.input[2].sequence = Sequence::ENABLE_LOCKTIME_NO_RBF;
 
                 let utxos = vec![cov_utxo, grantor_utxo, fee_utxo_out];
-                let options_program = get_options_program(&option_arguments)?;
-                let tx = finalize_options_spend_transaction(
-                    tx,
-                    &taproot_pubkey_gen.pubkey.to_x_only_pubkey(),
-                    &options_program,
-                    &utxos,
-                    0,
+                let witness_values = contracts::build_witness::build_option_witness(
                     TokenBranch::GrantorToken,
                     contracts::build_witness::OptionBranch::Expiry {
+                        is_change_needed: is_collateral_change_needed,
+                        index_to_spend: 0,
                         grantor_token_amount_to_burn: *grantor_token_amount_to_burn,
                         collateral_amount_to_withdraw: collateral_amount,
                     },
+                );
+                let options_program = get_options_program(&option_arguments)?;
+                let tx = finalize_transaction(
+                    tx,
+                    &options_program,
+                    &taproot_pubkey_gen.pubkey.to_x_only_pubkey(),
+                    &utxos,
+                    0,
+                    witness_values,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
                 )?;
                 let tx = finalize_p2pk_transaction(
                     tx,
@@ -1280,6 +1326,9 @@ impl Options {
                 let grantor_token_id =
                     AssetId::from_str(&option_arguments.grantor_token_asset_id_hex_le)?;
 
+                let total_option_token_amount = option_utxo.value.explicit().unwrap();
+                let total_grantor_token_amount = grantor_utxo.value.explicit().unwrap();
+
                 let recipient = get_p2pk_address(
                     &keypair.x_only_public_key().0,
                     &AddressParams::LIQUID_TESTNET,
@@ -1292,15 +1341,23 @@ impl Options {
                 pst.add_input(Input::from_prevout(*grantor_asset_utxo));
                 pst.add_input(Input::from_prevout(*fee_utxo));
 
-                // Output 0: change (collateral) back to covenant
-                pst.add_output(Output::new_explicit(
-                    taproot_pubkey_gen.address.script_pubkey(),
-                    total_collateral - collateral_amount_to_withdraw,
-                    LIQUID_TESTNET_BITCOIN_ASSET,
-                    None,
-                ));
+                // Compute change needs
+                let is_collateral_change_needed = total_collateral != collateral_amount_to_withdraw;
+                let is_option_change_needed = total_option_token_amount != *amount_to_burn;
+                let is_grantor_change_needed = total_grantor_token_amount != *amount_to_burn;
+                let is_lbtc_change_needed = total_fee != *fee_amount;
 
-                // Output 1: burn option tokens
+                // change (collateral) back to covenant if needed
+                if is_collateral_change_needed {
+                    pst.add_output(Output::new_explicit(
+                        taproot_pubkey_gen.address.script_pubkey(),
+                        total_collateral - collateral_amount_to_withdraw,
+                        LIQUID_TESTNET_BITCOIN_ASSET,
+                        None,
+                    ));
+                }
+
+                // burn option tokens
                 pst.add_output(Output::new_explicit(
                     Script::new_op_return(b"burn"),
                     *amount_to_burn,
@@ -1308,7 +1365,7 @@ impl Options {
                     None,
                 ));
 
-                // Output 2: burn grantor tokens
+                // burn grantor tokens
                 pst.add_output(Output::new_explicit(
                     Script::new_op_return(b"burn"),
                     *amount_to_burn,
@@ -1316,7 +1373,7 @@ impl Options {
                     None,
                 ));
 
-                // Output 3: withdraw collateral to recipient
+                // withdraw collateral to recipient
                 pst.add_output(Output::new_explicit(
                     recipient.script_pubkey(),
                     collateral_amount_to_withdraw,
@@ -1324,39 +1381,35 @@ impl Options {
                     None,
                 ));
 
-                // Output 4: option token change to recipient
-                pst.add_output(Output::new_explicit(
-                    recipient.script_pubkey(),
-                    option_utxo
-                        .value
-                        .explicit()
-                        .unwrap()
-                        .saturating_sub(*amount_to_burn),
-                    option_token_id,
-                    None,
-                ));
+                // token changes if any
+                if is_option_change_needed {
+                    pst.add_output(Output::new_explicit(
+                        recipient.script_pubkey(),
+                        total_option_token_amount - *amount_to_burn,
+                        option_token_id,
+                        None,
+                    ));
+                }
+                if is_grantor_change_needed {
+                    pst.add_output(Output::new_explicit(
+                        recipient.script_pubkey(),
+                        total_grantor_token_amount - *amount_to_burn,
+                        grantor_token_id,
+                        None,
+                    ));
+                }
 
-                // Output 5: grantor token change to recipient
-                pst.add_output(Output::new_explicit(
-                    recipient.script_pubkey(),
-                    grantor_utxo
-                        .value
-                        .explicit()
-                        .unwrap()
-                        .saturating_sub(*amount_to_burn),
-                    grantor_token_id,
-                    None,
-                ));
+                // LBTC change if any
+                if is_lbtc_change_needed {
+                    pst.add_output(Output::new_explicit(
+                        recipient.script_pubkey(),
+                        total_fee - *fee_amount,
+                        LIQUID_TESTNET_BITCOIN_ASSET,
+                        None,
+                    ));
+                }
 
-                // Output 6: change
-                pst.add_output(Output::new_explicit(
-                    recipient.script_pubkey(),
-                    total_fee - *fee_amount,
-                    LIQUID_TESTNET_BITCOIN_ASSET,
-                    None,
-                ));
-
-                // Output 7: fee
+                // fee
                 pst.add_output(Output::new_explicit(
                     Script::new(),
                     *fee_amount,
@@ -1372,17 +1425,25 @@ impl Options {
 
                 let utxos = vec![cov_utxo, option_utxo, grantor_utxo, fee_utxo_out];
                 let options_program = get_options_program(&option_arguments)?;
-                let tx = finalize_options_spend_transaction(
-                    tx,
-                    &taproot_pubkey_gen.pubkey.to_x_only_pubkey(),
-                    &options_program,
-                    &utxos,
-                    0,
+
+                let witness_values = contracts::build_witness::build_option_witness(
                     TokenBranch::OptionToken,
                     contracts::build_witness::OptionBranch::Cancellation {
+                        is_change_needed: is_collateral_change_needed,
+                        index_to_spend: 0,
                         amount_to_burn: *amount_to_burn,
                         collateral_amount_to_withdraw,
                     },
+                );
+                let tx = finalize_transaction(
+                    tx,
+                    &options_program,
+                    &taproot_pubkey_gen.pubkey.to_x_only_pubkey(),
+                    &utxos,
+                    0,
+                    witness_values,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
                 )?;
 
                 // sign option token input
@@ -1423,69 +1484,4 @@ impl Options {
             }
         }
     }
-}
-
-/// Attach a Simplicity witness for an options spend path on the specified input
-fn finalize_options_spend_transaction(
-    mut tx: Transaction,
-    options_public_key: &XOnlyPublicKey,
-    options_program: &CompiledProgram,
-    utxos: &[TxOut],
-    input_index: usize,
-    token_branch: TokenBranch,
-    branch: contracts::build_witness::OptionBranch,
-) -> anyhow::Result<Transaction> {
-    let cmr = options_program.commit().cmr();
-
-    anyhow::ensure!(
-        utxos.len() > input_index,
-        "UTXOs must be greater than input index"
-    );
-
-    let target_utxo = &utxos[input_index];
-    let script_pubkey =
-        create_p2tr_address(cmr, options_public_key, &AddressParams::LIQUID_TESTNET)
-            .script_pubkey();
-
-    anyhow::ensure!(
-        target_utxo.script_pubkey == script_pubkey,
-        "Expected the UTXO to be spent by Options to have the same script"
-    );
-
-    let env: ElementsEnv<Arc<Transaction>> = ElementsEnv::new(
-        Arc::new(tx.clone()),
-        utxos
-            .iter()
-            .map(|utxo| ElementsUtxo {
-                script_pubkey: utxo.script_pubkey.clone(),
-                asset: utxo.asset,
-                value: utxo.value,
-            })
-            .collect(),
-        input_index as u32,
-        cmr,
-        control_block(cmr, *options_public_key),
-        None,
-        *LIQUID_TESTNET_GENESIS,
-    );
-
-    let witness_values = contracts::build_witness::build_option_witness(token_branch, branch);
-    let pruned = run_program(options_program, witness_values, env, RunnerLogLevel::None)?.0;
-
-    let (simplicity_program_bytes, simplicity_witness_bytes) = pruned.to_vec_with_witness();
-    let cmr = pruned.cmr();
-
-    tx.input[input_index].witness = TxInWitness {
-        amount_rangeproof: None,
-        inflation_keys_rangeproof: None,
-        script_witness: vec![
-            simplicity_witness_bytes,
-            simplicity_program_bytes,
-            cmr.as_ref().to_vec(),
-            control_block(cmr, *options_public_key).serialize(),
-        ],
-        pegin_witness: vec![],
-    };
-
-    Ok(tx)
 }

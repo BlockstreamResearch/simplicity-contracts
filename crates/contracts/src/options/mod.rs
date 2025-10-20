@@ -386,6 +386,8 @@ mod options_tests {
         let witness_values = build_option_witness(
             TokenBranch::OptionToken,
             build_witness::OptionBranch::Cancellation {
+                is_change_needed: true,
+                index_to_spend: 0,
                 amount_to_burn,
                 collateral_amount_to_withdraw,
             },
@@ -499,6 +501,8 @@ mod options_tests {
         let witness_values = build_option_witness(
             TokenBranch::OptionToken,
             build_witness::OptionBranch::Exercise {
+                is_change_needed: true,
+                index_to_spend: 0,
                 amount_to_burn: option_amount_to_burn,
                 collateral_amount_to_get,
                 asset_amount: asset_amount_to_pay,
@@ -610,6 +614,8 @@ mod options_tests {
         let witness_values = build_option_witness(
             TokenBranch::GrantorToken,
             build_witness::OptionBranch::Exercise {
+                is_change_needed: true,
+                index_to_spend: 0,
                 amount_to_burn: grantor_token_amount_to_burn,
                 collateral_amount_to_get: 0,
                 asset_amount,
@@ -722,12 +728,14 @@ mod options_tests {
         let witness_values = build_option_witness(
             TokenBranch::GrantorToken,
             build_witness::OptionBranch::Expiry {
+                is_change_needed: true,
+                index_to_spend: 0,
                 grantor_token_amount_to_burn,
                 collateral_amount_to_withdraw: collateral_amount,
             },
         );
 
-        if run_program(&program, witness_values, env, RunnerLogLevel::Trace).is_err() {
+        if run_program(&program, witness_values, env, RunnerLogLevel::None).is_err() {
             panic!("expected success expiry path -- grantor token");
         }
 
