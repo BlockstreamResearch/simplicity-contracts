@@ -14,6 +14,7 @@ use clap::{Parser, Subcommand};
 
 use crate::commands::basic::Basic;
 use crate::commands::options::Options;
+use crate::commands::storage::Storage;
 
 /// Command-line entrypoint for the Simplicity helper CLI.
 #[derive(Parser, Debug)]
@@ -40,11 +41,17 @@ enum Commands {
         #[command(subcommand)]
         options: Box<Options>,
     },
+    /// Simple storage prototype (initialization and updating storage)
+    Storage {
+        #[command(subcommand)]
+        storage: Box<Storage>,
+    },
 }
 
 fn main() -> Result<()> {
     match Cli::parse().command {
         Commands::Basic { basic } => basic.handle(),
         Commands::Options { options } => options.handle(),
+        Commands::Storage { storage } => storage.handle(),
     }
 }

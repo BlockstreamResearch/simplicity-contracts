@@ -162,10 +162,8 @@ mod options_tests {
         let second_asset_entropy = get_new_asset_entropy(&outpoint, [2; 32]);
 
         let first_asset_id = AssetId::from_entropy(first_asset_entropy);
-        let first_token_id = AssetId::reissuance_token_from_entropy(first_asset_entropy, false);
 
         let second_asset_id = AssetId::from_entropy(second_asset_entropy);
-        let second_token_id = AssetId::reissuance_token_from_entropy(second_asset_entropy, false);
 
         let contract_size = 20;
         let collateral_amount = 1000;
@@ -180,13 +178,10 @@ mod options_tests {
             contract_size,
             asset_strike_price,
             grantor_token_strike_price,
-            lbtc_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
             collateral_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
             target_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
             option_token_asset_id_hex_le: first_asset_id.to_string(),
-            reissuance_option_token_asset_id_hex_le: first_token_id.to_string(),
             grantor_token_asset_id_hex_le: second_asset_id.to_string(),
-            reissuance_grantor_token_asset_id_hex_le: second_token_id.to_string(),
         };
 
         let keypair = Keypair::from_secret_key(
@@ -218,14 +213,14 @@ mod options_tests {
         pst.add_output(Output::new_explicit(
             options_address.script_pubkey(),
             1,
-            first_token_id,
+            AssetId::default(),
             None,
         ));
 
         pst.add_output(Output::new_explicit(
             options_address.script_pubkey(),
             1,
-            second_token_id,
+            AssetId::default(),
             None,
         ));
 
@@ -295,10 +290,8 @@ mod options_tests {
         let second_asset_entropy = get_new_asset_entropy(&outpoint, [2; 32]);
 
         let first_asset_id = AssetId::from_entropy(first_asset_entropy);
-        let first_token_id = AssetId::reissuance_token_from_entropy(first_asset_entropy, false);
 
         let second_asset_id = AssetId::from_entropy(second_asset_entropy);
-        let second_token_id = AssetId::reissuance_token_from_entropy(second_asset_entropy, false);
 
         let contract_size = 20;
         let collateral_amount = 1000;
@@ -316,13 +309,10 @@ mod options_tests {
             contract_size,
             asset_strike_price,
             grantor_token_strike_price,
-            lbtc_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
             collateral_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
             target_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
             option_token_asset_id_hex_le: first_asset_id.to_string(),
-            reissuance_option_token_asset_id_hex_le: first_token_id.to_string(),
             grantor_token_asset_id_hex_le: second_asset_id.to_string(),
-            reissuance_grantor_token_asset_id_hex_le: second_token_id.to_string(),
         };
 
         let keypair = Keypair::from_secret_key(
@@ -408,10 +398,8 @@ mod options_tests {
         let second_asset_entropy = get_new_asset_entropy(&outpoint, [2; 32]);
 
         let first_asset_id = AssetId::from_entropy(first_asset_entropy);
-        let first_token_id = AssetId::reissuance_token_from_entropy(first_asset_entropy, false);
 
         let second_asset_id = AssetId::from_entropy(second_asset_entropy);
-        let second_token_id = AssetId::reissuance_token_from_entropy(second_asset_entropy, false);
 
         let contract_size = 20;
         let collateral_amount_total = 1000;
@@ -430,13 +418,10 @@ mod options_tests {
             contract_size,
             asset_strike_price,
             grantor_token_strike_price,
-            lbtc_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
             collateral_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
             target_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
             option_token_asset_id_hex_le: first_asset_id.to_string(),
-            reissuance_option_token_asset_id_hex_le: first_token_id.to_string(),
             grantor_token_asset_id_hex_le: second_asset_id.to_string(),
-            reissuance_grantor_token_asset_id_hex_le: second_token_id.to_string(),
         };
 
         let keypair = Keypair::from_secret_key(
@@ -524,10 +509,8 @@ mod options_tests {
         let second_asset_entropy = get_new_asset_entropy(&outpoint, [2; 32]);
 
         let first_asset_id = AssetId::from_entropy(first_asset_entropy);
-        let first_token_id = AssetId::reissuance_token_from_entropy(first_asset_entropy, false);
 
         let second_asset_id = AssetId::from_entropy(second_asset_entropy);
-        let second_token_id = AssetId::reissuance_token_from_entropy(second_asset_entropy, false);
 
         let contract_size = 20;
         let asset_strike_price = 2;
@@ -545,13 +528,10 @@ mod options_tests {
             contract_size,
             asset_strike_price,
             grantor_token_strike_price,
-            lbtc_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
             collateral_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
             target_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
             option_token_asset_id_hex_le: first_asset_id.to_string(),
-            reissuance_option_token_asset_id_hex_le: first_token_id.to_string(),
             grantor_token_asset_id_hex_le: second_asset_id.to_string(),
-            reissuance_grantor_token_asset_id_hex_le: second_token_id.to_string(),
         };
 
         let keypair = Keypair::from_secret_key(
@@ -637,10 +617,8 @@ mod options_tests {
         let second_asset_entropy = get_new_asset_entropy(&outpoint, [2; 32]);
 
         let first_asset_id = AssetId::from_entropy(first_asset_entropy);
-        let first_token_id = AssetId::reissuance_token_from_entropy(first_asset_entropy, false);
 
         let second_asset_id = AssetId::from_entropy(second_asset_entropy);
-        let second_token_id = AssetId::reissuance_token_from_entropy(second_asset_entropy, false);
 
         let contract_size = 20;
         let collateral_amount_total = 1000;
@@ -659,13 +637,10 @@ mod options_tests {
             contract_size,
             asset_strike_price,
             grantor_token_strike_price,
-            lbtc_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
             collateral_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
             target_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
             option_token_asset_id_hex_le: first_asset_id.to_string(),
-            reissuance_option_token_asset_id_hex_le: first_token_id.to_string(),
             grantor_token_asset_id_hex_le: second_asset_id.to_string(),
-            reissuance_grantor_token_asset_id_hex_le: second_token_id.to_string(),
         };
 
         let keypair = Keypair::from_secret_key(

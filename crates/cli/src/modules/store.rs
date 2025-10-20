@@ -79,13 +79,10 @@ mod tests {
             contract_size: 100,
             asset_strike_price: 1000,
             grantor_token_strike_price: 1000,
-            lbtc_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
             collateral_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
             target_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
             option_token_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
-            reissuance_option_token_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
             grantor_token_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
-            reissuance_grantor_token_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
         };
 
         let options_taproot_pubkey_gen = TaprootPubkeyGen::from(
