@@ -304,11 +304,8 @@ impl Options {
                     grantor_token_strike_price,
                     collateral_asset_id_hex_le: LIQUID_TESTNET_BITCOIN_ASSET.to_string(),
                     target_asset_id_hex_le: target_asset_id_hex_be.clone(),
-                    lbtc_asset_id_hex_le: LIQUID_TESTNET_BITCOIN_ASSET.to_string(),
                     option_token_asset_id_hex_le: first_asset.to_string(),
-                    reissuance_option_token_asset_id_hex_le: first_reissuance_asset.to_string(),
                     grantor_token_asset_id_hex_le: second_asset.to_string(),
-                    reissuance_grantor_token_asset_id_hex_le: second_reissuance_asset.to_string(),
                 };
 
                 let options_taproot_pubkey_gen = TaprootPubkeyGen::from(

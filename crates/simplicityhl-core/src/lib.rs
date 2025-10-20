@@ -222,7 +222,7 @@ pub fn get_and_verify_env(
 
     anyhow::ensure!(
         target_utxo.script_pubkey == script_pubkey,
-        "Expected the UTXO to be spent by Options to have the same script"
+        "Expected the UTXO to be spent to have the same script"
     );
 
     Ok(ElementsEnv::new(

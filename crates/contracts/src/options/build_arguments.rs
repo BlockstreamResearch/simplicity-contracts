@@ -12,13 +12,10 @@ pub struct OptionsArguments {
     pub contract_size: u64,
     pub asset_strike_price: u64,
     pub grantor_token_strike_price: u64,
-    pub lbtc_asset_id_hex_le: String,
     pub collateral_asset_id_hex_le: String,
     pub target_asset_id_hex_le: String,
     pub option_token_asset_id_hex_le: String,
     pub grantor_token_asset_id_hex_le: String,
-    pub reissuance_option_token_asset_id_hex_le: String,
-    pub reissuance_grantor_token_asset_id_hex_le: String,
 }
 
 impl Default for OptionsArguments {
@@ -30,11 +27,8 @@ impl Default for OptionsArguments {
             asset_strike_price: 0,
             grantor_token_strike_price: 0,
             collateral_asset_id_hex_le: "00".repeat(32),
-            lbtc_asset_id_hex_le: "00".repeat(32),
             option_token_asset_id_hex_le: "00".repeat(32),
             grantor_token_asset_id_hex_le: "00".repeat(32),
-            reissuance_option_token_asset_id_hex_le: "00".repeat(32),
-            reissuance_grantor_token_asset_id_hex_le: "00".repeat(32),
             target_asset_id_hex_le: "00".repeat(32),
         }
     }
@@ -64,12 +58,6 @@ impl OptionsArguments {
                 simplicityhl::Value::from(UIntValue::U64(self.grantor_token_strike_price)),
             ),
             (
-                WitnessName::from_str_unchecked("LBTC_ASSET"),
-                simplicityhl::Value::from(UIntValue::U256(u256_from_le_hex(
-                    &self.lbtc_asset_id_hex_le,
-                ))),
-            ),
-            (
                 WitnessName::from_str_unchecked("COLLATERAL_ASSET_ID"),
                 simplicityhl::Value::from(UIntValue::U256(u256_from_le_hex(
                     &self.collateral_asset_id_hex_le,
@@ -91,18 +79,6 @@ impl OptionsArguments {
                 WitnessName::from_str_unchecked("GRANTOR_TOKEN_ASSET"),
                 simplicityhl::Value::from(UIntValue::U256(u256_from_le_hex(
                     &self.grantor_token_asset_id_hex_le,
-                ))),
-            ),
-            (
-                WitnessName::from_str_unchecked("REISSUANCE_OPTION_TOKEN_ASSET"),
-                simplicityhl::Value::from(UIntValue::U256(u256_from_le_hex(
-                    &self.reissuance_option_token_asset_id_hex_le,
-                ))),
-            ),
-            (
-                WitnessName::from_str_unchecked("REISSUANCE_GRANTOR_TOKEN_ASSET"),
-                simplicityhl::Value::from(UIntValue::U256(u256_from_le_hex(
-                    &self.reissuance_grantor_token_asset_id_hex_le,
                 ))),
             ),
         ]))
@@ -141,13 +117,10 @@ mod tests {
             contract_size: 100,
             asset_strike_price: 1000,
             grantor_token_strike_price: 1000,
-            lbtc_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
             collateral_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
             target_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
             option_token_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
-            reissuance_option_token_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
             grantor_token_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
-            reissuance_grantor_token_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
         };
 
         let serialized = args.encode()?;
