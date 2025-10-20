@@ -17,12 +17,15 @@ Workspace for prototyping and exercising Simplicity-based contracts on Liquid te
 
 - `crates/contracts` — Contract templates and helpers
   - `options/` contains a Simplicity Options contract (`options.simf`), argument builders, and witness builders
+  - `simple_storage/` contains a minimal stateful storage covenant (`simple_storage.simf`), argument and witness builders
   - `get_options_program`, `get_options_address`, and `finalize_options_funding_path_transaction`
+  - `get_storage_compiled_program`, `get_storage_address`, and helpers to finalize storage transactions
   - Bincode-based encoding of argument structs (via `simplicityhl-core` encoding feature)
 
 - `crates/cli` — Simplicity helper CLI (Liquid testnet)
   - `basic` commands: P2PK address derivation and simple LBTC/asset transfers
   - `options` commands: create/fund/exercise/settle/expire/cancel paths for the Options contract
+  - `storage` commands: initialize storage state and update state (mint/burn paths)
   - Uses a local sled store at `.cache/store` for argument persistence
 
 ### Note
@@ -54,6 +57,14 @@ Workspace for prototyping and exercising Simplicity-based contracts on Liquid te
   - Expiry (grantor): after expiry, burns grantor tokens and withdraws the corresponding collateral to a P2PK recipient (fees deducted from collateral input).
   - Cancellation: burns both tokens and withdraws a portion of collateral to a P2PK recipient (fees deducted from collateral input).
   - The covenant expects specific output ordering and conditional change outputs; the CLI constructs outputs in that order.
+
+- Simple Storage
+  - Init: issues a slot asset and a reissuance token, binds `StorageArguments` and persists the initial entropy for later reissuance.
+  - Update: enforces that output[0] remains at the covenant with `SLOT_ID` set to `NEW_VALUE`.
+    - Burn path (decrease): burns the exact delta to OP_RETURN at index 1.
+    - Mint path (increase): consumes the reissuance token UTXO and enforces a covenant output at the next index.
+  - Only the bound owner key may authorize updates (Schnorr over `sig_all_hash`).
+  - See `crates/contracts/src/simple_storage/README.md` for details.
 
 ## Getting started
 
@@ -91,6 +102,8 @@ Examples
   cargo run -p cli -- options export  --help
   ```
 - Options flows (creation → funding → exercise/settlement/expiry/cancellation): see `crates/cli/README.md` for full command lines.
+
+- Simple Storage flows, see `crates/contracts/src/simple_storage/README.md` for the detailed explanation.
 
 ## Development tips
 

@@ -125,12 +125,12 @@ impl Storage {
             } => {
                 let store = Store::load()?;
 
-                let keypair = secp256k1::Keypair::from_secret_key(
+                let keypair = Keypair::from_secret_key(
                     secp256k1::SECP256K1,
                     &derive_secret_key_from_index(*account_index),
                 );
 
-                let blinder_key = secp256k1::Keypair::from_secret_key(
+                let blinder_key = Keypair::from_secret_key(
                     secp256k1::SECP256K1,
                     &SecretKey::from_slice(&[1; 32])?,
                 );
@@ -164,7 +164,7 @@ impl Storage {
                     &storage_taproot_pubkey_gen.to_string(),
                     &storage_arguments.to_hex()?,
                     &AddressParams::LIQUID_TESTNET,
-                    &contracts::get_storage_address,
+                    &get_storage_address,
                 )?;
 
                 store.store.insert(
@@ -266,12 +266,12 @@ impl Storage {
             } => {
                 let store = Store::load()?;
 
-                let keypair = secp256k1::Keypair::from_secret_key(
+                let keypair = Keypair::from_secret_key(
                     secp256k1::SECP256K1,
                     &derive_secret_key_from_index(*account_index),
                 );
 
-                let blinder_key = secp256k1::Keypair::from_secret_key(
+                let blinder_key = Keypair::from_secret_key(
                     secp256k1::SECP256K1,
                     &SecretKey::from_slice(&[1; 32])?,
                 );
@@ -496,7 +496,7 @@ pub fn finalize_storage_transaction(
     keypair: &Keypair,
     params: &'static AddressParams,
     genesis_hash: BlockHash,
-) -> anyhow::Result<Transaction> {
+) -> Result<Transaction> {
     let cmr = program.commit().cmr();
 
     assert!(

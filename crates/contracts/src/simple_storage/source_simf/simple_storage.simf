@@ -1,3 +1,18 @@
+/*
+ * Simple Storage Program for Liquid
+ *
+ * Only the owner of the storage can modify the value.
+ *
+ * ==== IMPORTANT ====
+ *
+ * Based on the following resources:
+ * https://github.com/ElementsProject/elements/blob/master/src/consensus/amount.h
+ * https://github.com/ElementsProject/rust-elements/blob/f6ffc7800df14b81c0f5ae1c94368a78b99612b9/src/blind.rs#L471
+ *
+ * The maximum allowed amount is 2,100,000,000,000,000
+ * (i.e., 21,000,000 × 10^8), which is approximately 51 bits.
+ */
+ 
 fn checksig(pk: Pubkey, sig: Signature) {
     let msg: u256 = jet::sig_all_hash();
     jet::bip_0340_verify((pk, msg), sig);
