@@ -1,6 +1,9 @@
 name: Feature request
 description: Suggest a new feature
 labels: ['feature']
+assignees:
+  - KyrylR
+  - imaginator
 body:
   - type: textarea
     id: feature-description

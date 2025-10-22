@@ -1,6 +1,9 @@
 name: Bug Report
 description: File a bug report
 labels: ['bug']
+assignees:
+  - KyrylR
+  - imaginator
 body:
   - type: markdown
     attributes:
