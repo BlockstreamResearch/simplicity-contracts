@@ -16,7 +16,7 @@ Workspace for prototyping and exercising Simplicity-based contracts on Liquid te
   - Embedded `p2pk.simf` program
 
 - `crates/contracts` — Contract templates and helpers
-  - `options/` contains a Simplicity Options contract (`options.simf`), argument builders, and witness builders
+  - `options/` contains a Simplicity Options contract (`options.simf`) based on the [options whitepaper](https://blockstream.com/assets/downloads/pdf/options-whitepaper.pdf), argument builders, and witness builders
   - `simple_storage/` contains a minimal stateful storage covenant (`simple_storage.simf`), argument and witness builders
   - `get_options_program`, `get_options_address`, and `finalize_options_funding_path_transaction`
   - `get_storage_compiled_program`, `get_storage_address`, and helpers to finalize storage transactions
