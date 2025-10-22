@@ -66,6 +66,17 @@ Workspace for prototyping and exercising Simplicity-based contracts on Liquid te
   - Only the bound owner key may authorize updates (Schnorr over `sig_all_hash`).
   - See `crates/contracts/src/simple_storage/README.md` for details.
 
+## Swaps in Liquid
+
+Here are some resources to help you get started with asset swaps on Liquid:
+
+- Learn about asset swap transactions and how to start developing smart contracts (such as options) on Liquid: https://docs.liquid.net/docs/swaps-and-smart-contracts
+- A helpful article on two-step atomic swaps on the Liquid Network: https://medium.com/blockstream/liquidex-2-step-atomic-swaps-on-the-liquid-network-8a7ff6fb7aa5
+
+This functionality completes the set of tools needed to build a DEX-like system where users can trade options.
+
+Note: To swap two tokens for one (e.g., 1 Option Token and 1 Grantor Token for 1 LBTC), a custom Simplicity script is required.
+
 ## Getting started
 
 Prerequisites
