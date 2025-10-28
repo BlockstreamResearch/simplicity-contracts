@@ -4,7 +4,7 @@ Small helper CLI to derive testnet addresses from a configured seed and to build
 
 ## Setup
 
-1. Add a `.env` file in this crate directory (or export env var):
+1. Add a `.env` file in the project root directory (or export env var):
 
 ```
 SEED_HEX=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
