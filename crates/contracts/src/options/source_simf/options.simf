@@ -26,7 +26,6 @@ fn get_output_explicit_asset_amount(index: u32) -> (u256, u64) {
     let asset_bits: u256 = unwrap_right::<(u1, u256)>(asset);
     let amount: u64 = unwrap_right::<(u1, u256)>(amount);
     (asset_bits, amount)
-    
 }
 
 fn get_input_explicit_asset_amount(index: u32) -> (u256, u64) {
