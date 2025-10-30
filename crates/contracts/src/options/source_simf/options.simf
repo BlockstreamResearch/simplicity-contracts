@@ -83,6 +83,7 @@ fn ensure_output_script_hash_eq(index: u32, expected: u256) {
 fn ensure_correct_change_at_index(index: u32, asset_id: u256, asset_amount_to_spend: u64, contract_script_hash: u256, is_change_needed: bool) {
     let (asset_bits, available_asset_amount): (u256, u64) = get_input_explicit_asset_amount(index);
     assert!(jet::eq_256(unwrap(jet::input_script_hash(index)), contract_script_hash));
+    assert!(jet::eq_32(jet::current_index(), index));
     
     match is_change_needed {
         true => {
