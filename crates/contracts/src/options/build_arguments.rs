@@ -9,11 +9,10 @@ use simplicityhl::{Arguments, str::WitnessName, value::UIntValue};
 pub struct OptionsArguments {
     pub start_time: u32,
     pub expiry_time: u32,
-    pub contract_size: u64,
-    pub asset_strike_price: u64,
-    pub grantor_token_strike_price: u64,
+    pub collateral_per_contract: u64,
+    pub settlement_per_contract: u64,
     pub collateral_asset_id_hex_le: String,
-    pub target_asset_id_hex_le: String,
+    pub settlement_asset_id_hex_le: String,
     pub option_token_asset_id_hex_le: String,
     pub grantor_token_asset_id_hex_le: String,
 }
@@ -23,13 +22,12 @@ impl Default for OptionsArguments {
         Self {
             start_time: 0,
             expiry_time: 0,
-            contract_size: 0,
-            asset_strike_price: 0,
-            grantor_token_strike_price: 0,
+            collateral_per_contract: 0,
+            settlement_per_contract: 0,
             collateral_asset_id_hex_le: "00".repeat(32),
             option_token_asset_id_hex_le: "00".repeat(32),
             grantor_token_asset_id_hex_le: "00".repeat(32),
-            target_asset_id_hex_le: "00".repeat(32),
+            settlement_asset_id_hex_le: "00".repeat(32),
         }
     }
 }
@@ -46,16 +44,12 @@ impl OptionsArguments {
                 simplicityhl::Value::from(UIntValue::U32(self.expiry_time)),
             ),
             (
-                WitnessName::from_str_unchecked("CONTRACT_SIZE"),
-                simplicityhl::Value::from(UIntValue::U64(self.contract_size)),
+                WitnessName::from_str_unchecked("COLLATERAL_PER_CONTRACT"),
+                simplicityhl::Value::from(UIntValue::U64(self.collateral_per_contract)),
             ),
             (
-                WitnessName::from_str_unchecked("ASSET_STRIKE_PRICE"),
-                simplicityhl::Value::from(UIntValue::U64(self.asset_strike_price)),
-            ),
-            (
-                WitnessName::from_str_unchecked("GRANTOR_TOKEN_STRIKE_PRICE"),
-                simplicityhl::Value::from(UIntValue::U64(self.grantor_token_strike_price)),
+                WitnessName::from_str_unchecked("SETTLEMENT_PER_CONTRACT"),
+                simplicityhl::Value::from(UIntValue::U64(self.settlement_per_contract)),
             ),
             (
                 WitnessName::from_str_unchecked("COLLATERAL_ASSET_ID"),
@@ -64,9 +58,9 @@ impl OptionsArguments {
                 ))),
             ),
             (
-                WitnessName::from_str_unchecked("TARGET_ASSET_ID"),
+                WitnessName::from_str_unchecked("SETTLEMENT_ASSET_ID"),
                 simplicityhl::Value::from(UIntValue::U256(u256_from_le_hex(
-                    &self.target_asset_id_hex_le,
+                    &self.settlement_asset_id_hex_le,
                 ))),
             ),
             (
@@ -114,11 +108,10 @@ mod tests {
         let args = OptionsArguments {
             start_time: 10,
             expiry_time: 50,
-            contract_size: 100,
-            asset_strike_price: 1000,
-            grantor_token_strike_price: 1000,
+            collateral_per_contract: 100,
+            settlement_per_contract: 1000,
             collateral_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
-            target_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
+            settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
             option_token_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
             grantor_token_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
         };

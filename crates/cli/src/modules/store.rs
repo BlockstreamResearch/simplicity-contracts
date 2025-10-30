@@ -76,11 +76,10 @@ mod tests {
         let args = OptionsArguments {
             start_time: 10,
             expiry_time: 50,
-            contract_size: 100,
-            asset_strike_price: 1000,
-            grantor_token_strike_price: 1000,
+            collateral_per_contract: 100,
+            settlement_per_contract: 1000,
             collateral_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
-            target_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
+            settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
             option_token_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
             grantor_token_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
         };

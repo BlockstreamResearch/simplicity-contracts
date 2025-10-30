@@ -116,9 +116,9 @@ fn funding_path(expected_asset_amount: u64) {
     let grantor_token_amount: u64 = unwrap_right::<(u1, u256)>(unwrap(unwrap(jet::issuance_asset_amount(1))));
     assert!(jet::eq_64(option_token_amount, grantor_token_amount));
 
-    divmod_eq(collateral_amount, param::CONTRACT_SIZE, option_token_amount);
-    divmod_eq(collateral_amount, param::ASSET_STRIKE_PRICE, expected_asset_amount);
-    divmod_eq(expected_asset_amount, param::GRANTOR_TOKEN_STRIKE_PRICE, grantor_token_amount);
+    divmod_eq(collateral_amount, param::COLLATERAL_PER_CONTRACT, option_token_amount);
+    divmod_eq(expected_asset_amount, param::SETTLEMENT_PER_CONTRACT, option_token_amount);
+    divmod_eq(expected_asset_amount, param::SETTLEMENT_PER_CONTRACT, grantor_token_amount);
 
     ensure_output_asset_with_amount_eq(2, param::COLLATERAL_ASSET_ID, collateral_amount);
     ensure_output_asset_with_amount_eq(3, param::OPTION_TOKEN_ASSET, option_token_amount);
@@ -151,7 +151,7 @@ fn cancellation_path(index: u32, amount_to_burn: u64, collateral_amount_to_withd
     ensure_output_asset_with_amount_eq(burn_grantor_output_index, param::GRANTOR_TOKEN_ASSET, amount_to_burn);
 
     // Ensure returned collateral amount is correct
-    divmod_eq(collateral_amount_to_withdraw, param::CONTRACT_SIZE, amount_to_burn);
+    divmod_eq(collateral_amount_to_withdraw, param::COLLATERAL_PER_CONTRACT, amount_to_burn);
 }
 
 /*
@@ -173,15 +173,15 @@ fn exercise_path(index: u32, option_amount_to_burn: u64, collateral_amount_to_ge
     ensure_correct_change_at_index(index, param::COLLATERAL_ASSET_ID, collateral_amount_to_get, expected_current_script_hash, is_change_needed);
 
     // Ensure collateral and asset amounts are correct
-    divmod_eq(collateral_amount_to_get, param::CONTRACT_SIZE, option_amount_to_burn);
-    divmod_eq(collateral_amount_to_get, param::ASSET_STRIKE_PRICE, asset_amount_to_pay);
+    divmod_eq(collateral_amount_to_get, param::COLLATERAL_PER_CONTRACT, option_amount_to_burn);
+    divmod_eq(asset_amount_to_pay, param::SETTLEMENT_PER_CONTRACT, option_amount_to_burn);
 
     // Burn option token
     ensure_output_is_op_return(burn_option_output_index);
     ensure_output_asset_with_amount_eq(burn_option_output_index, param::OPTION_TOKEN_ASSET, option_amount_to_burn);
 
     // Ensure settlement asset and script hash are correct
-    ensure_output_asset_with_amount_eq(asset_to_covenant_output_index, param::TARGET_ASSET_ID, asset_amount_to_pay);
+    ensure_output_asset_with_amount_eq(asset_to_covenant_output_index, param::SETTLEMENT_ASSET_ID, asset_amount_to_pay);
     ensure_output_script_hash_eq(asset_to_covenant_output_index, expected_current_script_hash);
 }
 
@@ -200,11 +200,11 @@ fn settlement_path(index: u32, grantor_token_amount_to_burn: u64, asset_amount: 
 
     let expected_current_script_hash: u256 = get_input_script_hash(target_asset_input_index);
 
-    // Check and ensure target asset change
-    ensure_correct_change_at_index(index, param::TARGET_ASSET_ID, asset_amount, expected_current_script_hash, is_change_needed);
+    // Check and ensure settlement asset change
+    ensure_correct_change_at_index(index, param::SETTLEMENT_ASSET_ID, asset_amount, expected_current_script_hash, is_change_needed);
     
-    // Ensure target asset and grantor token amounts are correct
-    divmod_eq(asset_amount, param::GRANTOR_TOKEN_STRIKE_PRICE, grantor_token_amount_to_burn);
+    // Ensure settlement asset and grantor token amounts are correct
+    divmod_eq(asset_amount, param::SETTLEMENT_PER_CONTRACT, grantor_token_amount_to_burn);
 
     // Burn grantor token
     ensure_output_is_op_return(burn_grantor_output_index);
@@ -230,7 +230,7 @@ fn expiry_path(index: u32, grantor_token_amount_to_burn: u64, collateral_amount:
     ensure_correct_change_at_index(collateral_input_index, param::COLLATERAL_ASSET_ID, collateral_amount, expected_current_script_hash, is_change_needed);
 
     // Ensure collateral amount is correct
-    divmod_eq(collateral_amount, param::CONTRACT_SIZE, grantor_token_amount_to_burn);
+    divmod_eq(collateral_amount, param::COLLATERAL_PER_CONTRACT, grantor_token_amount_to_burn);
 
     // Burn grantor token
     ensure_output_is_op_return(burn_grantor_output_index);

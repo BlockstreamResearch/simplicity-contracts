@@ -47,18 +47,15 @@ pub enum Options {
         /// Expiry time (UNIX seconds)
         #[arg(long = "expiry-time")]
         expiry_time: u32,
-        /// Contract size
-        #[arg(long = "contract-size")]
-        contract_size: u64,
-        /// Asset strike price
-        #[arg(long = "asset-strike-price")]
-        asset_strike_price: u64,
-        /// Collateral amount
-        #[arg(long = "collateral-amount")]
-        collateral_amount: u64,
-        /// Target asset id (hex, BE)
-        #[arg(long = "target-asset-id-hex-be")]
-        target_asset_id_hex_be: String,
+        /// Collateral per contract
+        #[arg(long = "collateral-per-contract")]
+        collateral_per_contract: u64,
+        /// Settlement per contract (in settlement asset units)
+        #[arg(long = "settlement-per-contract")]
+        settlement_per_contract: u64,
+        /// Settlement asset id (hex, BE)
+        #[arg(long = "settlement-asset-id-hex-be")]
+        settlement_asset_id_hex_be: String,
         /// Account index
         #[arg(long = "account-index")]
         account_index: u32,
@@ -126,11 +123,11 @@ pub enum Options {
         #[arg(long = "broadcast")]
         broadcast: bool,
     },
-    /// Settlement path: burn grantor tokens against target asset held by the covenant (contract)
+    /// Settlement path: burn grantor tokens against settlement asset held by the covenant (contract)
     SettlementOption {
-        /// Target asset UTXO at the options address
-        #[arg(long = "target-asset-utxo")]
-        target_asset_utxo: OutPoint,
+        /// Settlement asset UTXO at the options address
+        #[arg(long = "settlement-asset-utxo")]
+        settlement_asset_utxo: OutPoint,
         /// Grantor token UTXO consumed for burning
         #[arg(long = "grantor-asset-utxo")]
         grantor_asset_utxo: OutPoint,
@@ -251,10 +248,9 @@ impl Options {
                 second_fee_utxo,
                 start_time,
                 expiry_time,
-                contract_size,
-                asset_strike_price,
-                collateral_amount,
-                target_asset_id_hex_be,
+                collateral_per_contract,
+                settlement_per_contract,
+                settlement_asset_id_hex_be,
                 account_index,
                 fee_amount,
                 broadcast,
@@ -292,18 +288,13 @@ impl Options {
                 let (first_asset, first_reissuance_asset) = first_issuance_tx.issuance_ids();
                 let (second_asset, second_reissuance_asset) = second_issuance_tx.issuance_ids();
 
-                let option_token_amount = collateral_amount / contract_size;
-                let expected_asset_amount = collateral_amount / asset_strike_price;
-                let grantor_token_strike_price = expected_asset_amount / option_token_amount;
-
                 let option_arguments = OptionsArguments {
                     start_time: *start_time,
                     expiry_time: *expiry_time,
-                    contract_size: *contract_size,
-                    asset_strike_price: *asset_strike_price,
-                    grantor_token_strike_price,
+                    collateral_per_contract: *collateral_per_contract,
+                    settlement_per_contract: *settlement_per_contract,
                     collateral_asset_id_hex_le: LIQUID_TESTNET_BITCOIN_ASSET.to_string(),
-                    target_asset_id_hex_le: target_asset_id_hex_be.clone(),
+                    settlement_asset_id_hex_le: settlement_asset_id_hex_be.clone(),
                     option_token_asset_id_hex_le: first_asset.to_string(),
                     grantor_token_asset_id_hex_le: second_asset.to_string(),
                 };
@@ -516,8 +507,10 @@ impl Options {
                 let option_arguments: OptionsArguments =
                     store.get_arguments(option_taproot_pubkey_gen)?;
 
-                let option_token_amount = collateral_amount / option_arguments.contract_size;
-                let expected_asset_amount = collateral_amount / option_arguments.asset_strike_price;
+                let option_token_amount =
+                    collateral_amount / option_arguments.collateral_per_contract;
+                let expected_asset_amount =
+                    option_token_amount.saturating_mul(option_arguments.settlement_per_contract);
 
                 let taproot_pubkey_gen = TaprootPubkeyGen::build_from_str(
                     option_taproot_pubkey_gen,
@@ -721,9 +714,10 @@ impl Options {
                 let total_input_fee = fee_utxo_out.value.explicit().unwrap();
 
                 let total_collateral = cov_utxo.value.explicit().unwrap();
-                let collateral_amount_to_get = (*amount_to_burn) * option_arguments.contract_size;
+                let collateral_amount_to_get =
+                    (*amount_to_burn).saturating_mul(option_arguments.collateral_per_contract);
                 let asset_amount_to_pay =
-                    collateral_amount_to_get / option_arguments.asset_strike_price;
+                    (*amount_to_burn).saturating_mul(option_arguments.settlement_per_contract);
 
                 anyhow::ensure!(
                     collateral_amount_to_get <= total_collateral,
@@ -738,15 +732,16 @@ impl Options {
                     "asset_amount exceeds asset utxo value"
                 );
                 anyhow::ensure!(
-                    option_arguments.target_asset_id_hex_le
+                    option_arguments.settlement_asset_id_hex_le
                         == asset_utxo_out.asset.explicit().unwrap().to_string(),
-                    "target asset id mismatch"
+                    "settlement asset id mismatch"
                 );
 
                 // Asset ids
                 let option_token_id =
                     AssetId::from_str(&option_arguments.option_token_asset_id_hex_le)?;
-                let target_asset_id = AssetId::from_str(&option_arguments.target_asset_id_hex_le)?;
+                let settlement_asset_id =
+                    AssetId::from_str(&option_arguments.settlement_asset_id_hex_le)?;
 
                 let change_recipient = get_p2pk_address(
                     &keypair.x_only_public_key().0,
@@ -795,11 +790,11 @@ impl Options {
                     None,
                 ));
 
-                // settlement payment in target asset to covenant (immediately after burn)
+                // settlement payment to covenant (immediately after burn)
                 pst.add_output(Output::new_explicit(
                     taproot_pubkey_gen.address.script_pubkey(),
                     asset_amount_to_pay,
-                    target_asset_id,
+                    settlement_asset_id,
                     None,
                 ));
 
@@ -818,7 +813,7 @@ impl Options {
                     pst.add_output(Output::new_explicit(
                         change_recipient.script_pubkey(),
                         total_asset_amount - asset_amount_to_pay,
-                        target_asset_id,
+                        settlement_asset_id,
                         None,
                     ));
                 }
@@ -904,7 +899,7 @@ impl Options {
                 Ok(())
             }
             Options::SettlementOption {
-                target_asset_utxo,
+                settlement_asset_utxo,
                 grantor_asset_utxo,
                 fee_utxo,
                 option_taproot_pubkey_gen,
@@ -929,25 +924,26 @@ impl Options {
                     &contracts::get_options_address,
                 )?;
 
-                let target_utxo = fetch_utxo(*target_asset_utxo)?;
+                let target_utxo = fetch_utxo(*settlement_asset_utxo)?;
                 let grantor_utxo = fetch_utxo(*grantor_asset_utxo)?;
                 let fee_lbtc_utxo = fetch_utxo(*fee_utxo)?;
 
                 assert_eq!(
                     taproot_pubkey_gen.address.script_pubkey(),
                     target_utxo.script_pubkey,
-                    "Expected target asset UTXO script to match options address"
+                    "Expected settlement asset UTXO script to match options address"
                 );
 
                 // Asset ids
                 let grantor_token_id =
                     AssetId::from_str(&option_arguments.grantor_token_asset_id_hex_le)?;
-                let target_asset_id = AssetId::from_str(&option_arguments.target_asset_id_hex_le)?;
+                let target_asset_id =
+                    AssetId::from_str(&option_arguments.settlement_asset_id_hex_le)?;
 
                 // Validate assets
                 anyhow::ensure!(
                     matches!(target_utxo.asset, confidential::Asset::Explicit(id) if id == target_asset_id),
-                    "target-asset-utxo must be the target asset"
+                    "settlement-asset-utxo must be the settlement asset"
                 );
                 anyhow::ensure!(
                     matches!(fee_lbtc_utxo.asset, confidential::Asset::Explicit(id) if id == LIQUID_TESTNET_BITCOIN_ASSET),
@@ -959,7 +955,7 @@ impl Options {
                 let total_grantor_token_amount = grantor_utxo.value.explicit().unwrap();
 
                 let asset_amount = (*grantor_token_amount_to_burn)
-                    .saturating_mul(option_arguments.grantor_token_strike_price);
+                    .saturating_mul(option_arguments.settlement_per_contract);
                 anyhow::ensure!(
                     asset_amount <= available_target_asset,
                     "asset_amount exceeds available target asset"
@@ -978,7 +974,7 @@ impl Options {
                 let mut pst = PartiallySignedTransaction::new_v2();
                 pst.global.tx_data.fallback_locktime =
                     Some(LockTime::from_time(option_arguments.start_time)?);
-                pst.add_input(Input::from_prevout(*target_asset_utxo));
+                pst.add_input(Input::from_prevout(*settlement_asset_utxo));
                 pst.add_input(Input::from_prevout(*grantor_asset_utxo));
                 pst.add_input(Input::from_prevout(*fee_utxo));
 
@@ -1135,8 +1131,8 @@ impl Options {
                 let total_fee = fee_utxo_out.value.explicit().unwrap();
 
                 let total_collateral = cov_utxo.value.explicit().unwrap();
-                let collateral_amount =
-                    (*grantor_token_amount_to_burn) * option_arguments.contract_size;
+                let collateral_amount = (*grantor_token_amount_to_burn)
+                    .saturating_mul(option_arguments.collateral_per_contract);
                 anyhow::ensure!(
                     collateral_amount <= total_collateral,
                     "collateral exceeds input value"
@@ -1311,7 +1307,7 @@ impl Options {
 
                 let total_collateral = cov_utxo.value.explicit().unwrap();
                 let collateral_amount_to_withdraw =
-                    (*amount_to_burn).saturating_mul(option_arguments.contract_size);
+                    (*amount_to_burn).saturating_mul(option_arguments.collateral_per_contract);
                 anyhow::ensure!(
                     collateral_amount_to_withdraw <= total_collateral,
                     "collateral exceeds input value"

@@ -165,21 +165,19 @@ mod options_tests {
 
         let second_asset_id = AssetId::from_entropy(second_asset_entropy);
 
-        let contract_size = 20;
+        let collateral_per_contract = 20;
         let collateral_amount = 1000;
-        let asset_strike_price = 2;
-        let option_token_amount = collateral_amount / contract_size;
-        let expected_asset_amount = collateral_amount / asset_strike_price;
-        let grantor_token_strike_price = expected_asset_amount / option_token_amount;
+        let settlement_per_contract = 25; // arbitrary for test
+        let option_token_amount = collateral_amount / collateral_per_contract;
+        let expected_asset_amount = option_token_amount * settlement_per_contract;
 
         let option_arguments = OptionsArguments {
             start_time: 0,
             expiry_time: 0,
-            contract_size,
-            asset_strike_price,
-            grantor_token_strike_price,
+            collateral_per_contract,
+            settlement_per_contract,
             collateral_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
-            target_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
+            settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
             option_token_asset_id_hex_le: first_asset_id.to_string(),
             grantor_token_asset_id_hex_le: second_asset_id.to_string(),
         };
@@ -293,12 +291,10 @@ mod options_tests {
 
         let second_asset_id = AssetId::from_entropy(second_asset_entropy);
 
-        let contract_size = 20;
+        let collateral_per_contract = 20;
         let collateral_amount = 1000;
-        let asset_strike_price = 2;
-        let option_token_amount = collateral_amount / contract_size;
-        let expected_asset_amount = collateral_amount * asset_strike_price;
-        let grantor_token_strike_price = expected_asset_amount / option_token_amount;
+        let settlement_per_contract = 50; // arbitrary for test
+        let option_token_amount = collateral_amount / collateral_per_contract;
 
         let amount_to_burn = option_token_amount / 2;
         let collateral_amount_to_withdraw = collateral_amount / 2;
@@ -306,11 +302,10 @@ mod options_tests {
         let option_arguments = OptionsArguments {
             start_time: 0,
             expiry_time: 0,
-            contract_size,
-            asset_strike_price,
-            grantor_token_strike_price,
+            collateral_per_contract,
+            settlement_per_contract,
             collateral_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
-            target_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
+            settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
             option_token_asset_id_hex_le: first_asset_id.to_string(),
             grantor_token_asset_id_hex_le: second_asset_id.to_string(),
         };
@@ -401,25 +396,22 @@ mod options_tests {
 
         let second_asset_id = AssetId::from_entropy(second_asset_entropy);
 
-        let contract_size = 20;
+        let collateral_per_contract = 20;
         let collateral_amount_total = 1000;
-        let asset_strike_price = 2;
-        let option_token_amount_total = collateral_amount_total / contract_size; // 50
+        let settlement_per_contract = 10;
+        let option_token_amount_total = collateral_amount_total / collateral_per_contract; // 50
 
         let option_amount_to_burn = option_token_amount_total - 5; // 45
-        let collateral_amount_to_get = option_amount_to_burn * contract_size; // 900
-        let asset_amount_to_pay = collateral_amount_to_get / asset_strike_price; // 450
-        let grantor_token_strike_price =
-            (collateral_amount_total * asset_strike_price) / option_token_amount_total; // 40
+        let collateral_amount_to_get = option_amount_to_burn * collateral_per_contract; // 900
+        let asset_amount_to_pay = option_amount_to_burn * settlement_per_contract; // 450
 
         let option_arguments = OptionsArguments {
             start_time: 1760358546,
             expiry_time: 0,
-            contract_size,
-            asset_strike_price,
-            grantor_token_strike_price,
+            collateral_per_contract,
+            settlement_per_contract,
             collateral_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
-            target_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
+            settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
             option_token_asset_id_hex_le: first_asset_id.to_string(),
             grantor_token_asset_id_hex_le: second_asset_id.to_string(),
         };
@@ -512,24 +504,21 @@ mod options_tests {
 
         let second_asset_id = AssetId::from_entropy(second_asset_entropy);
 
-        let contract_size = 20;
-        let asset_strike_price = 2;
-        let option_token_amount_total = 50; // arbitrary, only used to derive strike price below
-        let grantor_token_strike_price = (1000 * asset_strike_price) / option_token_amount_total; // 40
+        let collateral_per_contract = 20;
+        let settlement_per_contract = 40;
 
-        // Settlement burns grantor tokens against target asset held by covenant
+        // Settlement burns grantor tokens against settlement asset held by covenant
         let grantor_token_amount_to_burn = 10;
-        let asset_amount = grantor_token_amount_to_burn * grantor_token_strike_price; // 400
+        let asset_amount = grantor_token_amount_to_burn * settlement_per_contract; // 400
         let available_target_asset = 1000; // available in input utxo
 
         let option_arguments = OptionsArguments {
             start_time: 1760358546,
             expiry_time: 0,
-            contract_size,
-            asset_strike_price,
-            grantor_token_strike_price,
+            collateral_per_contract,
+            settlement_per_contract,
             collateral_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
-            target_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
+            settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
             option_token_asset_id_hex_le: first_asset_id.to_string(),
             grantor_token_asset_id_hex_le: second_asset_id.to_string(),
         };
@@ -620,25 +609,21 @@ mod options_tests {
 
         let second_asset_id = AssetId::from_entropy(second_asset_entropy);
 
-        let contract_size = 20;
+        let collateral_per_contract = 20;
         let collateral_amount_total = 1000;
-        let asset_strike_price = 2;
-        let option_token_amount_total = collateral_amount_total / contract_size; // 50
-        let grantor_token_strike_price =
-            (collateral_amount_total * asset_strike_price) / option_token_amount_total; // 40
+        let option_token_amount_total = collateral_amount_total / collateral_per_contract; // 50
 
         // At expiry, burn grantor tokens to withdraw collateral
         let grantor_token_amount_to_burn = option_token_amount_total / 2; // 25
-        let collateral_amount = grantor_token_amount_to_burn * contract_size; // 500
+        let collateral_amount = grantor_token_amount_to_burn * collateral_per_contract; // 500
 
         let option_arguments = OptionsArguments {
             start_time: 1760358546,
             expiry_time: 1760358546,
-            contract_size,
-            asset_strike_price,
-            grantor_token_strike_price,
+            collateral_per_contract,
+            settlement_per_contract: 0,
             collateral_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
-            target_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
+            settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
             option_token_asset_id_hex_le: first_asset_id.to_string(),
             grantor_token_asset_id_hex_le: second_asset_id.to_string(),
         };
