@@ -93,7 +93,7 @@ pub enum Options {
         #[arg(long = "broadcast")]
         broadcast: bool,
     },
-    /// Exercise path: burn option tokens and settle against target asset
+    /// Exercise path: burn option tokens and settle against settlement asset
     ExerciseOption {
         /// Collateral UTXO at the options address (LBTC)
         #[arg(long = "collateral-utxo")]
@@ -958,7 +958,7 @@ impl Options {
                     .saturating_mul(option_arguments.settlement_per_contract);
                 anyhow::ensure!(
                     asset_amount <= available_target_asset,
-                    "asset_amount exceeds available target asset"
+                    "asset_amount exceeds available settlement asset"
                 );
                 anyhow::ensure!(
                     *fee_amount <= total_input_fee,
@@ -984,7 +984,7 @@ impl Options {
                     total_grantor_token_amount != *grantor_token_amount_to_burn;
                 let is_lbtc_change_needed = total_input_fee != *fee_amount;
 
-                // change (target asset) back to covenant if needed
+                // change (settlement asset) back to covenant if needed
                 if is_target_change_needed {
                     pst.add_output(Output::new_explicit(
                         taproot_pubkey_gen.address.script_pubkey(),
@@ -1002,7 +1002,7 @@ impl Options {
                     None,
                 ));
 
-                // settlement asset to user (target asset)
+                // settlement asset to user
                 pst.add_output(Output::new_explicit(
                     change_recipient.script_pubkey(),
                     asset_amount,

@@ -448,7 +448,7 @@ mod options_tests {
             None,
         ));
 
-        // Output 2: settlement payment in target asset to covenant script (same script hash as output 0)
+        // Output 2: settlement payment in settlement asset to covenant script (same script hash as output 0)
         pst.add_output(Output::new_explicit(
             options_address.script_pubkey(),
             asset_amount_to_pay,
@@ -540,7 +540,7 @@ mod options_tests {
         pst.add_input(Input::from_prevout(outpoint));
         pst.inputs_mut()[0].sequence = Some(elements::Sequence::ENABLE_LOCKTIME_NO_RBF);
 
-        // Output 0: change (target asset) back to covenant
+        // Output 0: change (settlement asset) back to covenant
         pst.add_output(Output::new_explicit(
             options_address.script_pubkey(),
             available_target_asset - asset_amount,
@@ -556,7 +556,7 @@ mod options_tests {
             None,
         ));
 
-        // Output 2: settlement asset (target asset) forwarded
+        // Output 2: settlement asset forwarded
         pst.add_output(Output::new_explicit(
             options_address.script_pubkey(),
             asset_amount,

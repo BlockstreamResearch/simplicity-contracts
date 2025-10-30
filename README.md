@@ -52,8 +52,8 @@ Workspace for prototyping and exercising Simplicity-based contracts on Liquid te
 - Options contract
   - Creation: mints two reissuance tokens (option/grantor), persists entropies for later reissuance, derives/stores `OptionsArguments`, and prints the `TaprootPubkeyGen` string for the covenant instance.
   - Funding: reissues both tokens forward to the covenant address, deposits LBTC collateral, returns base assets as change, and attaches Simplicity witnesses for both token inputs.
-  - Exercise (option-holder): burns option tokens, posts the settlement amount in target asset back to the covenant, and withdraws the proportional collateral to a P2PK recipient. Uses `fallback_locktime` and `Sequence::ENABLE_LOCKTIME_NO_RBF` where required by the covenant.
-  - Settlement (grantor): burns grantor tokens against target asset held by the covenant, forwards settlement asset, and pays fees from a P2PK LBTC UTXO.
+  - Exercise (option-holder): burns option tokens, posts the settlement amount (in settlement asset) back to the covenant, and withdraws the proportional collateral to a P2PK recipient. Uses `fallback_locktime` and `Sequence::ENABLE_LOCKTIME_NO_RBF` where required by the covenant.
+  - Settlement (grantor): burns grantor tokens against settlement asset held by the covenant, forwards settlement asset, and pays fees from a P2PK LBTC UTXO.
   - Expiry (grantor): after expiry, burns grantor tokens and withdraws the corresponding collateral to a P2PK recipient (fees deducted from collateral input).
   - Cancellation: burns both tokens and withdraws a portion of collateral to a P2PK recipient (fees deducted from collateral input).
   - The covenant expects specific output ordering and conditional change outputs; the CLI constructs outputs in that order.
