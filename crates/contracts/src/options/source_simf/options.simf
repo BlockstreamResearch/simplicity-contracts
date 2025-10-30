@@ -1,5 +1,8 @@
 /*
  * POC: Options – Collateral Covenant (Exercise, Cancellation, Expiry)
+ * 
+ * Room for optimization: 
+ * - https://github.com/BlockstreamResearch/simplicity-contracts/issues/2
  */
 
 /// Assert: a == b * expected_q, via divmod
