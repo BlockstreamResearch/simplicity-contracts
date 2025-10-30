@@ -100,15 +100,12 @@ fn ensure_correct_change_at_index(index: u32, asset_id: u256, asset_amount_to_sp
 /*
  * Funding Path
  */
-fn funding_path(token_branch: Either<(), ()>, expected_asset_amount: u64) {
+fn funding_path(expected_asset_amount: u64) {
     ensure_input_and_output_script_hash_eq(0);
     ensure_input_and_output_script_hash_eq(1);
     assert!(dbg!(jet::eq_256(get_output_script_hash(0), get_output_script_hash(1))));
 
-    match token_branch {
-        Left(u: ()) => assert!(jet::eq_32(jet::current_index(), 0)),
-        Right(u: ()) => assert!(jet::eq_32(jet::current_index(), 1)),
-    };
+    assert!(jet::le_32(jet::current_index(), 1));
 
     ensure_output_script_hash_eq(2, get_output_script_hash(0));
 
@@ -244,7 +241,7 @@ fn main() {
     match witness::PATH {
         Left(left_or_right: Either<u64, (bool, u32, u64, u64, u64)>) => match left_or_right {
             Left(expected_asset_amount: u64) => {
-                funding_path(token_branch, expected_asset_amount)
+                funding_path(expected_asset_amount)
             },
             Right(params: (bool, u32, u64, u64, u64)) => {
                 let (is_change_needed, index_to_spend, amount_to_burn, collateral_amount, asset_amount): (bool, u32, u64, u64, u64) = dbg!(params);
