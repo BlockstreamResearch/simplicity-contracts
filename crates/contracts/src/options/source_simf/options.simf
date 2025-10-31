@@ -118,7 +118,6 @@ fn funding_path(expected_asset_amount: u64) {
 
     divmod_eq(collateral_amount, param::COLLATERAL_PER_CONTRACT, option_token_amount);
     divmod_eq(expected_asset_amount, param::SETTLEMENT_PER_CONTRACT, option_token_amount);
-    divmod_eq(expected_asset_amount, param::SETTLEMENT_PER_CONTRACT, grantor_token_amount);
 
     ensure_output_asset_with_amount_eq(2, param::COLLATERAL_ASSET_ID, collateral_amount);
     ensure_output_asset_with_amount_eq(3, param::OPTION_TOKEN_ASSET, option_token_amount);
