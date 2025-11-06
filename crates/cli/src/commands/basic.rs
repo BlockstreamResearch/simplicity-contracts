@@ -42,23 +42,38 @@ pub enum Basic {
         #[arg(long = "broadcast")]
         broadcast: bool,
     },
-    /// Build unsigned tx hex splitting one LBTC UTXO into two recipients
+    /// Build tx splitting one LBTC UTXO into two recipients
     SplitNative {
         /// Transaction id (hex) and output index (vout) of the UTXO you will spend
         #[arg(long = "utxo")]
         utxo_outpoint: OutPoint,
-        /// First recipient address (Liquid testnet bech32m)
-        #[arg(long = "first-to-address")]
-        first_to_address: Address,
-        /// Amount to send to the first recipient in satoshis (LBTC)
-        #[arg(long = "first-sats")]
-        first_amount: u64,
-        /// Second recipient address (Liquid testnet bech32m)
-        #[arg(long = "second-to-address")]
-        second_to_address: Address,
-        /// Amount to send to the second recipient in satoshis (LBTC)
-        #[arg(long = "second-sats")]
-        second_amount: u64,
+        /// Recipient address (Liquid testnet bech32m)
+        #[arg(long = "recipient-address")]
+        recipient_address: Address,
+        /// Amount to send to the recipient in satoshis (LBTC)
+        #[arg(long = "send-sats", default_value_t = 1000)]
+        amount: u64,
+        /// Miner fee in satoshis (LBTC). A separate fee output is added.
+        #[arg(long = "fee-sats")]
+        fee_amount: u64,
+        /// Account index to use for signing input
+        #[arg(long = "account-index", default_value_t = 0)]
+        account_index: u32,
+        /// When set, broadcast the built transaction via Esplora and print txid
+        #[arg(long = "broadcast")]
+        broadcast: bool,
+    },
+    /// Build tx splitting one LBTC UTXO into three recipients
+    SplitNativeThree {
+        /// Transaction id (hex) and output index (vout) of the UTXO you will spend
+        #[arg(long = "utxo")]
+        utxo_outpoint: OutPoint,
+        /// Recipient address (Liquid testnet bech32m)
+        #[arg(long = "recipient-address")]
+        recipient_address: Address,
+        /// Amount to send to the recipient in satoshis (LBTC)
+        #[arg(long = "send-sats", default_value_t = 1000)]
+        amount: u64,
         /// Miner fee in satoshis (LBTC). A separate fee output is added.
         #[arg(long = "fee-sats")]
         fee_amount: u64,
@@ -158,12 +173,14 @@ impl Basic {
 
                 let tx = finalize_p2pk_transaction(
                     pst.extract_tx()?,
-                    &[utxo],
+                    std::slice::from_ref(&utxo),
                     &keypair,
                     0,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
                 )?;
+
+                tx.verify_tx_amt_proofs(secp256k1::SECP256K1, &[utxo])?;
 
                 match broadcast {
                     true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
@@ -174,10 +191,8 @@ impl Basic {
             }
             Basic::SplitNative {
                 utxo_outpoint,
-                first_to_address,
-                first_amount,
-                second_to_address,
-                second_amount,
+                recipient_address,
+                amount,
                 fee_amount,
                 account_index,
                 broadcast,
@@ -191,31 +206,20 @@ impl Basic {
 
                 let total_input_amount = utxo.value.explicit().unwrap();
 
-                let required_total = first_amount
-                    .checked_add(*second_amount)
-                    .ok_or_else(|| anyhow!("first_amount + second_amount overflows"))?
-                    .checked_add(*fee_amount)
-                    .ok_or_else(|| anyhow!("sum + fee overflows"))?;
-
-                if required_total != total_input_amount {
-                    return Err(anyhow!(
-                        "first + second + fee must equal input value ({} != {})",
-                        required_total,
-                        total_input_amount
-                    ));
-                }
+                let first_amount = *amount;
+                let second_amount = total_input_amount - first_amount - *fee_amount;
 
                 let mut pst = PartiallySignedTransaction::new_v2();
                 pst.add_input(Input::from_prevout(*utxo_outpoint));
                 pst.add_output(Output::new_explicit(
-                    first_to_address.script_pubkey(),
-                    *first_amount,
+                    recipient_address.script_pubkey(),
+                    first_amount,
                     LIQUID_TESTNET_BITCOIN_ASSET,
                     None,
                 ));
                 pst.add_output(Output::new_explicit(
-                    second_to_address.script_pubkey(),
-                    *second_amount,
+                    recipient_address.script_pubkey(),
+                    second_amount,
                     LIQUID_TESTNET_BITCOIN_ASSET,
                     None,
                 ));
@@ -226,12 +230,79 @@ impl Basic {
 
                 let tx = finalize_p2pk_transaction(
                     pst.extract_tx()?,
-                    &[utxo],
+                    std::slice::from_ref(&utxo),
                     &keypair,
                     0,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
                 )?;
+
+                tx.verify_tx_amt_proofs(secp256k1::SECP256K1, &[utxo])?;
+
+                match broadcast {
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    false => println!("{}", tx.serialize().to_lower_hex_string()),
+                }
+
+                Ok(())
+            }
+            Basic::SplitNativeThree {
+                utxo_outpoint,
+                recipient_address,
+                amount,
+                fee_amount,
+                account_index,
+                broadcast,
+            } => {
+                let keypair = secp256k1::Keypair::from_secret_key(
+                    secp256k1::SECP256K1,
+                    &derive_secret_key_from_index(*account_index),
+                );
+
+                let utxo = fetch_utxo(*utxo_outpoint)?;
+
+                let total_input_amount = utxo.value.explicit().unwrap();
+
+                let first_amount = *amount;
+                let second_amount = first_amount;
+                let third_amount = total_input_amount - first_amount - second_amount - *fee_amount;
+
+                let mut pst = PartiallySignedTransaction::new_v2();
+                pst.add_input(Input::from_prevout(*utxo_outpoint));
+
+                pst.add_output(Output::new_explicit(
+                    recipient_address.script_pubkey(),
+                    first_amount,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                    None,
+                ));
+                pst.add_output(Output::new_explicit(
+                    recipient_address.script_pubkey(),
+                    second_amount,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                    None,
+                ));
+                pst.add_output(Output::new_explicit(
+                    recipient_address.script_pubkey(),
+                    third_amount,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                    None,
+                ));
+                pst.add_output(Output::from_txout(TxOut::new_fee(
+                    *fee_amount,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                )));
+
+                let tx = finalize_p2pk_transaction(
+                    pst.extract_tx()?,
+                    std::slice::from_ref(&utxo),
+                    &keypair,
+                    0,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
+                )?;
+
+                tx.verify_tx_amt_proofs(secp256k1::SECP256K1, &[utxo])?;
 
                 match broadcast {
                     true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
@@ -336,6 +407,8 @@ impl Basic {
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
                 )?;
+
+                tx.verify_tx_amt_proofs(secp256k1::SECP256K1, &utxos)?;
 
                 match broadcast {
                     true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),

@@ -46,7 +46,8 @@ Workspace for prototyping and exercising Simplicity-based contracts on Liquid te
 - Basic CLI (P2PK)
   - `basic address <index>` prints the derived X-only public key and its P2TR address.
   - `basic transfer-native` builds a 1-in/2-out LBTC spend with change + a separate fee output, then Schnorr-signs and optionally broadcasts.
-  - `basic split-native` enforces that `first + second + fee == input value` for exact splits.
+  - `basic split-native` creates two outputs to `--recipient-address`: the first set by `--send-sats`, the second as the remainder (`input - first - fee`).
+  - `basic split-native-three` creates three outputs to `--recipient-address`: the first and second equal to `--send-sats`; the third is the remainder (`input - first - second - fee`).
   - `basic transfer-asset` spends an ASSET UTXO and a separate LBTC fee UTXO, returning change for both and enforcing the fee UTXO is LBTC.
 
 - Options contract

@@ -13,6 +13,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 use crate::commands::basic::Basic;
+use crate::commands::dcd::Dcd;
 use crate::commands::options::Options;
 use crate::commands::storage::Storage;
 
@@ -46,6 +47,11 @@ enum Commands {
         #[command(subcommand)]
         storage: Box<Storage>,
     },
+    /// Dual Currency Deposit Contract utilities
+    Dcd {
+        #[command(subcommand)]
+        dcd: Box<Dcd>,
+    },
 }
 
 fn main() -> Result<()> {
@@ -53,5 +59,6 @@ fn main() -> Result<()> {
         Commands::Basic { basic } => basic.handle(),
         Commands::Options { options } => options.handle(),
         Commands::Storage { storage } => storage.handle(),
+        Commands::Dcd { dcd } => dcd.handle(),
     }
 }

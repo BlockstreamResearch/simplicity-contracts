@@ -46,15 +46,24 @@ cargo run -p cli -- basic transfer-native \
   --broadcast
 ```
 
-- Split LBTC into two recipients
+- Split LBTC into two outputs (same recipient)
 
 ```
 cargo run -p cli -- basic split-native \
   --utxo <txid>:<vout> \
-  --first-to-address <addr1> \
-  --first-sats <sats1> \
-  --second-to-address <addr2> \
-  --second-sats <sats2> \
+  --recipient-address <addr> \
+  --send-sats <first_output_sats> \
+  --fee-sats <fee> \
+  --account-index 0
+```
+
+- Split LBTC into three outputs (same recipient)
+
+```
+cargo run -p cli -- basic split-native-three \
+  --utxo <txid>:<vout> \
+  --recipient-address <addr> \
+  --send-sats <first_two_outputs_sats_each> \
   --fee-sats <fee> \
   --account-index 0
 ```
@@ -269,6 +278,321 @@ cargo run -p cli -- options cancellation-option \
   --broadcast
 ```
 
+## DCD Commands
+
+The DCD (Decentralized Collateralized Derivative) contract enables price-attested derivatives on Liquid Testnet.
+
+### DCD Creation
+
+Create a new DCD covenant by issuing three token types (filler, grantor collateral, grantor settlement) and storing the DCD arguments.
+
+- Meaning of terms:
+  - first-fee-utxo, second-fee-utxo, third-fee-utxo: Three LBTC UTXOs to use for token issuance
+  - taker-funding-start-time: Block time when taker can start funding
+  - taker-funding-end-time: Block time when taker funding period ends
+  - contract-expiry-time: Block time when contract expires
+  - early-termination-end-time: Block time when early termination is no longer allowed
+  - settlement-height: Block height at which oracle price is attested
+  - principal-collateral-amount: Base collateral amount
+  - incentive-basis-points: Incentive in basis points (1 bp = 0.01%)
+  - filler-per-principal-collateral: Filler token ratio
+  - strike-price: Oracle strike price for settlement
+  - settlement-asset-id: Asset ID (hex) for settlement
+  - oracle-public-key: X-only pubkey of oracle
+  - fee-amount: Transaction fee in satoshis
+  - account-index: Account index for signing
+  - broadcast: When set, broadcast transaction
+
+Example:
+```
+cargo run -p cli -- dcd-demo dcd-creation \
+  --first-fee-utxo <txid>:<vout> \
+  --second-fee-utxo <txid>:<vout> \
+  --third-fee-utxo <txid>:<vout> \
+  --taker-funding-start-time 1700000000 \
+  --taker-funding-end-time 1700100000 \
+  --contract-expiry-time 1700200000 \
+  --early-termination-end-time 1700150000 \
+  --settlement-height 1200000 \
+  --principal-collateral-amount 1000000 \
+  --incentive-basis-points 100 \
+  --filler-per-principal-collateral 1000 \
+  --strike-price 115000 \
+  --settlement-asset-id <asset-id-hex> \
+  --oracle-public-key <xonly-pubkey-hex> \
+  --fee-amount 500 \
+  --account-index 0 \
+  --broadcast
+```
+
+### DCD Import/Export
+
+Persist or retrieve encoded DCD arguments for a given taproot pubkey gen in the local store.
+
+- Import (bind encoded args to a `taproot-pubkey-gen`):
+
+```
+cargo run -p cli -- dcd-demo import \
+  --taproot-pubkey-gen <taproot-pubkey-gen> \
+  --encoded-dcd-arguments <hex>
+```
+
+- Export (print encoded args for a `taproot-pubkey-gen`):
+
+```
+cargo run -p cli -- dcd-demo export \
+  --taproot-pubkey-gen <taproot-pubkey-gen>
+```
+
+### Oracle Signature
+
+Generate a Schnorr signature for price attestation at settlement.
+
+- Meaning of terms:
+  - price-at-current-block-height: Oracle price to attest
+  - settlement-height: Block height for settlement
+  - oracle-account-index: Account index for oracle key
+
+Example:
+```
+cargo run -p cli -- dcd-demo oracle-signature \
+  --price-at-current-block-height 115000 \
+  --settlement-height 1200000 \
+  --oracle-account-index 2
+```
+
+### Merge Token UTXOs
+
+Merge 2, 3, or 4 token UTXOs into a single UTXO. Useful for consolidating fragmented token holdings.
+
+- Commands: `merge-2-tokens`, `merge-3-tokens`, `merge-4-tokens`
+- Common parameters:
+  - token-utxo-1, token-utxo-2, token-utxo-3, token-utxo-4: Token UTXOs to merge
+  - fee-utxo: LBTC UTXO for transaction fees
+  - dcd-taproot-pubkey-gen: DCD instance identifier
+  - fee-amount: Transaction fee in satoshis
+  - account-index: Account index for signing
+  - broadcast: When set, broadcast transaction
+
+Example (merging 2 tokens):
+```
+cargo run -p cli -- dcd-demo merge-2-tokens \
+  --token-utxo-1 <txid>:<vout> \
+  --token-utxo-2 <txid>:<vout> \
+  --fee-utxo <txid>:<vout> \
+  --dcd-taproot-pubkey-gen <taproot-pubkey-gen> \
+  --fee-amount 500 \
+  --account-index 0 \
+  --broadcast
+```
+
+### Maker Funding Path
+
+Maker deposits collateral and settlement assets, receives grantor tokens.
+
+- Meaning of terms:
+  - filler-token-utxo: Filler token UTXO for issuance
+  - grantor-collateral-token-utxo: Grantor collateral token UTXO
+  - grantor-settlement-token-utxo: Grantor settlement token UTXO
+  - settlement-asset-utxo: Settlement asset UTXO to deposit
+  - fee-utxo: LBTC UTXO for fees
+  - dcd-taproot-pubkey-gen: DCD instance identifier
+  - collateral-amount-to-deposit: Collateral amount to deposit
+  - fee-amount: Transaction fee
+  - account-index: Account index for signing
+  - broadcast: When set, broadcast transaction
+
+Example:
+```
+cargo run -p cli -- dcd-demo maker-funding-path \
+  --filler-token-utxo <txid>:<vout> \
+  --grantor-collateral-token-utxo <txid>:<vout> \
+  --grantor-settlement-token-utxo <txid>:<vout> \
+  --settlement-asset-utxo <txid>:<vout> \
+  --fee-utxo <txid>:<vout> \
+  --dcd-taproot-pubkey-gen <taproot-pubkey-gen> \
+  --collateral-amount-to-deposit 100000 \
+  --fee-amount 500 \
+  --account-index 0 \
+  --broadcast
+```
+
+### Taker Funding Path
+
+Taker deposits collateral, receives filler tokens.
+
+- Meaning of terms:
+  - filler-token-utxo: Filler token UTXO from covenant
+  - collateral-utxo: Collateral UTXO to deposit
+  - fee-utxo: LBTC UTXO for fees
+  - dcd-taproot-pubkey-gen: DCD instance identifier
+  - collateral-amount-to-deposit: Collateral amount to deposit
+  - fee-amount: Transaction fee
+  - account-index: Account index for signing
+  - broadcast: When set, broadcast transaction
+
+Example:
+```
+cargo run -p cli -- dcd-demo taker-funding-path \
+  --filler-token-utxo <txid>:<vout> \
+  --collateral-utxo <txid>:<vout> \
+  --fee-utxo <txid>:<vout> \
+  --dcd-taproot-pubkey-gen <taproot-pubkey-gen> \
+  --collateral-amount-to-deposit 50000 \
+  --fee-amount 500 \
+  --account-index 1 \
+  --broadcast
+```
+
+### Taker Early Termination
+
+Taker returns filler tokens, gets collateral back before contract expiry.
+
+- Meaning of terms:
+  - collateral-utxo: Collateral UTXO at covenant
+  - filler-token-utxo: Filler token UTXO to burn
+  - fee-utxo: LBTC UTXO for fees
+  - dcd-taproot-pubkey-gen: DCD instance identifier
+  - filler-token-amount-to-return: Amount of filler tokens to return
+  - fee-amount: Transaction fee
+  - account-index: Account index for signing
+  - broadcast: When set, broadcast transaction
+
+Example:
+```
+cargo run -p cli -- dcd-demo taker-early-termination \
+  --collateral-utxo <txid>:<vout> \
+  --filler-token-utxo <txid>:<vout> \
+  --fee-utxo <txid>:<vout> \
+  --dcd-taproot-pubkey-gen <taproot-pubkey-gen> \
+  --filler-token-amount-to-return 1000 \
+  --fee-amount 500 \
+  --account-index 1 \
+  --broadcast
+```
+
+### Maker Collateral Termination
+
+Maker burns grantor collateral tokens, gets collateral back.
+
+- Meaning of terms:
+  - collateral-utxo: Collateral UTXO at covenant
+  - grantor-collateral-token-utxo: Grantor collateral token UTXO to burn
+  - fee-utxo: LBTC UTXO for fees
+  - dcd-taproot-pubkey-gen: DCD instance identifier
+  - grantor-collateral-amount-to-burn: Amount of grantor collateral tokens to burn
+  - fee-amount: Transaction fee
+  - account-index: Account index for signing
+  - broadcast: When set, broadcast transaction
+
+Example:
+```
+cargo run -p cli -- dcd-demo maker-collateral-termination \
+  --collateral-utxo <txid>:<vout> \
+  --grantor-collateral-token-utxo <txid>:<vout> \
+  --fee-utxo <txid>:<vout> \
+  --dcd-taproot-pubkey-gen <taproot-pubkey-gen> \
+  --grantor-collateral-amount-to-burn 1000 \
+  --fee-amount 500 \
+  --account-index 0 \
+  --broadcast
+```
+
+### Maker Settlement Termination
+
+Maker burns grantor settlement tokens, gets settlement asset back.
+
+- Meaning of terms:
+  - settlement-asset-utxo: Settlement asset UTXO at covenant
+  - grantor-settlement-token-utxo: Grantor settlement token UTXO to burn
+  - fee-utxo: LBTC UTXO for fees
+  - dcd-taproot-pubkey-gen: DCD instance identifier
+  - grantor-settlement-amount-to-burn: Amount of grantor settlement tokens to burn
+  - fee-amount: Transaction fee
+  - account-index: Account index for signing
+  - broadcast: When set, broadcast transaction
+
+Example:
+```
+cargo run -p cli -- dcd-demo maker-settlement-termination \
+  --settlement-asset-utxo <txid>:<vout> \
+  --grantor-settlement-token-utxo <txid>:<vout> \
+  --fee-utxo <txid>:<vout> \
+  --dcd-taproot-pubkey-gen <taproot-pubkey-gen> \
+  --grantor-settlement-amount-to-burn 1000 \
+  --fee-amount 500 \
+  --account-index 0 \
+  --broadcast
+```
+
+### Maker Settlement
+
+Maker settles at maturity based on oracle-attested price.
+
+- Meaning of terms:
+  - asset-utxo: Asset UTXO at covenant (collateral or settlement depending on price)
+  - grantor-collateral-token-utxo: Grantor collateral token UTXO to burn
+  - grantor-settlement-token-utxo: Grantor settlement token UTXO to burn
+  - fee-utxo: LBTC UTXO for fees
+  - dcd-taproot-pubkey-gen: DCD instance identifier
+  - price-at-current-block-height: Oracle-attested price
+  - oracle-signature: Schnorr signature from oracle
+  - grantor-amount-to-burn: Amount of grantor tokens to burn
+  - fee-amount: Transaction fee
+  - account-index: Account index for signing
+  - broadcast: When set, broadcast transaction
+
+Example:
+```
+cargo run -p cli -- dcd-demo maker-settlement \
+  --asset-utxo <txid>:<vout> \
+  --grantor-collateral-token-utxo <txid>:<vout> \
+  --grantor-settlement-token-utxo <txid>:<vout> \
+  --fee-utxo <txid>:<vout> \
+  --dcd-taproot-pubkey-gen <taproot-pubkey-gen> \
+  --price-at-current-block-height 115000 \
+  --oracle-signature <hex> \
+  --grantor-amount-to-burn 1000 \
+  --fee-amount 500 \
+  --account-index 0 \
+  --broadcast
+```
+
+### Taker Settlement
+
+Taker settles at maturity based on oracle-attested price.
+
+- Meaning of terms:
+  - asset-utxo: Asset UTXO at covenant (collateral or settlement depending on price)
+  - filler-token-utxo: Filler token UTXO to burn
+  - fee-utxo: LBTC UTXO for fees
+  - dcd-taproot-pubkey-gen: DCD instance identifier
+  - price-at-current-block-height: Oracle-attested price
+  - oracle-signature: Schnorr signature from oracle
+  - filler-amount-to-burn: Amount of filler tokens to burn
+  - fee-amount: Transaction fee
+  - account-index: Account index for signing
+  - broadcast: When set, broadcast transaction
+
+Example:
+```
+cargo run -p cli -- dcd-demo taker-settlement \
+  --asset-utxo <txid>:<vout> \
+  --filler-token-utxo <txid>:<vout> \
+  --fee-utxo <txid>:<vout> \
+  --dcd-taproot-pubkey-gen <taproot-pubkey-gen> \
+  --price-at-current-block-height 115000 \
+  --oracle-signature <hex> \
+  --filler-amount-to-burn 1000 \
+  --fee-amount 500 \
+  --account-index 1 \
+  --broadcast
+```
+
+### Options
+
+The Options contract and related CLI commands have moved to a separate repository and are no longer part of this CLI.
+
 ## Notes
 
 - Addresses are Liquid testnet P2TR derived from SEED_HEX and index.
@@ -288,10 +612,8 @@ OutPoint format note:
 cargo run -p cli -- basic split-native \
   --broadcast \
   --utxo 07ecfc3fb98db1693b2721c5efeea1a0bb348b4bc6ff4ef57526e9d5d8e4867f:3 \
-  --first-to-address tex1pxztvg542emmh9h8txga43jcltt4uhphpt79lylqmlwrafzvcferq2qpdg9 \
-  --first-sats 2000 \
-  --second-to-address tex1pxztvg542emmh9h8txga43jcltt4uhphpt79lylqmlwrafzvcferq2qpdg9 \
-  --second-sats 85140 \
+  --recipient-address tex1pxztvg542emmh9h8txga43jcltt4uhphpt79lylqmlwrafzvcferq2qpdg9 \
+  --send-sats 2000 \
   --fee-sats 50 \
   --account-index 0
 ```
