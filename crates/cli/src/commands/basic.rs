@@ -1,8 +1,15 @@
 use crate::modules::keys::derive_secret_key_from_index;
+use crate::modules::store::Store;
 use anyhow::anyhow;
 
 use clap::Subcommand;
 
+use simplicityhl::elements::confidential::{AssetBlindingFactor, ValueBlindingFactor};
+use simplicityhl::elements::hashes::sha256;
+use simplicityhl::elements::hex::ToHex;
+use simplicityhl::elements::secp256k1_zkp::rand::thread_rng;
+use simplicityhl::elements::secp256k1_zkp::{Secp256k1, SecretKey};
+use simplicityhl::elements::{AssetId, TxOutSecrets};
 use simplicityhl::simplicity::bitcoin::secp256k1;
 use simplicityhl::simplicity::elements::confidential::Asset;
 use simplicityhl::simplicity::elements::pset::serialize::Serialize;
@@ -11,7 +18,7 @@ use simplicityhl::simplicity::elements::{Address, AddressParams, OutPoint, TxOut
 use simplicityhl::simplicity::hex::DisplayHex;
 use simplicityhl_core::{
     LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_GENESIS, broadcast_tx, fetch_utxo,
-    finalize_p2pk_transaction, get_p2pk_address,
+    finalize_p2pk_transaction, get_new_asset_entropy, get_p2pk_address, get_random_seed,
 };
 
 #[derive(Subcommand, Debug)]
@@ -98,6 +105,51 @@ pub enum Basic {
         /// Amount to send of the asset in its satoshi units
         #[arg(long = "send-sats")]
         send_amount: u64,
+        /// Miner fee in satoshis (LBTC). A separate fee output is added.
+        #[arg(long = "fee-sats")]
+        fee_amount: u64,
+        /// Account index to use for change address
+        #[arg(long = "account-index", default_value_t = 0)]
+        account_index: u32,
+        /// When set, broadcast the built transaction via Esplora and print txid
+        #[arg(long = "broadcast")]
+        broadcast: bool,
+    },
+    /// Build tx issuing an asset
+    IssueAsset {
+        /// Transaction id (hex) and output index (vout) of the LBTC UTXO used to pay fees and issue the asset
+        #[arg(long = "fee-utxo")]
+        fee_utxo_outpoint: OutPoint,
+        /// Asset name
+        #[arg(long = "asset-name")]
+        asset_name: String,
+        /// Amount to issue of the asset in its satoshi units
+        #[arg(long = "issue-sats")]
+        issue_amount: u64,
+        /// Miner fee in satoshis (LBTC). A separate fee output is added.
+        #[arg(long = "fee-sats")]
+        fee_amount: u64,
+        /// Account index to use for change address
+        #[arg(long = "account-index", default_value_t = 0)]
+        account_index: u32,
+        /// When set, broadcast the built transaction via Esplora and print txid
+        #[arg(long = "broadcast")]
+        broadcast: bool,
+    },
+    /// Reissue an asset
+    ReissueAsset {
+        /// Transaction id (hex) and output index (vout) of the REISSUANCE ASSET UTXO you will spend
+        #[arg(long = "reissue-asset-utxo")]
+        reissue_asset_outpoint: OutPoint,
+        /// Transaction id (hex) and output index (vout) of the LBTC UTXO used to pay fees and reissue the asset
+        #[arg(long = "fee-utxo")]
+        fee_utxo_outpoint: OutPoint,
+        /// Asset name
+        #[arg(long = "asset-name")]
+        asset_name: String,
+        /// Amount to reissue of the asset in its satoshi units
+        #[arg(long = "reissue-sats")]
+        reissue_amount: u64,
         /// Miner fee in satoshis (LBTC). A separate fee output is added.
         #[arg(long = "fee-sats")]
         fee_amount: u64,
@@ -408,6 +460,261 @@ impl Basic {
                     *LIQUID_TESTNET_GENESIS,
                 )?;
 
+                tx.verify_tx_amt_proofs(secp256k1::SECP256K1, &utxos)?;
+
+                match broadcast {
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    false => println!("{}", tx.serialize().to_lower_hex_string()),
+                }
+
+                Ok(())
+            }
+            Basic::IssueAsset {
+                fee_utxo_outpoint,
+                asset_name,
+                issue_amount,
+                fee_amount,
+                account_index,
+                broadcast,
+            } => {
+                let store = Store::load()?;
+
+                if store.store.get(asset_name)?.is_some() {
+                    return Err(anyhow!("Asset name already exists"));
+                };
+
+                let keypair = secp256k1::Keypair::from_secret_key(
+                    secp256k1::SECP256K1,
+                    &derive_secret_key_from_index(*account_index),
+                );
+
+                let utxo_fee = fetch_utxo(*fee_utxo_outpoint)?;
+
+                let total_input_fee = utxo_fee.value.explicit().unwrap();
+                if *fee_amount > total_input_fee {
+                    return Err(anyhow!("fee exceeds fee input value"));
+                }
+
+                let blinding_key = secp256k1::Keypair::from_secret_key(
+                    secp256k1::SECP256K1,
+                    &SecretKey::from_slice(&[1; 32])?,
+                );
+
+                let asset_entropy = get_random_seed();
+
+                let mut issuance_tx = Input::from_prevout(*fee_utxo_outpoint);
+                issuance_tx.witness_utxo = Some(utxo_fee.clone());
+                issuance_tx.issuance_value_amount = Some(*issue_amount);
+                issuance_tx.issuance_inflation_keys = Some(1);
+                issuance_tx.issuance_asset_entropy = Some(asset_entropy);
+
+                let (asset, reissuance_asset) = issuance_tx.issuance_ids();
+
+                println!("Asset: {}", asset);
+                println!("Reissuance Asset: {}", reissuance_asset);
+
+                store.store.insert(
+                    asset_name,
+                    get_new_asset_entropy(fee_utxo_outpoint, asset_entropy)
+                        .to_hex()
+                        .as_bytes(),
+                )?;
+
+                let change_recipient = get_p2pk_address(
+                    &keypair.x_only_public_key().0,
+                    &AddressParams::LIQUID_TESTNET,
+                )?;
+
+                let mut pst = PartiallySignedTransaction::new_v2();
+
+                pst.add_input(issuance_tx);
+
+                let mut output = Output::new_explicit(
+                    change_recipient.script_pubkey(),
+                    1,
+                    reissuance_asset,
+                    Some(blinding_key.public_key().into()),
+                );
+                output.blinder_index = Some(0);
+                pst.add_output(output);
+
+                pst.add_output(Output::new_explicit(
+                    change_recipient.script_pubkey(),
+                    *issue_amount,
+                    asset,
+                    None,
+                ));
+
+                pst.add_output(Output::new_explicit(
+                    change_recipient.script_pubkey(),
+                    total_input_fee - fee_amount,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                    None,
+                ));
+
+                pst.add_output(Output::from_txout(TxOut::new_fee(
+                    *fee_amount,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                )));
+
+                let issuance_secrets = TxOutSecrets {
+                    asset_bf: AssetBlindingFactor::zero(),
+                    value_bf: ValueBlindingFactor::zero(),
+                    value: utxo_fee.value.explicit().unwrap(),
+                    asset: LIQUID_TESTNET_BITCOIN_ASSET,
+                };
+
+                let mut inp_txout_sec = std::collections::HashMap::new();
+                inp_txout_sec.insert(0, issuance_secrets);
+
+                pst.inputs_mut()[0].blinded_issuance = Some(0x00);
+
+                pst.blind_last(&mut thread_rng(), &Secp256k1::new(), &inp_txout_sec)?;
+
+                let tx = finalize_p2pk_transaction(
+                    pst.extract_tx()?,
+                    std::slice::from_ref(&utxo_fee),
+                    &keypair,
+                    0,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
+                )?;
+
+                tx.verify_tx_amt_proofs(secp256k1::SECP256K1, &[utxo_fee])?;
+
+                match broadcast {
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    false => println!("{}", tx.serialize().to_lower_hex_string()),
+                }
+
+                Ok(())
+            }
+            Basic::ReissueAsset {
+                reissue_asset_outpoint,
+                fee_utxo_outpoint,
+                asset_name,
+                reissue_amount,
+                fee_amount,
+                account_index,
+                broadcast,
+            } => {
+                let store = Store::load()?;
+
+                let Some(asset_entropy) = store.store.get(asset_name)? else {
+                    return Err(anyhow!("Asset name not found"));
+                };
+                let asset_entropy = hex::decode(asset_entropy)?;
+
+                let mut asset_entropy_bytes: [u8; 32] = asset_entropy.try_into().unwrap();
+                asset_entropy_bytes.reverse();
+                let asset_entropy = sha256::Midstate::from_byte_array(asset_entropy_bytes);
+
+                let keypair = secp256k1::Keypair::from_secret_key(
+                    secp256k1::SECP256K1,
+                    &derive_secret_key_from_index(*account_index),
+                );
+
+                let utxo_reissue = fetch_utxo(*reissue_asset_outpoint)?;
+                let utxo_fee = fetch_utxo(*fee_utxo_outpoint)?;
+
+                let total_input_fee = utxo_fee.value.explicit().unwrap();
+                if *fee_amount > total_input_fee {
+                    return Err(anyhow!("fee exceeds fee input value"));
+                }
+
+                let blinding_key = secp256k1::Keypair::from_secret_key(
+                    secp256k1::SECP256K1,
+                    &SecretKey::from_slice(&[1; 32])?,
+                );
+
+                let blinding_sk = blinding_key.secret_key();
+
+                let unblinded = utxo_reissue.unblind(&Secp256k1::new(), blinding_sk)?;
+                let asset_bf = unblinded.asset_bf;
+
+                let asset_id = AssetId::from_entropy(asset_entropy);
+                let reissuance_asset_id =
+                    AssetId::reissuance_token_from_entropy(asset_entropy, false);
+
+                println!("Asset: {}", asset_id);
+                println!("Reissuance Asset: {}", reissuance_asset_id);
+
+                let mut reissuance_tx = Input::from_prevout(*reissue_asset_outpoint);
+                reissuance_tx.witness_utxo = Some(utxo_reissue.clone());
+                reissuance_tx.issuance_value_amount = Some(*reissue_amount);
+                reissuance_tx.issuance_inflation_keys = None;
+                reissuance_tx.issuance_asset_entropy = Some(asset_entropy.to_byte_array());
+
+                let change_recipient = get_p2pk_address(
+                    &keypair.x_only_public_key().0,
+                    &AddressParams::LIQUID_TESTNET,
+                )?;
+
+                let mut pst = PartiallySignedTransaction::new_v2();
+
+                pst.add_input(reissuance_tx);
+
+                let mut fee_input = Input::from_prevout(*fee_utxo_outpoint);
+                fee_input.witness_utxo = Some(utxo_fee.clone());
+                pst.add_input(fee_input);
+
+                let mut output = Output::new_explicit(
+                    change_recipient.script_pubkey(),
+                    1,
+                    reissuance_asset_id,
+                    Some(blinding_key.public_key().into()),
+                );
+                output.blinder_index = Some(0);
+                pst.add_output(output);
+
+                pst.add_output(Output::new_explicit(
+                    change_recipient.script_pubkey(),
+                    *reissue_amount,
+                    asset_id,
+                    None,
+                ));
+
+                pst.add_output(Output::new_explicit(
+                    change_recipient.script_pubkey(),
+                    total_input_fee - fee_amount,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                    None,
+                ));
+
+                pst.add_output(Output::from_txout(TxOut::new_fee(
+                    *fee_amount,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                )));
+
+                {
+                    let input = &mut pst.inputs_mut()[0];
+                    input.blinded_issuance = Some(0x00);
+                    input.issuance_blinding_nonce = Some(asset_bf.into_inner());
+                }
+
+                let mut inp_txout_sec = std::collections::HashMap::new();
+                inp_txout_sec.insert(0, unblinded);
+
+                pst.blind_last(&mut thread_rng(), &Secp256k1::new(), &inp_txout_sec)?;
+
+                let utxos = vec![utxo_reissue, utxo_fee];
+
+                let tx = finalize_p2pk_transaction(
+                    pst.extract_tx()?,
+                    &utxos,
+                    &keypair,
+                    0,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
+                )?;
+                let tx = finalize_p2pk_transaction(
+                    tx,
+                    &utxos,
+                    &keypair,
+                    1,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
+                )?;
                 tx.verify_tx_amt_proofs(secp256k1::SECP256K1, &utxos)?;
 
                 match broadcast {

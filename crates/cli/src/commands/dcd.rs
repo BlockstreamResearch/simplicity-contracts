@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use crate::modules::keys::derive_secret_key_from_index;
 use crate::modules::store::Store;
 
@@ -6,26 +8,27 @@ use clap::Subcommand;
 
 use simplicityhl::elements::bitcoin::secp256k1;
 use simplicityhl::elements::confidential::{AssetBlindingFactor, ValueBlindingFactor};
+use simplicityhl::elements::hashes::sha256;
 use simplicityhl::elements::hex::ToHex;
 use simplicityhl::elements::pset::serialize::Serialize;
 use simplicityhl::elements::secp256k1_zkp::rand::thread_rng;
 use simplicityhl::elements::secp256k1_zkp::{Secp256k1, SecretKey};
-use simplicityhl::elements::{OutPoint, TxOutSecrets};
+use simplicityhl::elements::{AssetId, OutPoint, TxOutSecrets};
 use simplicityhl::simplicity::ToXOnlyPubkey;
 use simplicityhl::simplicity::hex::DisplayHex;
 
 use simplicityhl_core::{
     Encodable, LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_GENESIS, TaprootPubkeyGen,
-    broadcast_tx, fetch_utxo, finalize_p2pk_transaction, get_new_asset_entropy, get_p2pk_address,
-    get_random_seed,
+    broadcast_tx, fetch_utxo, finalize_p2pk_transaction, finalize_transaction,
+    get_new_asset_entropy, get_p2pk_address, get_random_seed,
 };
 
 use simplicityhl::simplicity::elements::pset::{Input, Output, PartiallySignedTransaction};
 use simplicityhl::simplicity::elements::{AddressParams, LockTime, Script, Transaction};
 
 use contracts::{
-    DCDArguments, DCDRatioArguments, finalize_dcd_transaction_on_liquid_testnet, get_dcd_program,
-    oracle_msg,
+    DCDArguments, DCDRatioArguments, build_dcd_witness, finalize_dcd_transaction_on_liquid_testnet,
+    get_dcd_program, oracle_msg,
 };
 use contracts::{DcdBranch, MergeBranch, TokenBranch};
 
@@ -212,9 +215,6 @@ pub enum Dcd {
         /// DCD taproot pubkey gen
         #[arg(long = "dcd-taproot-pubkey-gen")]
         dcd_taproot_pubkey_gen: String,
-        /// Collateral amount to deposit
-        #[arg(long = "collateral-amount-to-deposit")]
-        collateral_amount_to_deposit: u64,
         /// Fee amount
         #[arg(long = "fee-amount")]
         fee_amount: u64,
@@ -731,6 +731,8 @@ impl Dcd {
                     *LIQUID_TESTNET_GENESIS,
                 )?;
 
+                tx.verify_tx_amt_proofs(secp256k1::SECP256K1, &utxos)?;
+
                 match broadcast {
                     true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
@@ -738,9 +740,359 @@ impl Dcd {
 
                 Ok(())
             }
-            Dcd::MakerFundingPath { .. } => {
-                // TODO: Implement maker funding path transaction building
-                println!("MakerFundingPath: Not yet implemented");
+            Dcd::MakerFundingPath {
+                filler_token_utxo,
+                grantor_collateral_token_utxo,
+                grantor_settlement_token_utxo,
+                settlement_asset_utxo,
+                fee_utxo,
+                dcd_taproot_pubkey_gen,
+                fee_amount,
+                account_index,
+                broadcast,
+            } => {
+                let store = Store::load()?;
+
+                let keypair = secp256k1::Keypair::from_secret_key(
+                    secp256k1::SECP256K1,
+                    &derive_secret_key_from_index(*account_index),
+                );
+
+                let blinding_key = secp256k1::Keypair::from_secret_key(
+                    secp256k1::SECP256K1,
+                    &SecretKey::from_slice(&[1; 32])?,
+                );
+
+                let filler_utxo = fetch_utxo(*filler_token_utxo)?;
+                let grantor_collateral_utxo = fetch_utxo(*grantor_collateral_token_utxo)?;
+                let grantor_settlement_utxo = fetch_utxo(*grantor_settlement_token_utxo)?;
+                let settlement_utxo = fetch_utxo(*settlement_asset_utxo)?;
+                let fee_token_utxo = fetch_utxo(*fee_utxo)?;
+
+                let total_input_fee = fee_token_utxo.value.explicit().unwrap();
+                let total_input_asset = settlement_utxo.value.explicit().unwrap();
+
+                let Some(first_entropy_hex) = store
+                    .store
+                    .get(format!("first_entropy_{}", dcd_taproot_pubkey_gen))?
+                else {
+                    anyhow::bail!("First entropy not found");
+                };
+                let Some(second_entropy_hex) = store
+                    .store
+                    .get(format!("second_entropy_{}", dcd_taproot_pubkey_gen))?
+                else {
+                    anyhow::bail!("Second entropy not found");
+                };
+                let Some(third_entropy_hex) = store
+                    .store
+                    .get(format!("third_entropy_{}", dcd_taproot_pubkey_gen))?
+                else {
+                    anyhow::bail!("Third entropy not found");
+                };
+                let first_entropy_hex = hex::decode(first_entropy_hex)?;
+                let second_entropy_hex = hex::decode(second_entropy_hex)?;
+                let third_entropy_hex = hex::decode(third_entropy_hex)?;
+
+                let mut first_asset_entropy_bytes: [u8; 32] = first_entropy_hex.try_into().unwrap();
+                first_asset_entropy_bytes.reverse();
+                let mut second_asset_entropy_bytes: [u8; 32] =
+                    second_entropy_hex.try_into().unwrap();
+                second_asset_entropy_bytes.reverse();
+                let mut third_asset_entropy_bytes: [u8; 32] = third_entropy_hex.try_into().unwrap();
+                third_asset_entropy_bytes.reverse();
+
+                let first_asset_entropy =
+                    sha256::Midstate::from_byte_array(first_asset_entropy_bytes);
+                let second_asset_entropy =
+                    sha256::Midstate::from_byte_array(second_asset_entropy_bytes);
+                let third_asset_entropy =
+                    sha256::Midstate::from_byte_array(third_asset_entropy_bytes);
+
+                let blinding_sk = blinding_key.secret_key();
+
+                let first_unblinded = filler_utxo.unblind(&Secp256k1::new(), blinding_sk)?;
+                let second_unblinded =
+                    grantor_collateral_utxo.unblind(&Secp256k1::new(), blinding_sk)?;
+                let third_unblinded =
+                    grantor_settlement_utxo.unblind(&Secp256k1::new(), blinding_sk)?;
+
+                let first_token_abf = first_unblinded.asset_bf;
+                let second_token_abf = second_unblinded.asset_bf;
+                let third_token_abf = third_unblinded.asset_bf;
+
+                let first_asset_id = AssetId::from_entropy(first_asset_entropy);
+                let second_asset_id = AssetId::from_entropy(second_asset_entropy);
+                let third_asset_id = AssetId::from_entropy(third_asset_entropy);
+
+                let first_token_id =
+                    AssetId::reissuance_token_from_entropy(first_asset_entropy, false);
+                let second_token_id =
+                    AssetId::reissuance_token_from_entropy(second_asset_entropy, false);
+                let third_token_id =
+                    AssetId::reissuance_token_from_entropy(third_asset_entropy, false);
+
+                let dcd_arguments: DCDArguments = store.get_arguments(dcd_taproot_pubkey_gen)?;
+
+                let taproot_pubkey_gen = TaprootPubkeyGen::build_from_str(
+                    dcd_taproot_pubkey_gen,
+                    &dcd_arguments,
+                    &AddressParams::LIQUID_TESTNET,
+                    &contracts::get_dcd_address,
+                )?;
+
+                assert_eq!(
+                    taproot_pubkey_gen.address.script_pubkey(),
+                    filler_utxo.script_pubkey,
+                    "Expected the taproot pubkey gen address to be the same as the filler token utxo script pubkey"
+                );
+
+                assert_eq!(
+                    taproot_pubkey_gen.address.script_pubkey(),
+                    grantor_collateral_utxo.script_pubkey,
+                    "Expected the taproot pubkey gen address to be the same as the grantor collateral token utxo script pubkey"
+                );
+
+                assert_eq!(
+                    taproot_pubkey_gen.address.script_pubkey(),
+                    grantor_settlement_utxo.script_pubkey,
+                    "Expected the taproot pubkey gen address to be the same as the grantor settlement token utxo script pubkey"
+                );
+
+                let settlement_asset_id =
+                    AssetId::from_str(&dcd_arguments.settlement_asset_id_hex_le)?;
+
+                let change_recipient = get_p2pk_address(
+                    &keypair.x_only_public_key().0,
+                    &AddressParams::LIQUID_TESTNET,
+                )?;
+
+                let mut pst = PartiallySignedTransaction::new_v2();
+
+                let mut first_reissuance_tx = Input::from_prevout(*filler_token_utxo);
+                first_reissuance_tx.witness_utxo = Some(filler_utxo.clone());
+                first_reissuance_tx.issuance_value_amount =
+                    Some(dcd_arguments.ratio_args.filler_token_amount);
+                first_reissuance_tx.issuance_inflation_keys = None;
+                first_reissuance_tx.issuance_asset_entropy =
+                    Some(first_asset_entropy.to_byte_array());
+
+                let mut second_reissuance_tx = Input::from_prevout(*grantor_collateral_token_utxo);
+                second_reissuance_tx.witness_utxo = Some(grantor_collateral_utxo.clone());
+                second_reissuance_tx.issuance_value_amount =
+                    Some(dcd_arguments.ratio_args.grantor_collateral_token_amount);
+                second_reissuance_tx.issuance_inflation_keys = None;
+                second_reissuance_tx.issuance_asset_entropy =
+                    Some(second_asset_entropy.to_byte_array());
+
+                let mut third_reissuance_tx = Input::from_prevout(*grantor_settlement_token_utxo);
+                third_reissuance_tx.witness_utxo = Some(grantor_settlement_utxo.clone());
+                third_reissuance_tx.issuance_value_amount =
+                    Some(dcd_arguments.ratio_args.grantor_settlement_token_amount);
+                third_reissuance_tx.issuance_inflation_keys = None;
+                third_reissuance_tx.issuance_asset_entropy =
+                    Some(third_asset_entropy.to_byte_array());
+
+                pst.add_input(first_reissuance_tx);
+                pst.add_input(second_reissuance_tx);
+                pst.add_input(third_reissuance_tx);
+
+                let mut asset_settlement_tx = Input::from_prevout(*settlement_asset_utxo);
+                asset_settlement_tx.witness_utxo = Some(settlement_utxo.clone());
+                pst.add_input(asset_settlement_tx);
+
+                let mut fee_tx = Input::from_prevout(*fee_utxo);
+                fee_tx.witness_utxo = Some(fee_token_utxo.clone());
+                pst.add_input(fee_tx);
+
+                let mut output = Output::new_explicit(
+                    taproot_pubkey_gen.address.script_pubkey(),
+                    1,
+                    first_token_id,
+                    Some(blinding_key.public_key().into()),
+                );
+                output.blinder_index = Some(0);
+                pst.add_output(output);
+
+                let mut output = Output::new_explicit(
+                    taproot_pubkey_gen.address.script_pubkey(),
+                    1,
+                    second_token_id,
+                    Some(blinding_key.public_key().into()),
+                );
+                output.blinder_index = Some(1);
+                pst.add_output(output);
+
+                let mut output = Output::new_explicit(
+                    taproot_pubkey_gen.address.script_pubkey(),
+                    1,
+                    third_token_id,
+                    Some(blinding_key.public_key().into()),
+                );
+                output.blinder_index = Some(2);
+                pst.add_output(output);
+
+                pst.add_output(Output::new_explicit(
+                    taproot_pubkey_gen.address.script_pubkey(),
+                    dcd_arguments.ratio_args.interest_collateral_amount,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                    None,
+                ));
+
+                pst.add_output(Output::new_explicit(
+                    taproot_pubkey_gen.address.script_pubkey(),
+                    dcd_arguments.ratio_args.total_asset_amount,
+                    settlement_asset_id,
+                    None,
+                ));
+
+                pst.add_output(Output::new_explicit(
+                    taproot_pubkey_gen.address.script_pubkey(),
+                    dcd_arguments.ratio_args.filler_token_amount,
+                    first_asset_id,
+                    None,
+                ));
+
+                pst.add_output(Output::new_explicit(
+                    change_recipient.script_pubkey(),
+                    dcd_arguments.ratio_args.grantor_collateral_token_amount,
+                    second_asset_id,
+                    None,
+                ));
+
+                pst.add_output(Output::new_explicit(
+                    change_recipient.script_pubkey(),
+                    dcd_arguments.ratio_args.grantor_settlement_token_amount,
+                    third_asset_id,
+                    None,
+                ));
+
+                // Collateral change
+                pst.add_output(Output::new_explicit(
+                    change_recipient.script_pubkey(),
+                    total_input_fee
+                        - fee_amount
+                        - dcd_arguments.ratio_args.interest_collateral_amount,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                    None,
+                ));
+
+                // Asset change
+                pst.add_output(Output::new_explicit(
+                    change_recipient.script_pubkey(),
+                    total_input_asset - dcd_arguments.ratio_args.total_asset_amount,
+                    settlement_asset_id,
+                    None,
+                ));
+
+                // Fee
+                pst.add_output(Output::new_explicit(
+                    Script::new(),
+                    *fee_amount,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                    None,
+                ));
+
+                {
+                    let input = &mut pst.inputs_mut()[0];
+                    input.blinded_issuance = Some(0x00);
+                    input.issuance_blinding_nonce = Some(first_token_abf.into_inner());
+                }
+                {
+                    let input = &mut pst.inputs_mut()[1];
+                    input.blinded_issuance = Some(0x00);
+                    input.issuance_blinding_nonce = Some(second_token_abf.into_inner());
+                }
+                {
+                    let input = &mut pst.inputs_mut()[2];
+                    input.blinded_issuance = Some(0x00);
+                    input.issuance_blinding_nonce = Some(third_token_abf.into_inner());
+                }
+
+                let mut inp_tx_out_sec = std::collections::HashMap::new();
+                inp_tx_out_sec.insert(0, first_unblinded);
+                inp_tx_out_sec.insert(1, second_unblinded);
+                inp_tx_out_sec.insert(2, third_unblinded);
+
+                pst.blind_last(&mut thread_rng(), &Secp256k1::new(), &inp_tx_out_sec)?;
+
+                let utxos = vec![
+                    filler_utxo,
+                    grantor_collateral_utxo,
+                    grantor_settlement_utxo,
+                    settlement_utxo,
+                    fee_token_utxo,
+                ];
+                let dcd_program = get_dcd_program(&dcd_arguments)?;
+
+                let witness_values = build_dcd_witness(
+                    TokenBranch::default(),
+                    DcdBranch::MakerFunding {
+                        principal_collateral_amount: dcd_arguments
+                            .ratio_args
+                            .principal_collateral_amount,
+                        principal_asset_amount: dcd_arguments.ratio_args.principal_asset_amount,
+                        interest_collateral_amount: dcd_arguments
+                            .ratio_args
+                            .interest_collateral_amount,
+                        interest_asset_amount: dcd_arguments.ratio_args.interest_asset_amount,
+                    },
+                    MergeBranch::default(),
+                );
+                let tx = finalize_transaction(
+                    pst.extract_tx()?,
+                    &dcd_program,
+                    &taproot_pubkey_gen.pubkey.to_x_only_pubkey(),
+                    &utxos,
+                    0,
+                    witness_values.clone(),
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
+                )?;
+                let tx = finalize_transaction(
+                    tx,
+                    &dcd_program,
+                    &taproot_pubkey_gen.pubkey.to_x_only_pubkey(),
+                    &utxos,
+                    1,
+                    witness_values.clone(),
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
+                )?;
+                let tx = finalize_transaction(
+                    tx,
+                    &dcd_program,
+                    &taproot_pubkey_gen.pubkey.to_x_only_pubkey(),
+                    &utxos,
+                    2,
+                    witness_values,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
+                )?;
+                let tx = finalize_p2pk_transaction(
+                    tx,
+                    &utxos,
+                    &keypair,
+                    3,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
+                )?;
+                let tx = finalize_p2pk_transaction(
+                    tx,
+                    &utxos,
+                    &keypair,
+                    4,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
+                )?;
+
+                tx.verify_tx_amt_proofs(secp256k1::SECP256K1, &utxos)?;
+
+                match broadcast {
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    false => println!("{}", tx.serialize().to_lower_hex_string()),
+                }
+
                 Ok(())
             }
             Dcd::TakerFundingPath { .. } => {
