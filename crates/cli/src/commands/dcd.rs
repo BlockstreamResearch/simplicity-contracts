@@ -13,7 +13,7 @@ use simplicityhl::elements::hex::ToHex;
 use simplicityhl::elements::pset::serialize::Serialize;
 use simplicityhl::elements::secp256k1_zkp::rand::thread_rng;
 use simplicityhl::elements::secp256k1_zkp::{Secp256k1, SecretKey};
-use simplicityhl::elements::{AssetId, OutPoint, TxOutSecrets};
+use simplicityhl::elements::{AssetId, OutPoint, Sequence, TxOut, TxOutSecrets};
 use simplicityhl::simplicity::ToXOnlyPubkey;
 use simplicityhl::simplicity::hex::DisplayHex;
 
@@ -233,9 +233,6 @@ pub enum Dcd {
         /// Collateral UTXO to deposit
         #[arg(long = "collateral-utxo")]
         collateral_utxo: OutPoint,
-        /// Fee UTXO
-        #[arg(long = "fee-utxo")]
-        fee_utxo: OutPoint,
         /// DCD taproot pubkey gen
         #[arg(long = "dcd-taproot-pubkey-gen")]
         dcd_taproot_pubkey_gen: String,
@@ -1095,34 +1092,1351 @@ impl Dcd {
 
                 Ok(())
             }
-            Dcd::TakerFundingPath { .. } => {
-                // TODO: Implement taker funding path transaction building
-                println!("TakerFundingPath: Not yet implemented");
+            Dcd::TakerFundingPath {
+                filler_token_utxo,
+                collateral_utxo,
+                dcd_taproot_pubkey_gen,
+                collateral_amount_to_deposit,
+                fee_amount,
+                account_index,
+                broadcast,
+            } => {
+                let store = Store::load()?;
+
+                let keypair = secp256k1::Keypair::from_secret_key(
+                    secp256k1::SECP256K1,
+                    &derive_secret_key_from_index(*account_index),
+                );
+
+                let filler_utxo = fetch_utxo(*filler_token_utxo)?;
+                let collateral_token_utxo = fetch_utxo(*collateral_utxo)?;
+
+                let dcd_arguments: DCDArguments = store.get_arguments(dcd_taproot_pubkey_gen)?;
+
+                let taproot_pubkey_gen = TaprootPubkeyGen::build_from_str(
+                    dcd_taproot_pubkey_gen,
+                    &dcd_arguments,
+                    &AddressParams::LIQUID_TESTNET,
+                    &contracts::get_dcd_address,
+                )?;
+
+                assert_eq!(
+                    taproot_pubkey_gen.address.script_pubkey(),
+                    filler_utxo.script_pubkey,
+                    "Expected the taproot pubkey gen address to be the same as the filler token utxo script pubkey"
+                );
+
+                let filler_asset_id = filler_utxo.asset.explicit().unwrap();
+
+                let total_collateral = collateral_token_utxo.value.explicit().unwrap();
+                let total_filler = filler_utxo.value.explicit().unwrap();
+
+                anyhow::ensure!(
+                    *collateral_amount_to_deposit <= total_collateral,
+                    "collateral amount to deposit exceeds input value"
+                );
+
+                let total_input_fee = total_collateral - *collateral_amount_to_deposit;
+
+                anyhow::ensure!(
+                    *fee_amount <= total_input_fee,
+                    "fee amount exceeds input value"
+                );
+
+                let mut pst = PartiallySignedTransaction::new_v2();
+                pst.global.tx_data.fallback_locktime =
+                    Some(LockTime::from_time(dcd_arguments.taker_funding_start_time)?);
+
+                pst.add_input(Input::from_prevout(*filler_token_utxo));
+                pst.add_input(Input::from_prevout(*collateral_utxo));
+
+                let filler_to_get = collateral_amount_to_deposit
+                    / dcd_arguments.ratio_args.filler_per_principal_collateral;
+
+                let is_filler_change_needed = total_filler != filler_to_get;
+
+                let change_recipient = get_p2pk_address(
+                    &keypair.x_only_public_key().0,
+                    &AddressParams::LIQUID_TESTNET,
+                )?;
+
+                if is_filler_change_needed {
+                    pst.add_output(Output::new_explicit(
+                        taproot_pubkey_gen.address.script_pubkey(),
+                        total_filler - filler_to_get,
+                        filler_asset_id,
+                        None,
+                    ));
+                }
+
+                pst.add_output(Output::new_explicit(
+                    taproot_pubkey_gen.address.script_pubkey(),
+                    *collateral_amount_to_deposit,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                    None,
+                ));
+
+                pst.add_output(Output::new_explicit(
+                    change_recipient.script_pubkey(),
+                    filler_to_get,
+                    filler_asset_id,
+                    None,
+                ));
+
+                // LBTC change
+                pst.add_output(Output::new_explicit(
+                    change_recipient.script_pubkey(),
+                    total_input_fee - *fee_amount,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                    None,
+                ));
+
+                pst.add_output(Output::from_txout(TxOut::new_fee(
+                    *fee_amount,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                )));
+
+                let utxos = vec![filler_utxo, collateral_token_utxo];
+
+                let witness_values = build_dcd_witness(
+                    TokenBranch::default(),
+                    DcdBranch::TakerFunding {
+                        collateral_amount_to_deposit: *collateral_amount_to_deposit,
+                        filler_token_amount_to_get: filler_to_get,
+                        is_change_needed: is_filler_change_needed,
+                    },
+                    MergeBranch::default(),
+                );
+
+                let dcd_program = get_dcd_program(&dcd_arguments)?;
+
+                let tx = finalize_transaction(
+                    pst.extract_tx()?,
+                    &dcd_program,
+                    &taproot_pubkey_gen.pubkey.to_x_only_pubkey(),
+                    &utxos,
+                    0,
+                    witness_values,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
+                )?;
+
+                let tx = finalize_p2pk_transaction(
+                    tx,
+                    &utxos,
+                    &keypair,
+                    1,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
+                )?;
+
+                tx.verify_tx_amt_proofs(secp256k1::SECP256K1, &utxos)?;
+
+                match broadcast {
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    false => println!("{}", tx.serialize().to_lower_hex_string()),
+                }
+
                 Ok(())
             }
-            Dcd::TakerEarlyTermination { .. } => {
-                // TODO: Implement taker early termination transaction building
-                println!("TakerEarlyTermination: Not yet implemented");
+            Dcd::TakerEarlyTermination {
+                collateral_utxo,
+                filler_token_utxo,
+                fee_utxo,
+                dcd_taproot_pubkey_gen,
+                filler_token_amount_to_return,
+                fee_amount,
+                account_index,
+                broadcast,
+            } => {
+                let store = Store::load()?;
+
+                let keypair = secp256k1::Keypair::from_secret_key(
+                    secp256k1::SECP256K1,
+                    &derive_secret_key_from_index(*account_index),
+                );
+
+                let collateral_txout = fetch_utxo(*collateral_utxo)?; // DCD input index 0
+                let filler_txout = fetch_utxo(*filler_token_utxo)?; // P2PK input index 1
+                let fee_txout = fetch_utxo(*fee_utxo)?; // P2PK input index 2
+
+                let dcd_arguments: DCDArguments = store.get_arguments(dcd_taproot_pubkey_gen)?;
+                let taproot_pubkey_gen = TaprootPubkeyGen::build_from_str(
+                    dcd_taproot_pubkey_gen,
+                    &dcd_arguments,
+                    &AddressParams::LIQUID_TESTNET,
+                    &contracts::get_dcd_address,
+                )?;
+
+                anyhow::ensure!(
+                    taproot_pubkey_gen.address.script_pubkey() == collateral_txout.script_pubkey,
+                    "collateral_utxo must be locked by DCD covenant"
+                );
+
+                let available_collateral = collateral_txout.value.explicit().unwrap();
+                let filler_asset_id = filler_txout.asset.explicit().unwrap();
+                let available_filler = filler_txout.value.explicit().unwrap();
+                let total_fee_input = fee_txout.value.explicit().unwrap();
+
+                anyhow::ensure!(
+                    *filler_token_amount_to_return <= available_filler,
+                    "filler tokens to return exceed available"
+                );
+
+                // collateral_to_get = filler_return * FILLER_PER_PRINCIPAL_COLLATERAL
+                let collateral_per_principal =
+                    dcd_arguments.ratio_args.filler_per_principal_collateral;
+                let collateral_to_get =
+                    filler_token_amount_to_return.saturating_mul(collateral_per_principal);
+
+                anyhow::ensure!(
+                    collateral_to_get <= available_collateral,
+                    "required collateral exceeds available"
+                );
+
+                let is_change_needed = available_collateral != collateral_to_get;
+
+                let change_recipient = get_p2pk_address(
+                    &keypair.x_only_public_key().0,
+                    &AddressParams::LIQUID_TESTNET,
+                )?;
+
+                let mut pst = PartiallySignedTransaction::new_v2();
+
+                let mut in0 = Input::from_prevout(*collateral_utxo);
+                in0.witness_utxo = Some(collateral_txout.clone());
+                pst.add_input(in0);
+
+                let mut in1 = Input::from_prevout(*filler_token_utxo);
+                in1.witness_utxo = Some(filler_txout.clone());
+                pst.add_input(in1);
+
+                let mut in2 = Input::from_prevout(*fee_utxo);
+                in2.witness_utxo = Some(fee_txout.clone());
+                pst.add_input(in2);
+
+                // Outputs per SIMF indices
+                if is_change_needed {
+                    // 0: collateral change back to covenant
+                    pst.add_output(Output::new_explicit(
+                        taproot_pubkey_gen.address.script_pubkey(),
+                        available_collateral - collateral_to_get,
+                        LIQUID_TESTNET_BITCOIN_ASSET,
+                        None,
+                    ));
+                }
+
+                // return filler to covenant
+                pst.add_output(Output::new_explicit(
+                    taproot_pubkey_gen.address.script_pubkey(),
+                    *filler_token_amount_to_return,
+                    filler_asset_id,
+                    None,
+                ));
+
+                // return collateral to user
+                pst.add_output(Output::new_explicit(
+                    change_recipient.script_pubkey(),
+                    collateral_to_get,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                    None,
+                ));
+
+                if *filler_token_amount_to_return != available_filler {
+                    pst.add_output(Output::new_explicit(
+                        change_recipient.script_pubkey(),
+                        available_filler - filler_token_amount_to_return,
+                        filler_asset_id,
+                        None,
+                    ));
+                }
+
+                // fee change
+                anyhow::ensure!(*fee_amount <= total_fee_input, "fee exceeds input value");
+                pst.add_output(Output::new_explicit(
+                    change_recipient.script_pubkey(),
+                    total_fee_input - *fee_amount,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                    None,
+                ));
+                // fee
+                pst.add_output(Output::from_txout(TxOut::new_fee(
+                    *fee_amount,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                )));
+
+                // Finalize
+                let utxos = vec![collateral_txout, filler_txout, fee_txout];
+                let dcd_program = get_dcd_program(&dcd_arguments)?;
+
+                // Attach DCD witness to input 0 only
+                let witness_values = build_dcd_witness(
+                    TokenBranch::default(),
+                    DcdBranch::TakerEarlyTermination {
+                        is_change_needed,
+                        index_to_spend: 0,
+                        filler_token_amount_to_return: *filler_token_amount_to_return,
+                        collateral_amount_to_get: collateral_to_get,
+                    },
+                    MergeBranch::default(),
+                );
+
+                let tx = finalize_transaction(
+                    pst.extract_tx()?,
+                    &dcd_program,
+                    &taproot_pubkey_gen.pubkey.to_x_only_pubkey(),
+                    &utxos,
+                    0,
+                    witness_values,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
+                )?;
+
+                // Sign P2PK inputs 1 and 2
+                let tx = finalize_p2pk_transaction(
+                    tx,
+                    &utxos,
+                    &keypair,
+                    1,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
+                )?;
+                let tx = finalize_p2pk_transaction(
+                    tx,
+                    &utxos,
+                    &keypair,
+                    2,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
+                )?;
+
+                tx.verify_tx_amt_proofs(secp256k1::SECP256K1, &utxos)?;
+
+                match broadcast {
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    false => println!("{}", tx.serialize().to_lower_hex_string()),
+                }
+
                 Ok(())
             }
-            Dcd::MakerCollateralTermination { .. } => {
-                // TODO: Implement maker collateral termination transaction building
-                println!("MakerCollateralTermination: Not yet implemented");
+            Dcd::MakerCollateralTermination {
+                collateral_utxo,
+                grantor_collateral_token_utxo,
+                fee_utxo,
+                dcd_taproot_pubkey_gen,
+                grantor_collateral_amount_to_burn,
+                fee_amount,
+                account_index,
+                broadcast,
+            } => {
+                let store = Store::load()?;
+
+                let keypair = secp256k1::Keypair::from_secret_key(
+                    secp256k1::SECP256K1,
+                    &derive_secret_key_from_index(*account_index),
+                );
+
+                // Fetch UTXOs
+                let collateral_txout = fetch_utxo(*collateral_utxo)?; // DCD input 0
+                let grantor_coll_txout = fetch_utxo(*grantor_collateral_token_utxo)?; // P2PK input 1
+                let fee_txout = fetch_utxo(*fee_utxo)?; // P2PK input 2
+
+                let dcd_arguments: DCDArguments = store.get_arguments(dcd_taproot_pubkey_gen)?;
+                let taproot_pubkey_gen = TaprootPubkeyGen::build_from_str(
+                    dcd_taproot_pubkey_gen,
+                    &dcd_arguments,
+                    &AddressParams::LIQUID_TESTNET,
+                    &contracts::get_dcd_address,
+                )?;
+
+                anyhow::ensure!(
+                    taproot_pubkey_gen.address.script_pubkey() == collateral_txout.script_pubkey,
+                    "collateral_utxo must be locked by DCD covenant"
+                );
+
+                let available_collateral = collateral_txout.value.explicit().unwrap();
+                let grantor_coll_asset_id = grantor_coll_txout.asset.explicit().unwrap();
+                let available_grantor_coll = grantor_coll_txout.value.explicit().unwrap();
+                let total_fee_input = fee_txout.value.explicit().unwrap();
+
+                anyhow::ensure!(
+                    *grantor_collateral_amount_to_burn <= available_grantor_coll,
+                    "grantor collateral burn amount exceeds available"
+                );
+
+                // amount_to_get = burn * GRANTOR_COLLATERAL_PER_DEPOSITED_COLLATERAL
+                let grantor_coll_per_deposited =
+                    dcd_arguments.ratio_args.interest_collateral_amount
+                        / dcd_arguments.ratio_args.grantor_collateral_token_amount;
+                let amount_to_get =
+                    grantor_collateral_amount_to_burn.saturating_mul(grantor_coll_per_deposited);
+
+                anyhow::ensure!(
+                    amount_to_get <= available_collateral,
+                    "required collateral exceeds available"
+                );
+
+                let is_change_needed = available_collateral != amount_to_get;
+
+                let change_recipient = get_p2pk_address(
+                    &keypair.x_only_public_key().0,
+                    &AddressParams::LIQUID_TESTNET,
+                )?;
+
+                // Build PST
+                let mut pst = PartiallySignedTransaction::new_v2();
+
+                let mut in0 = Input::from_prevout(*collateral_utxo);
+                in0.witness_utxo = Some(collateral_txout.clone());
+                pst.add_input(in0);
+
+                let mut in1 = Input::from_prevout(*grantor_collateral_token_utxo);
+                in1.witness_utxo = Some(grantor_coll_txout.clone());
+                pst.add_input(in1);
+
+                let mut in2 = Input::from_prevout(*fee_utxo);
+                in2.witness_utxo = Some(fee_txout.clone());
+                pst.add_input(in2);
+
+                if is_change_needed {
+                    // 0: collateral change back to covenant
+                    pst.add_output(Output::new_explicit(
+                        taproot_pubkey_gen.address.script_pubkey(),
+                        available_collateral - amount_to_get,
+                        LIQUID_TESTNET_BITCOIN_ASSET,
+                        None,
+                    ));
+                }
+
+                // 1: burn grantor collateral token (OP_RETURN)
+                pst.add_output(Output::new_explicit(
+                    Script::new_op_return("burn".as_bytes()),
+                    *grantor_collateral_amount_to_burn,
+                    grantor_coll_asset_id,
+                    None,
+                ));
+
+                // 2: return collateral to user
+                pst.add_output(Output::new_explicit(
+                    change_recipient.script_pubkey(),
+                    amount_to_get,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                    None,
+                ));
+
+                if *grantor_collateral_amount_to_burn != available_grantor_coll {
+                    pst.add_output(Output::new_explicit(
+                        change_recipient.script_pubkey(),
+                        available_grantor_coll - grantor_collateral_amount_to_burn,
+                        grantor_coll_asset_id,
+                        None,
+                    ));
+                }
+
+                // fee change + fee
+                anyhow::ensure!(*fee_amount <= total_fee_input, "fee exceeds input value");
+                pst.add_output(Output::new_explicit(
+                    change_recipient.script_pubkey(),
+                    total_fee_input - *fee_amount,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                    None,
+                ));
+                pst.add_output(Output::from_txout(TxOut::new_fee(
+                    *fee_amount,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                )));
+
+                // Finalize
+                let utxos = vec![collateral_txout, grantor_coll_txout, fee_txout];
+                let dcd_program = get_dcd_program(&dcd_arguments)?;
+
+                let witness_values = build_dcd_witness(
+                    TokenBranch::Maker,
+                    DcdBranch::MakerTermination {
+                        is_change_needed,
+                        index_to_spend: 0,
+                        grantor_token_amount_to_burn: *grantor_collateral_amount_to_burn,
+                        amount_to_get,
+                    },
+                    MergeBranch::default(),
+                );
+
+                let tx = finalize_transaction(
+                    pst.extract_tx()?,
+                    &dcd_program,
+                    &taproot_pubkey_gen.pubkey.to_x_only_pubkey(),
+                    &utxos,
+                    0,
+                    witness_values,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
+                )?;
+                let tx = finalize_p2pk_transaction(
+                    tx,
+                    &utxos,
+                    &keypair,
+                    1,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
+                )?;
+                let tx = finalize_p2pk_transaction(
+                    tx,
+                    &utxos,
+                    &keypair,
+                    2,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
+                )?;
+
+                tx.verify_tx_amt_proofs(secp256k1::SECP256K1, &utxos)?;
+
+                match broadcast {
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    false => println!("{}", tx.serialize().to_lower_hex_string()),
+                }
+
                 Ok(())
             }
-            Dcd::MakerSettlementTermination { .. } => {
-                // TODO: Implement maker settlement termination transaction building
-                println!("MakerSettlementTermination: Not yet implemented");
+            Dcd::MakerSettlementTermination {
+                settlement_asset_utxo,
+                grantor_settlement_token_utxo,
+                fee_utxo,
+                dcd_taproot_pubkey_gen,
+                grantor_settlement_amount_to_burn,
+                fee_amount,
+                account_index,
+                broadcast,
+            } => {
+                let store = Store::load()?;
+
+                let keypair = secp256k1::Keypair::from_secret_key(
+                    secp256k1::SECP256K1,
+                    &derive_secret_key_from_index(*account_index),
+                );
+
+                // Fetch UTXOs
+                let settlement_txout = fetch_utxo(*settlement_asset_utxo)?; // DCD input 0
+                let grantor_settle_txout = fetch_utxo(*grantor_settlement_token_utxo)?; // P2PK input 1
+                let fee_txout = fetch_utxo(*fee_utxo)?; // P2PK input 2
+
+                let dcd_arguments: DCDArguments = store.get_arguments(dcd_taproot_pubkey_gen)?;
+                let taproot_pubkey_gen = TaprootPubkeyGen::build_from_str(
+                    dcd_taproot_pubkey_gen,
+                    &dcd_arguments,
+                    &AddressParams::LIQUID_TESTNET,
+                    &contracts::get_dcd_address,
+                )?;
+
+                anyhow::ensure!(
+                    taproot_pubkey_gen.address.script_pubkey() == settlement_txout.script_pubkey,
+                    "settlement_asset_utxo must be locked by DCD covenant"
+                );
+
+                let available_settlement = settlement_txout.value.explicit().unwrap();
+                let grantor_settle_asset_id = grantor_settle_txout.asset.explicit().unwrap();
+                let available_grantor_settle = grantor_settle_txout.value.explicit().unwrap();
+                let total_fee_input = fee_txout.value.explicit().unwrap();
+
+                anyhow::ensure!(
+                    *grantor_settlement_amount_to_burn <= available_grantor_settle,
+                    "grantor settlement burn amount exceeds available"
+                );
+
+                // amount_to_get = burn * GRANTOR_SETTLEMENT_PER_DEPOSITED_ASSET
+                let grantor_settle_per_deposited = dcd_arguments.ratio_args.total_asset_amount
+                    / dcd_arguments.ratio_args.grantor_settlement_token_amount;
+                let amount_to_get =
+                    grantor_settlement_amount_to_burn.saturating_mul(grantor_settle_per_deposited);
+
+                anyhow::ensure!(
+                    amount_to_get <= available_settlement,
+                    "required settlement exceeds available"
+                );
+
+                let is_change_needed = available_settlement != amount_to_get;
+
+                let change_recipient = get_p2pk_address(
+                    &keypair.x_only_public_key().0,
+                    &AddressParams::LIQUID_TESTNET,
+                )?;
+
+                // Build PST
+                let mut pst = PartiallySignedTransaction::new_v2();
+
+                let mut in0 = Input::from_prevout(*settlement_asset_utxo);
+                in0.witness_utxo = Some(settlement_txout.clone());
+                pst.add_input(in0);
+
+                let mut in1 = Input::from_prevout(*grantor_settlement_token_utxo);
+                in1.witness_utxo = Some(grantor_settle_txout.clone());
+                pst.add_input(in1);
+
+                let mut in2 = Input::from_prevout(*fee_utxo);
+                in2.witness_utxo = Some(fee_txout.clone());
+                pst.add_input(in2);
+
+                if is_change_needed {
+                    // 0: settlement change back to covenant
+                    pst.add_output(Output::new_explicit(
+                        taproot_pubkey_gen.address.script_pubkey(),
+                        available_settlement - amount_to_get,
+                        AssetId::from_str(&dcd_arguments.settlement_asset_id_hex_le)?,
+                        None,
+                    ));
+                }
+
+                // 1: burn grantor settlement token (OP_RETURN)
+                pst.add_output(Output::new_explicit(
+                    Script::new_op_return("burn".as_bytes()),
+                    *grantor_settlement_amount_to_burn,
+                    grantor_settle_asset_id,
+                    None,
+                ));
+
+                // 2: return settlement to user
+                pst.add_output(Output::new_explicit(
+                    change_recipient.script_pubkey(),
+                    amount_to_get,
+                    AssetId::from_str(&dcd_arguments.settlement_asset_id_hex_le)?,
+                    None,
+                ));
+
+                if *grantor_settlement_amount_to_burn != available_grantor_settle {
+                    pst.add_output(Output::new_explicit(
+                        change_recipient.script_pubkey(),
+                        available_grantor_settle - grantor_settlement_amount_to_burn,
+                        grantor_settle_asset_id,
+                        None,
+                    ));
+                }
+
+                // fee change + fee
+                anyhow::ensure!(*fee_amount <= total_fee_input, "fee exceeds input value");
+                pst.add_output(Output::new_explicit(
+                    change_recipient.script_pubkey(),
+                    total_fee_input - *fee_amount,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                    None,
+                ));
+                pst.add_output(Output::from_txout(TxOut::new_fee(
+                    *fee_amount,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                )));
+
+                // Finalize
+                let utxos = vec![settlement_txout, grantor_settle_txout, fee_txout];
+                let dcd_program = get_dcd_program(&dcd_arguments)?;
+
+                let witness_values = build_dcd_witness(
+                    TokenBranch::Taker,
+                    DcdBranch::MakerTermination {
+                        is_change_needed,
+                        index_to_spend: 0,
+                        grantor_token_amount_to_burn: *grantor_settlement_amount_to_burn,
+                        amount_to_get,
+                    },
+                    MergeBranch::default(),
+                );
+
+                let tx = finalize_transaction(
+                    pst.extract_tx()?,
+                    &dcd_program,
+                    &taproot_pubkey_gen.pubkey.to_x_only_pubkey(),
+                    &utxos,
+                    0,
+                    witness_values,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
+                )?;
+                let tx = finalize_p2pk_transaction(
+                    tx,
+                    &utxos,
+                    &keypair,
+                    1,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
+                )?;
+                let tx = finalize_p2pk_transaction(
+                    tx,
+                    &utxos,
+                    &keypair,
+                    2,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
+                )?;
+
+                tx.verify_tx_amt_proofs(secp256k1::SECP256K1, &utxos)?;
+
+                match broadcast {
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    false => println!("{}", tx.serialize().to_lower_hex_string()),
+                }
+
                 Ok(())
             }
-            Dcd::MakerSettlement { .. } => {
-                // TODO: Implement maker settlement transaction building
-                println!("MakerSettlement: Not yet implemented");
+            Dcd::MakerSettlement {
+                asset_utxo,
+                grantor_collateral_token_utxo,
+                grantor_settlement_token_utxo,
+                fee_utxo,
+                dcd_taproot_pubkey_gen,
+                price_at_current_block_height,
+                oracle_signature,
+                grantor_amount_to_burn,
+                fee_amount,
+                account_index,
+                broadcast,
+            } => {
+                let store = Store::load()?;
+
+                let keypair = secp256k1::Keypair::from_secret_key(
+                    secp256k1::SECP256K1,
+                    &derive_secret_key_from_index(*account_index),
+                );
+
+                // Fetch UTXOs
+                let asset_txout = fetch_utxo(*asset_utxo)?; // DCD input 0
+                let grantor_coll_txout = fetch_utxo(*grantor_collateral_token_utxo)?; // P2PK input 1
+                let grantor_settle_txout = fetch_utxo(*grantor_settlement_token_utxo)?; // P2PK input 2
+                let fee_txout = fetch_utxo(*fee_utxo)?; // P2PK input 3
+
+                let dcd_arguments: DCDArguments = store.get_arguments(dcd_taproot_pubkey_gen)?;
+                let taproot_pubkey_gen = TaprootPubkeyGen::build_from_str(
+                    dcd_taproot_pubkey_gen,
+                    &dcd_arguments,
+                    &AddressParams::LIQUID_TESTNET,
+                    &contracts::get_dcd_address,
+                )?;
+
+                anyhow::ensure!(
+                    taproot_pubkey_gen.address.script_pubkey() == asset_txout.script_pubkey,
+                    "asset_utxo must be locked by DCD covenant"
+                );
+
+                let total_fee_input = fee_txout.value.explicit().unwrap();
+                let available_onchain_asset = asset_txout.value.explicit().unwrap();
+
+                let grantor_coll_asset_id = grantor_coll_txout.asset.explicit().unwrap();
+                let grantor_settle_asset_id = grantor_settle_txout.asset.explicit().unwrap();
+                let available_grantor_coll = grantor_coll_txout.value.explicit().unwrap();
+                let available_grantor_settle = grantor_settle_txout.value.explicit().unwrap();
+
+                anyhow::ensure!(
+                    *grantor_amount_to_burn <= available_grantor_coll
+                        && *grantor_amount_to_burn <= available_grantor_settle,
+                    "grantor burn amount exceeds available"
+                );
+
+                // Compute amount_to_get based on price branch
+                let settlement_height = dcd_arguments.settlement_height;
+                let change_recipient = get_p2pk_address(
+                    &keypair.x_only_public_key().0,
+                    &AddressParams::LIQUID_TESTNET,
+                )?;
+
+                let mut pst = PartiallySignedTransaction::new_v2();
+                pst.global.tx_data.fallback_locktime =
+                    Some(LockTime::from_height(settlement_height)?);
+
+                // Inputs in order
+                let mut in0 = Input::from_prevout(*asset_utxo);
+                in0.witness_utxo = Some(asset_txout.clone());
+                in0.sequence = Some(Sequence::ENABLE_LOCKTIME_NO_RBF);
+                pst.add_input(in0);
+
+                let mut in1 = Input::from_prevout(*grantor_collateral_token_utxo);
+                in1.witness_utxo = Some(grantor_coll_txout.clone());
+                pst.add_input(in1);
+
+                let mut in2 = Input::from_prevout(*grantor_settlement_token_utxo);
+                in2.witness_utxo = Some(grantor_settle_txout.clone());
+                pst.add_input(in2);
+
+                let mut in3 = Input::from_prevout(*fee_utxo);
+                in3.witness_utxo = Some(fee_txout.clone());
+                pst.add_input(in3);
+
+                // Decide branch and build outputs
+                let price = *price_at_current_block_height;
+
+                // Parse oracle signature
+                let oracle_sig =
+                    simplicityhl::simplicity::bitcoin::secp256k1::schnorr::Signature::from_slice(
+                        &hex::decode(oracle_signature)?,
+                    )?;
+
+                // Maker gets ALT when price <= strike
+                if price <= dcd_arguments.strike_price {
+                    // amount_to_get = burn * GRANTOR_PER_SETTLEMENT_ASSET
+                    let per_settlement_asset = dcd_arguments.ratio_args.total_asset_amount
+                        / dcd_arguments.ratio_args.grantor_collateral_token_amount;
+                    let amount_to_get = grantor_amount_to_burn.saturating_mul(per_settlement_asset);
+
+                    anyhow::ensure!(
+                        amount_to_get <= available_onchain_asset,
+                        "required settlement exceeds available"
+                    );
+
+                    let is_change_needed = available_onchain_asset != amount_to_get;
+
+                    if is_change_needed {
+                        // 0: settlement change back to covenant
+                        pst.add_output(Output::new_explicit(
+                            taproot_pubkey_gen.address.script_pubkey(),
+                            available_onchain_asset - amount_to_get,
+                            AssetId::from_str(&dcd_arguments.settlement_asset_id_hex_le)?,
+                            None,
+                        ));
+                    }
+
+                    // Burn grantor settlement token
+                    pst.add_output(Output::new_explicit(
+                        Script::new_op_return("burn".as_bytes()),
+                        *grantor_amount_to_burn,
+                        grantor_settle_asset_id,
+                        None,
+                    ));
+                    // Burn grantor collateral token
+                    pst.add_output(Output::new_explicit(
+                        Script::new_op_return("burn".as_bytes()),
+                        *grantor_amount_to_burn,
+                        grantor_coll_asset_id,
+                        None,
+                    ));
+                    // settlement to user
+                    pst.add_output(Output::new_explicit(
+                        change_recipient.script_pubkey(),
+                        amount_to_get,
+                        AssetId::from_str(&dcd_arguments.settlement_asset_id_hex_le)?,
+                        None,
+                    ));
+
+                    if *grantor_amount_to_burn != available_grantor_coll {
+                        pst.add_output(Output::new_explicit(
+                            change_recipient.script_pubkey(),
+                            available_grantor_coll - grantor_amount_to_burn,
+                            grantor_coll_asset_id,
+                            None,
+                        ));
+                    }
+
+                    if *grantor_amount_to_burn != available_grantor_settle {
+                        pst.add_output(Output::new_explicit(
+                            change_recipient.script_pubkey(),
+                            available_grantor_settle - grantor_amount_to_burn,
+                            grantor_settle_asset_id,
+                            None,
+                        ));
+                    }
+
+                    // fee change + fee
+                    anyhow::ensure!(*fee_amount <= total_fee_input, "fee exceeds input value");
+                    pst.add_output(Output::new_explicit(
+                        change_recipient.script_pubkey(),
+                        total_fee_input - *fee_amount,
+                        LIQUID_TESTNET_BITCOIN_ASSET,
+                        None,
+                    ));
+                    pst.add_output(Output::from_txout(TxOut::new_fee(
+                        *fee_amount,
+                        LIQUID_TESTNET_BITCOIN_ASSET,
+                    )));
+
+                    let utxos = vec![
+                        asset_txout,
+                        grantor_coll_txout,
+                        grantor_settle_txout,
+                        fee_txout,
+                    ];
+                    let dcd_program = get_dcd_program(&dcd_arguments)?;
+                    let witness_values = build_dcd_witness(
+                        TokenBranch::Maker,
+                        DcdBranch::Settlement {
+                            price_at_current_block_height: price,
+                            oracle_sig: &oracle_sig,
+                            index_to_spend: 0,
+                            amount_to_burn: *grantor_amount_to_burn,
+                            amount_to_get,
+                            is_change_needed,
+                        },
+                        MergeBranch::default(),
+                    );
+
+                    let tx = finalize_transaction(
+                        pst.extract_tx()?,
+                        &dcd_program,
+                        &taproot_pubkey_gen.pubkey.to_x_only_pubkey(),
+                        &utxos,
+                        0,
+                        witness_values,
+                        &AddressParams::LIQUID_TESTNET,
+                        *LIQUID_TESTNET_GENESIS,
+                    )?;
+                    let tx = finalize_p2pk_transaction(
+                        tx,
+                        &utxos,
+                        &keypair,
+                        1,
+                        &AddressParams::LIQUID_TESTNET,
+                        *LIQUID_TESTNET_GENESIS,
+                    )?;
+                    let tx = finalize_p2pk_transaction(
+                        tx,
+                        &utxos,
+                        &keypair,
+                        2,
+                        &AddressParams::LIQUID_TESTNET,
+                        *LIQUID_TESTNET_GENESIS,
+                    )?;
+                    let tx = finalize_p2pk_transaction(
+                        tx,
+                        &utxos,
+                        &keypair,
+                        3,
+                        &AddressParams::LIQUID_TESTNET,
+                        *LIQUID_TESTNET_GENESIS,
+                    )?;
+
+                    tx.verify_tx_amt_proofs(secp256k1::SECP256K1, &utxos)?;
+                    match broadcast {
+                        true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                        false => println!("{}", tx.serialize().to_lower_hex_string()),
+                    }
+                } else {
+                    // Maker gets LBTC (price > strike)
+                    let per_settlement_collateral =
+                        dcd_arguments.ratio_args.total_collateral_amount
+                            / dcd_arguments.ratio_args.grantor_collateral_token_amount;
+                    let amount_to_get =
+                        grantor_amount_to_burn.saturating_mul(per_settlement_collateral);
+
+                    anyhow::ensure!(
+                        amount_to_get <= available_onchain_asset,
+                        "required collateral exceeds available"
+                    );
+
+                    let is_change_needed = available_onchain_asset != amount_to_get;
+
+                    if is_change_needed {
+                        // 0: collateral change back to covenant
+                        pst.add_output(Output::new_explicit(
+                            taproot_pubkey_gen.address.script_pubkey(),
+                            available_onchain_asset - amount_to_get,
+                            LIQUID_TESTNET_BITCOIN_ASSET,
+                            None,
+                        ));
+                    }
+
+                    // Burn grantor collateral token
+                    pst.add_output(Output::new_explicit(
+                        Script::new_op_return("burn".as_bytes()),
+                        *grantor_amount_to_burn,
+                        grantor_coll_asset_id,
+                        None,
+                    ));
+                    // Burn grantor settlement token
+                    pst.add_output(Output::new_explicit(
+                        Script::new_op_return("burn".as_bytes()),
+                        *grantor_amount_to_burn,
+                        grantor_settle_asset_id,
+                        None,
+                    ));
+                    // collateral to user
+                    pst.add_output(Output::new_explicit(
+                        change_recipient.script_pubkey(),
+                        amount_to_get,
+                        LIQUID_TESTNET_BITCOIN_ASSET,
+                        None,
+                    ));
+
+                    if *grantor_amount_to_burn != available_grantor_coll {
+                        pst.add_output(Output::new_explicit(
+                            change_recipient.script_pubkey(),
+                            available_grantor_coll - grantor_amount_to_burn,
+                            grantor_coll_asset_id,
+                            None,
+                        ));
+                    }
+
+                    if *grantor_amount_to_burn != available_grantor_settle {
+                        pst.add_output(Output::new_explicit(
+                            change_recipient.script_pubkey(),
+                            available_grantor_settle - grantor_amount_to_burn,
+                            grantor_settle_asset_id,
+                            None,
+                        ));
+                    }
+                    // fee change + fee
+                    anyhow::ensure!(*fee_amount <= total_fee_input, "fee exceeds input value");
+                    pst.add_output(Output::new_explicit(
+                        change_recipient.script_pubkey(),
+                        total_fee_input - *fee_amount,
+                        LIQUID_TESTNET_BITCOIN_ASSET,
+                        None,
+                    ));
+                    pst.add_output(Output::from_txout(TxOut::new_fee(
+                        *fee_amount,
+                        LIQUID_TESTNET_BITCOIN_ASSET,
+                    )));
+
+                    let utxos = vec![
+                        asset_txout,
+                        grantor_coll_txout,
+                        grantor_settle_txout,
+                        fee_txout,
+                    ];
+                    let dcd_program = get_dcd_program(&dcd_arguments)?;
+                    let witness_values = build_dcd_witness(
+                        TokenBranch::Maker,
+                        DcdBranch::Settlement {
+                            price_at_current_block_height: price,
+                            oracle_sig: &oracle_sig,
+                            index_to_spend: 0,
+                            amount_to_burn: *grantor_amount_to_burn,
+                            amount_to_get,
+                            is_change_needed,
+                        },
+                        MergeBranch::default(),
+                    );
+
+                    let tx = finalize_transaction(
+                        pst.extract_tx()?,
+                        &dcd_program,
+                        &taproot_pubkey_gen.pubkey.to_x_only_pubkey(),
+                        &utxos,
+                        0,
+                        witness_values,
+                        &AddressParams::LIQUID_TESTNET,
+                        *LIQUID_TESTNET_GENESIS,
+                    )?;
+                    let tx = finalize_p2pk_transaction(
+                        tx,
+                        &utxos,
+                        &keypair,
+                        1,
+                        &AddressParams::LIQUID_TESTNET,
+                        *LIQUID_TESTNET_GENESIS,
+                    )?;
+                    let tx = finalize_p2pk_transaction(
+                        tx,
+                        &utxos,
+                        &keypair,
+                        2,
+                        &AddressParams::LIQUID_TESTNET,
+                        *LIQUID_TESTNET_GENESIS,
+                    )?;
+                    let tx = finalize_p2pk_transaction(
+                        tx,
+                        &utxos,
+                        &keypair,
+                        3,
+                        &AddressParams::LIQUID_TESTNET,
+                        *LIQUID_TESTNET_GENESIS,
+                    )?;
+
+                    tx.verify_tx_amt_proofs(secp256k1::SECP256K1, &utxos)?;
+                    match broadcast {
+                        true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                        false => println!("{}", tx.serialize().to_lower_hex_string()),
+                    }
+                }
+
                 Ok(())
             }
-            Dcd::TakerSettlement { .. } => {
-                // TODO: Implement taker settlement transaction building
-                println!("TakerSettlement: Not yet implemented");
+            Dcd::TakerSettlement {
+                asset_utxo,
+                filler_token_utxo,
+                fee_utxo,
+                dcd_taproot_pubkey_gen,
+                price_at_current_block_height,
+                oracle_signature,
+                filler_amount_to_burn,
+                fee_amount,
+                account_index,
+                broadcast,
+            } => {
+                let store = Store::load()?;
+
+                let keypair = secp256k1::Keypair::from_secret_key(
+                    secp256k1::SECP256K1,
+                    &derive_secret_key_from_index(*account_index),
+                );
+
+                // Fetch UTXOs
+                let asset_txout = fetch_utxo(*asset_utxo)?; // DCD input 0
+                let filler_txout = fetch_utxo(*filler_token_utxo)?; // P2PK input 1
+                let fee_txout = fetch_utxo(*fee_utxo)?; // P2PK input 2
+
+                let dcd_arguments: DCDArguments = store.get_arguments(dcd_taproot_pubkey_gen)?;
+                let taproot_pubkey_gen = TaprootPubkeyGen::build_from_str(
+                    dcd_taproot_pubkey_gen,
+                    &dcd_arguments,
+                    &AddressParams::LIQUID_TESTNET,
+                    &contracts::get_dcd_address,
+                )?;
+
+                anyhow::ensure!(
+                    taproot_pubkey_gen.address.script_pubkey() == asset_txout.script_pubkey,
+                    "asset_utxo must be locked by DCD covenant"
+                );
+
+                let total_fee_input = fee_txout.value.explicit().unwrap();
+                let available_onchain_asset = asset_txout.value.explicit().unwrap();
+                let filler_asset_id = filler_txout.asset.explicit().unwrap();
+                let available_filler = filler_txout.value.explicit().unwrap();
+
+                anyhow::ensure!(
+                    *filler_amount_to_burn <= available_filler,
+                    "filler burn amount exceeds available"
+                );
+
+                let change_recipient = get_p2pk_address(
+                    &keypair.x_only_public_key().0,
+                    &AddressParams::LIQUID_TESTNET,
+                )?;
+
+                let mut pst = PartiallySignedTransaction::new_v2();
+                pst.global.tx_data.fallback_locktime =
+                    Some(LockTime::from_height(dcd_arguments.settlement_height)?);
+
+                // Inputs
+                let mut in0 = Input::from_prevout(*asset_utxo);
+                in0.witness_utxo = Some(asset_txout.clone());
+                in0.sequence = Some(Sequence::ENABLE_LOCKTIME_NO_RBF);
+                pst.add_input(in0);
+
+                let mut in1 = Input::from_prevout(*filler_token_utxo);
+                in1.witness_utxo = Some(filler_txout.clone());
+                pst.add_input(in1);
+
+                let mut in2 = Input::from_prevout(*fee_utxo);
+                in2.witness_utxo = Some(fee_txout.clone());
+                pst.add_input(in2);
+
+                let price = *price_at_current_block_height;
+                let oracle_sig =
+                    simplicityhl::simplicity::bitcoin::secp256k1::schnorr::Signature::from_slice(
+                        &hex::decode(oracle_signature)?,
+                    )?;
+
+                if price <= dcd_arguments.strike_price {
+                    // Taker receives LBTC: amount_to_get = burn * FILLER_PER_SETTLEMENT_COLLATERAL
+                    let per_settlement_collateral =
+                        dcd_arguments.ratio_args.total_collateral_amount
+                            / dcd_arguments.ratio_args.filler_token_amount;
+                    let amount_to_get =
+                        filler_amount_to_burn.saturating_mul(per_settlement_collateral);
+
+                    anyhow::ensure!(
+                        amount_to_get <= available_onchain_asset,
+                        "required collateral exceeds available"
+                    );
+
+                    let is_change_needed = available_onchain_asset != amount_to_get;
+
+                    if is_change_needed {
+                        // 0: collateral change back to covenant
+                        pst.add_output(Output::new_explicit(
+                            taproot_pubkey_gen.address.script_pubkey(),
+                            available_onchain_asset - amount_to_get,
+                            LIQUID_TESTNET_BITCOIN_ASSET,
+                            None,
+                        ));
+                    }
+
+                    // Burn filler token
+                    pst.add_output(Output::new_explicit(
+                        Script::new_op_return("burn".as_bytes()),
+                        *filler_amount_to_burn,
+                        filler_asset_id,
+                        None,
+                    ));
+
+                    // collateral to user
+                    pst.add_output(Output::new_explicit(
+                        change_recipient.script_pubkey(),
+                        amount_to_get,
+                        LIQUID_TESTNET_BITCOIN_ASSET,
+                        None,
+                    ));
+
+                    if *filler_amount_to_burn != available_filler {
+                        pst.add_output(Output::new_explicit(
+                            change_recipient.script_pubkey(),
+                            available_filler - filler_amount_to_burn,
+                            filler_asset_id,
+                            None,
+                        ));
+                    }
+
+                    anyhow::ensure!(*fee_amount <= total_fee_input, "fee exceeds input value");
+                    pst.add_output(Output::new_explicit(
+                        change_recipient.script_pubkey(),
+                        total_fee_input - *fee_amount,
+                        LIQUID_TESTNET_BITCOIN_ASSET,
+                        None,
+                    ));
+                    pst.add_output(Output::from_txout(TxOut::new_fee(
+                        *fee_amount,
+                        LIQUID_TESTNET_BITCOIN_ASSET,
+                    )));
+
+                    let utxos = vec![asset_txout, filler_txout, fee_txout];
+                    let dcd_program = get_dcd_program(&dcd_arguments)?;
+                    let witness_values = build_dcd_witness(
+                        TokenBranch::Taker,
+                        DcdBranch::Settlement {
+                            price_at_current_block_height: price,
+                            oracle_sig: &oracle_sig,
+                            index_to_spend: 0,
+                            amount_to_burn: *filler_amount_to_burn,
+                            amount_to_get,
+                            is_change_needed,
+                        },
+                        MergeBranch::default(),
+                    );
+
+                    let tx = finalize_transaction(
+                        pst.extract_tx()?,
+                        &dcd_program,
+                        &taproot_pubkey_gen.pubkey.to_x_only_pubkey(),
+                        &utxos,
+                        0,
+                        witness_values,
+                        &AddressParams::LIQUID_TESTNET,
+                        *LIQUID_TESTNET_GENESIS,
+                    )?;
+                    let tx = finalize_p2pk_transaction(
+                        tx,
+                        &utxos,
+                        &keypair,
+                        1,
+                        &AddressParams::LIQUID_TESTNET,
+                        *LIQUID_TESTNET_GENESIS,
+                    )?;
+                    let tx = finalize_p2pk_transaction(
+                        tx,
+                        &utxos,
+                        &keypair,
+                        2,
+                        &AddressParams::LIQUID_TESTNET,
+                        *LIQUID_TESTNET_GENESIS,
+                    )?;
+
+                    tx.verify_tx_amt_proofs(secp256k1::SECP256K1, &utxos)?;
+                    match broadcast {
+                        true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                        false => println!("{}", tx.serialize().to_lower_hex_string()),
+                    }
+                } else {
+                    // Taker receives SETTLEMENT: amount_to_get = burn * FILLER_PER_SETTLEMENT_ASSET
+                    let per_settlement_asset = dcd_arguments.ratio_args.total_asset_amount
+                        / dcd_arguments.ratio_args.filler_token_amount;
+                    let amount_to_get = filler_amount_to_burn.saturating_mul(per_settlement_asset);
+
+                    anyhow::ensure!(
+                        amount_to_get <= available_onchain_asset,
+                        "required settlement exceeds available"
+                    );
+
+                    let is_change_needed = available_onchain_asset != amount_to_get;
+
+                    if is_change_needed {
+                        // 0: settlement change back to covenant
+                        pst.add_output(Output::new_explicit(
+                            taproot_pubkey_gen.address.script_pubkey(),
+                            available_onchain_asset - amount_to_get,
+                            AssetId::from_str(&dcd_arguments.settlement_asset_id_hex_le)?,
+                            None,
+                        ));
+                    }
+
+                    // Burn filler token
+                    pst.add_output(Output::new_explicit(
+                        Script::new_op_return("burn".as_bytes()),
+                        *filler_amount_to_burn,
+                        filler_asset_id,
+                        None,
+                    ));
+
+                    // settlement to user
+                    pst.add_output(Output::new_explicit(
+                        change_recipient.script_pubkey(),
+                        amount_to_get,
+                        AssetId::from_str(&dcd_arguments.settlement_asset_id_hex_le)?,
+                        None,
+                    ));
+
+                    if *filler_amount_to_burn != available_filler {
+                        pst.add_output(Output::new_explicit(
+                            change_recipient.script_pubkey(),
+                            available_filler - filler_amount_to_burn,
+                            filler_asset_id,
+                            None,
+                        ));
+                    }
+
+                    anyhow::ensure!(*fee_amount <= total_fee_input, "fee exceeds input value");
+                    pst.add_output(Output::new_explicit(
+                        change_recipient.script_pubkey(),
+                        total_fee_input - *fee_amount,
+                        LIQUID_TESTNET_BITCOIN_ASSET,
+                        None,
+                    ));
+                    pst.add_output(Output::from_txout(TxOut::new_fee(
+                        *fee_amount,
+                        LIQUID_TESTNET_BITCOIN_ASSET,
+                    )));
+
+                    let utxos = vec![asset_txout, filler_txout, fee_txout];
+                    let dcd_program = get_dcd_program(&dcd_arguments)?;
+                    let witness_values = build_dcd_witness(
+                        TokenBranch::Taker,
+                        DcdBranch::Settlement {
+                            price_at_current_block_height: price,
+                            oracle_sig: &oracle_sig,
+                            index_to_spend: 0,
+                            amount_to_burn: *filler_amount_to_burn,
+                            amount_to_get,
+                            is_change_needed,
+                        },
+                        MergeBranch::default(),
+                    );
+
+                    let tx = finalize_transaction(
+                        pst.extract_tx()?,
+                        &dcd_program,
+                        &taproot_pubkey_gen.pubkey.to_x_only_pubkey(),
+                        &utxos,
+                        0,
+                        witness_values,
+                        &AddressParams::LIQUID_TESTNET,
+                        *LIQUID_TESTNET_GENESIS,
+                    )?;
+                    let tx = finalize_p2pk_transaction(
+                        tx,
+                        &utxos,
+                        &keypair,
+                        1,
+                        &AddressParams::LIQUID_TESTNET,
+                        *LIQUID_TESTNET_GENESIS,
+                    )?;
+                    let tx = finalize_p2pk_transaction(
+                        tx,
+                        &utxos,
+                        &keypair,
+                        2,
+                        &AddressParams::LIQUID_TESTNET,
+                        *LIQUID_TESTNET_GENESIS,
+                    )?;
+
+                    tx.verify_tx_amt_proofs(secp256k1::SECP256K1, &utxos)?;
+                    match broadcast {
+                        true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                        false => println!("{}", tx.serialize().to_lower_hex_string()),
+                    }
+                }
+
                 Ok(())
             }
         }
