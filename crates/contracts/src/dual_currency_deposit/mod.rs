@@ -434,7 +434,7 @@ mod dcd_merge_tests {
             Arc::new(pst.extract_tx()?),
             vec![ElementsUtxo {
                 script_pubkey: dcd_address.script_pubkey(),
-                asset: Asset::Explicit(first_asset_id.into()),
+                asset: Asset::Explicit(first_asset_id),
                 value: Value::Explicit(available_filler),
             }],
             0,
@@ -562,7 +562,7 @@ mod dcd_merge_tests {
                 },
                 ElementsUtxo {
                     script_pubkey: dcd_address.script_pubkey(),
-                    asset: Asset::Explicit(first_asset_id.into()),
+                    asset: Asset::Explicit(first_asset_id),
                     value: Value::Explicit(filler_return),
                 },
             ],
@@ -690,7 +690,7 @@ mod dcd_merge_tests {
                 },
                 ElementsUtxo {
                     script_pubkey: dcd_address.script_pubkey(),
-                    asset: Asset::Explicit(second_asset_id.into()),
+                    asset: Asset::Explicit(second_asset_id),
                     value: Value::Explicit(grantor_burn),
                 },
             ],
@@ -813,14 +813,12 @@ mod dcd_merge_tests {
             vec![
                 ElementsUtxo {
                     script_pubkey: dcd_address.script_pubkey(),
-                    asset: Asset::Explicit(
-                        AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?.into(),
-                    ),
+                    asset: Asset::Explicit(AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?),
                     value: Value::Explicit(ratio_args.total_asset_amount),
                 },
                 ElementsUtxo {
                     script_pubkey: dcd_address.script_pubkey(),
-                    asset: Asset::Explicit(third_asset_id.into()),
+                    asset: Asset::Explicit(third_asset_id),
                     value: Value::Explicit(grantor_burn),
                 },
             ],
@@ -956,7 +954,7 @@ mod dcd_merge_tests {
             Arc::new(pst.extract_tx()?),
             vec![ElementsUtxo {
                 script_pubkey: dcd_address.script_pubkey(),
-                asset: Asset::Explicit(AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?.into()),
+                asset: Asset::Explicit(AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?),
                 value: Value::Explicit(available_settlement),
             }],
             0,
@@ -1351,7 +1349,7 @@ mod dcd_merge_tests {
             Arc::new(pst.extract_tx()?),
             vec![ElementsUtxo {
                 script_pubkey: dcd_address.script_pubkey(),
-                asset: Asset::Explicit(AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?.into()),
+                asset: Asset::Explicit(AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?),
                 value: Value::Explicit(available_settlement),
             }],
             0,
