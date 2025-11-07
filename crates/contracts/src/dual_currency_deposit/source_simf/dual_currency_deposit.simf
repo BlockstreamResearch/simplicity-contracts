@@ -1,5 +1,16 @@
 /*
- * DCD PoC: Assets + Price-attested Branch Selection
+ * DCD: Dual Currency Deposit – price-attested settlement and funding windows
+ *
+ * Flows implemented:
+ *  - Maker funding: deposit settlement asset and collateral, issue grantor tokens
+ *  - Taker funding: deposit collateral in window and receive filler tokens
+ *  - Settlement: at SETTLEMENT_HEIGHT, oracle Schnorr signature over (height, price)
+ *    selects LBTC vs ALT branch based on price <= STRIKE_PRICE
+ *  - Early/post-expiry termination: taker returns filler; maker burns grantor tokens
+ *  - Merge: consolidate 2/3/4 token UTXOs
+ *
+ * All amounts and asset/script invariants are enforced on-chain; time guards use
+ * fallback locktime and height checks.
  */
 
 // Verify Schnorr signature against SHA256 of (u32 || u64)

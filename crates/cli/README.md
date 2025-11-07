@@ -305,7 +305,7 @@ Create a new DCD covenant by issuing three token types (filler, grantor collater
 
 Example:
 ```
-cargo run -p cli -- dcd-demo dcd-creation \
+cargo run -p cli -- dcd creation \
   --first-fee-utxo <txid>:<vout> \
   --second-fee-utxo <txid>:<vout> \
   --third-fee-utxo <txid>:<vout> \
@@ -332,7 +332,7 @@ Persist or retrieve encoded DCD arguments for a given taproot pubkey gen in the 
 - Import (bind encoded args to a `taproot-pubkey-gen`):
 
 ```
-cargo run -p cli -- dcd-demo import \
+cargo run -p cli -- dcd import \
   --taproot-pubkey-gen <taproot-pubkey-gen> \
   --encoded-dcd-arguments <hex>
 ```
@@ -340,7 +340,7 @@ cargo run -p cli -- dcd-demo import \
 - Export (print encoded args for a `taproot-pubkey-gen`):
 
 ```
-cargo run -p cli -- dcd-demo export \
+cargo run -p cli -- dcd export \
   --taproot-pubkey-gen <taproot-pubkey-gen>
 ```
 
@@ -355,7 +355,7 @@ Generate a Schnorr signature for price attestation at settlement.
 
 Example:
 ```
-cargo run -p cli -- dcd-demo oracle-signature \
+cargo run -p cli -- dcd oracle-signature \
   --price-at-current-block-height 115000 \
   --settlement-height 1200000 \
   --oracle-account-index 2
@@ -376,7 +376,7 @@ Merge 2, 3, or 4 token UTXOs into a single UTXO. Useful for consolidating fragme
 
 Example (merging 2 tokens):
 ```
-cargo run -p cli -- dcd-demo merge-2-tokens \
+cargo run -p cli -- dcd merge2-tokens \
   --token-utxo-1 <txid>:<vout> \
   --token-utxo-2 <txid>:<vout> \
   --fee-utxo <txid>:<vout> \
@@ -404,7 +404,7 @@ Maker deposits collateral and settlement assets, receives grantor tokens.
 
 Example:
 ```
-cargo run -p cli -- dcd-demo maker-funding-path \
+cargo run -p cli -- dcd maker-funding-path \
   --filler-token-utxo <txid>:<vout> \
   --grantor-collateral-token-utxo <txid>:<vout> \
   --grantor-settlement-token-utxo <txid>:<vout> \
@@ -433,7 +433,7 @@ Taker deposits collateral, receives filler tokens.
 
 Example:
 ```
-cargo run -p cli -- dcd-demo taker-funding-path \
+cargo run -p cli -- dcd taker-funding-path \
   --filler-token-utxo <txid>:<vout> \
   --collateral-utxo <txid>:<vout> \
   --fee-utxo <txid>:<vout> \
@@ -460,7 +460,7 @@ Taker returns filler tokens, gets collateral back before contract expiry.
 
 Example:
 ```
-cargo run -p cli -- dcd-demo taker-early-termination \
+cargo run -p cli -- dcd taker-early-termination \
   --collateral-utxo <txid>:<vout> \
   --filler-token-utxo <txid>:<vout> \
   --fee-utxo <txid>:<vout> \
@@ -487,7 +487,7 @@ Maker burns grantor collateral tokens, gets collateral back.
 
 Example:
 ```
-cargo run -p cli -- dcd-demo maker-collateral-termination \
+cargo run -p cli -- dcd maker-collateral-termination \
   --collateral-utxo <txid>:<vout> \
   --grantor-collateral-token-utxo <txid>:<vout> \
   --fee-utxo <txid>:<vout> \
@@ -514,7 +514,7 @@ Maker burns grantor settlement tokens, gets settlement asset back.
 
 Example:
 ```
-cargo run -p cli -- dcd-demo maker-settlement-termination \
+cargo run -p cli -- dcd maker-settlement-termination \
   --settlement-asset-utxo <txid>:<vout> \
   --grantor-settlement-token-utxo <txid>:<vout> \
   --fee-utxo <txid>:<vout> \
@@ -544,7 +544,7 @@ Maker settles at maturity based on oracle-attested price.
 
 Example:
 ```
-cargo run -p cli -- dcd-demo maker-settlement \
+cargo run -p cli -- dcd maker-settlement \
   --asset-utxo <txid>:<vout> \
   --grantor-collateral-token-utxo <txid>:<vout> \
   --grantor-settlement-token-utxo <txid>:<vout> \
@@ -576,7 +576,7 @@ Taker settles at maturity based on oracle-attested price.
 
 Example:
 ```
-cargo run -p cli -- dcd-demo taker-settlement \
+cargo run -p cli -- dcd taker-settlement \
   --asset-utxo <txid>:<vout> \
   --filler-token-utxo <txid>:<vout> \
   --fee-utxo <txid>:<vout> \

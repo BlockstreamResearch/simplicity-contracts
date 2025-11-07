@@ -3,6 +3,7 @@
 //! This binary exposes multiple subcommand groups to work with Liquid testnet:
 //! - `basic`: P2PK utilities such as deriving addresses and building simple transfers.
 //! - `options`: Utilities for the options contract (address derivation and funding paths).
+//! - `dcd`: Dual Currency Deposit contract commands (creation, funding, termination, settlement, merge).
 //!
 //! Run `simplicity-cli --help` or any subcommand with `--help` for usage.
 

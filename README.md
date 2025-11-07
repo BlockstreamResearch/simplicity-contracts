@@ -18,6 +18,7 @@ Workspace for prototyping and exercising Simplicity-based contracts on Liquid te
 - `crates/contracts` — Contract templates and helpers
   - `options/` contains a Simplicity Options contract (`options.simf`) based on the [options whitepaper](https://blockstream.com/assets/downloads/pdf/options-whitepaper.pdf), argument builders, and witness builders
   - `simple_storage/` contains a minimal stateful storage covenant (`simple_storage.simf`), argument and witness builders
+  - `dual_currency_deposit/` contains the DCD price-attested covenant (`dual_currency_deposit.simf`), argument builders, and witness builders
   - `get_options_program`, `get_options_address`, and `finalize_options_funding_path_transaction`
   - `get_storage_compiled_program`, `get_storage_address`, and helpers to finalize storage transactions
   - Bincode-based encoding of argument structs (via `simplicityhl-core` encoding feature)
@@ -25,6 +26,7 @@ Workspace for prototyping and exercising Simplicity-based contracts on Liquid te
 - `crates/cli` — Simplicity helper CLI (Liquid testnet)
   - `basic` commands: P2PK address derivation and simple LBTC/asset transfers
   - `options` commands: create/fund/exercise/settle/expire/cancel paths for the Options contract
+  - `dcd` commands: create, import/export, oracle-signature, token merge, maker/taker funding, early termination, and settlement paths
   - `storage` commands: initialize storage state and update state (mint/burn paths)
   - Uses a local sled store at `.cache/store` for argument persistence
 
@@ -58,6 +60,14 @@ Workspace for prototyping and exercising Simplicity-based contracts on Liquid te
   - Expiry (grantor): after expiry, burns grantor tokens and withdraws the corresponding collateral to a P2PK recipient (fees deducted from collateral input).
   - Cancellation: burns both tokens and withdraws a portion of collateral to a P2PK recipient (fees deducted from collateral input).
   - The covenant expects specific output ordering and conditional change outputs; the CLI constructs outputs in that order.
+
+- DCD contract (Dual Currency Deposit)
+  - Creation: issues three reissuance tokens (filler, grantor-collateral, grantor-settlement), persists entropies, derives/stores `DCDArguments`, and prints the `TaprootPubkeyGen` for the instance.
+  - Maker funding: deposits settlement asset and collateral, reissues grantor tokens forward, and attaches the DCD witness.
+  - Taker funding: deposits collateral during the funding window and receives filler tokens (with optional change handling), guarded by time windows.
+  - Settlement (oracle-attested): at `settlement_height`, an oracle Schnorr-signature over `(height, price)` selects the branch. Maker/taker receive LBTC vs settlement asset depending on whether `price <= strike`.
+  - Early/post-expiry termination: taker can return filler to recover collateral; maker can burn grantor tokens to recover collateral/settlement before end or after expiry.
+  - Token merge utilities: merge 2/3/4 token UTXOs for UX.
 
 - Simple Storage
   - Init: issues a slot asset and a reissuance token, binds `StorageArguments` and persists the initial entropy for later reissuance.

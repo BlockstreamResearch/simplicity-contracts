@@ -32,6 +32,7 @@ use contracts::{
 };
 use contracts::{DcdBranch, MergeBranch, TokenBranch};
 
+/// DCD subcommands.
 #[derive(Subcommand, Debug)]
 pub enum Dcd {
     /// Import previously-encoded DCD arguments and bind to taproot pubkey gen

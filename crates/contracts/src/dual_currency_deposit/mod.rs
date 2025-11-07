@@ -1,3 +1,21 @@
+//! Dual Currency Deposit (DCD) – price-attested Simplicity covenant for Liquid testnet.
+//!
+//! This module exposes helpers to compile, execute, and finalize the DCD program:
+//! - `get_dcd_template_program`, `get_dcd_program`, `get_compiled_dcd_program`
+//! - `get_dcd_address` to derive the covenant P2TR address bound to a Taproot pubkey
+//! - `execute_dcd_program` to run a specific branch with witness values
+//! - `finalize_dcd_transaction_on_liquid_testnet` to attach the Simplicity witness to a tx input
+//!
+//! DCD flows supported by the Simplicity program and CLI:
+//! - Maker funding: deposit settlement asset and collateral, issue grantor tokens
+//! - Taker funding: deposit collateral within the funding window and receive filler tokens
+//! - Settlement at `settlement_height`: oracle Schnorr-signature selects LBTC vs ALT branch
+//! - Early/post-expiry termination: taker returns filler; maker burns grantor tokens
+//! - Token merge utilities: merge 2/3/4 token UTXOs
+//!
+//! See `crates/cli/README.md` for canonical CLI usage and parameters.
+//! All transactions are explicit and target Liquid testnet.
+
 use std::sync::Arc;
 
 use simplicityhl::simplicity::RedeemNode;
