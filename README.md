@@ -112,9 +112,10 @@ Examples
   cargo run -p cli -- options import  --help
   cargo run -p cli -- options export  --help
   ```
-- Options flows (creation → funding → exercise/settlement/expiry/cancellation): see `crates/cli/README.md` for full command lines.
 
-- Simple Storage flows, see `crates/contracts/src/simple_storage/README.md` for the detailed explanation.
+- Options flows (creation → funding → exercise/settlement/expiry/cancellation): see [`crates/cli/README.md`](https://github.com/BlockstreamResearch/simplicity-contracts/blob/main/crates/cli/README.md) for full command lines and an example run with actual values.
+
+- Simple Storage flows, see [`crates/contracts/src/simple_storage/README.md`](https://github.com/BlockstreamResearch/simplicity-contracts/blob/main/crates/contracts/src/simple_storage/README.md) for the detailed explanation.
 
 ## Development tips
 
