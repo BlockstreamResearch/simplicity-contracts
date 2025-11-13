@@ -375,6 +375,26 @@ fn maker_settlement_termination_path(index: u32, grantor_settlement_amount_to_bu
     ensure_output_asset_with_amount_eq(return_settlement_output_index, param::SETTLEMENT_ASSET_ID, settlement_amount_to_get);
 }
 
+fn ensure_correct_return_at(user_output_index: u32, asset_id: u256, amount_to_get: u64, fee_basis_points: u64) {
+    match jet::eq_64(fee_basis_points, 0) {
+        true => ensure_output_asset_with_amount_eq(user_output_index, asset_id, amount_to_get),
+        false => {
+            let fee_output_index: u32 = increment_by(user_output_index, 1);
+
+            let (user_asset_bits, user_amount): (u256, u64) = get_output_explicit_asset_amount(user_output_index);
+            assert!(jet::eq_256(user_asset_bits, asset_id));
+
+            let (fee_asset_bits, fee_amount): (u256, u64) = get_output_explicit_asset_amount(fee_output_index);
+            assert!(jet::eq_256(fee_asset_bits, asset_id));
+
+            let (carry, calculated_total_amount): (bool, u64) = jet::add_64(user_amount, fee_amount);
+            ensure_zero_bit(carry);
+
+            constraint_percentage(calculated_total_amount, fee_basis_points, fee_amount);
+        },
+    };
+}
+
 fn maker_settlement_path(price_at_current_block_height: u64, oracle_sig: Signature, index: u32, grantor_amount_to_burn: u64, amount_to_get: u64, is_change_needed: bool) {
     jet::check_lock_height(param::SETTLEMENT_HEIGHT);
     checksig_priceblock(param::ORACLE_PK, param::SETTLEMENT_HEIGHT, price_at_current_block_height, oracle_sig);
@@ -404,7 +424,7 @@ fn maker_settlement_path(price_at_current_block_height: u64, oracle_sig: Signatu
             ensure_output_asset_with_amount_eq(burn_grantor_collateral_output_index, param::GRANTOR_COLLATERAL_TOKEN_ASSET, grantor_amount_to_burn);
 
             // Ensure settlement asset transferred to user
-            ensure_output_asset_with_amount_eq(settlement_output_index, param::SETTLEMENT_ASSET_ID, amount_to_get);
+            ensure_correct_return_at(settlement_output_index, param::SETTLEMENT_ASSET_ID, amount_to_get, 0);
         },
         false => {
             // Maker gets the LBTC
@@ -430,7 +450,7 @@ fn maker_settlement_path(price_at_current_block_height: u64, oracle_sig: Signatu
             ensure_output_asset_with_amount_eq(burn_grantor_settlement_output_index, param::GRANTOR_SETTLEMENT_TOKEN_ASSET, grantor_amount_to_burn);
 
             // Ensure collateral transferred to user
-            ensure_output_asset_with_amount_eq(collateral_output_index, param::COLLATERAL_ASSET_ID, amount_to_get);
+            ensure_correct_return_at(collateral_output_index, param::COLLATERAL_ASSET_ID, amount_to_get, 0);
         },
     }
 }
@@ -462,7 +482,7 @@ fn taker_settlement_path(price_at_current_block_height: u64, oracle_sig: Signatu
             ensure_output_asset_with_amount_eq(burn_filler_output_index, param::FILLER_TOKEN_ASSET, filler_amount_to_burn);
 
             // Ensure collateral transferred to user
-            ensure_output_asset_with_amount_eq(collateral_output_index, param::COLLATERAL_ASSET_ID, amount_to_get);
+            ensure_correct_return_at(collateral_output_index, param::COLLATERAL_ASSET_ID, amount_to_get, 0);
         },
         false => {
             // Taker receives ALT
@@ -486,7 +506,7 @@ fn taker_settlement_path(price_at_current_block_height: u64, oracle_sig: Signatu
             ensure_output_asset_with_amount_eq(burn_filler_output_index, param::FILLER_TOKEN_ASSET, filler_amount_to_burn);
 
             // Ensure filler token transferred to user
-            ensure_output_asset_with_amount_eq(settlement_output_index, param::SETTLEMENT_ASSET_ID, amount_to_get);
+            ensure_correct_return_at(settlement_output_index, param::SETTLEMENT_ASSET_ID, amount_to_get, 0);
         },
     }
 }
