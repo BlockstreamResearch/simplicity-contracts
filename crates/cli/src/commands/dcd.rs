@@ -565,6 +565,7 @@ impl Dcd {
                     settlement_height: *settlement_height,
                     strike_price: *strike_price,
                     incentive_basis_points: *incentive_basis_points,
+                    fee_basis_points: 0,
                     collateral_asset_id_hex_le: LIQUID_TESTNET_BITCOIN_ASSET.to_string(),
                     settlement_asset_id_hex_le: settlement_asset_id.to_string(),
                     filler_token_asset_id_hex_le: first_asset.to_string(),

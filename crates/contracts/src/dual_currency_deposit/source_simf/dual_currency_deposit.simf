@@ -424,7 +424,7 @@ fn maker_settlement_path(price_at_current_block_height: u64, oracle_sig: Signatu
             ensure_output_asset_with_amount_eq(burn_grantor_collateral_output_index, param::GRANTOR_COLLATERAL_TOKEN_ASSET, grantor_amount_to_burn);
 
             // Ensure settlement asset transferred to user
-            ensure_correct_return_at(settlement_output_index, param::SETTLEMENT_ASSET_ID, amount_to_get, 0);
+            ensure_correct_return_at(settlement_output_index, param::SETTLEMENT_ASSET_ID, amount_to_get, param::FEE_BASIS_POINTS);
         },
         false => {
             // Maker gets the LBTC
@@ -450,7 +450,7 @@ fn maker_settlement_path(price_at_current_block_height: u64, oracle_sig: Signatu
             ensure_output_asset_with_amount_eq(burn_grantor_settlement_output_index, param::GRANTOR_SETTLEMENT_TOKEN_ASSET, grantor_amount_to_burn);
 
             // Ensure collateral transferred to user
-            ensure_correct_return_at(collateral_output_index, param::COLLATERAL_ASSET_ID, amount_to_get, 0);
+            ensure_correct_return_at(collateral_output_index, param::COLLATERAL_ASSET_ID, amount_to_get, param::FEE_BASIS_POINTS);
         },
     }
 }
@@ -482,7 +482,7 @@ fn taker_settlement_path(price_at_current_block_height: u64, oracle_sig: Signatu
             ensure_output_asset_with_amount_eq(burn_filler_output_index, param::FILLER_TOKEN_ASSET, filler_amount_to_burn);
 
             // Ensure collateral transferred to user
-            ensure_correct_return_at(collateral_output_index, param::COLLATERAL_ASSET_ID, amount_to_get, 0);
+            ensure_correct_return_at(collateral_output_index, param::COLLATERAL_ASSET_ID, amount_to_get, param::FEE_BASIS_POINTS);
         },
         false => {
             // Taker receives ALT
@@ -506,7 +506,7 @@ fn taker_settlement_path(price_at_current_block_height: u64, oracle_sig: Signatu
             ensure_output_asset_with_amount_eq(burn_filler_output_index, param::FILLER_TOKEN_ASSET, filler_amount_to_burn);
 
             // Ensure filler token transferred to user
-            ensure_correct_return_at(settlement_output_index, param::SETTLEMENT_ASSET_ID, amount_to_get, 0);
+            ensure_correct_return_at(settlement_output_index, param::SETTLEMENT_ASSET_ID, amount_to_get, param::FEE_BASIS_POINTS);
         },
     }
 }
