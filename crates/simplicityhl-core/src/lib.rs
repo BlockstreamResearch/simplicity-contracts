@@ -6,12 +6,14 @@
 //! - Helpers to finalize transactions with Simplicity script witnesses
 //! - Esplora integration and small conveniences around Elements types
 
+mod blinder;
 mod constants;
 mod explorer;
 mod runner;
 mod scripts;
 mod taproot_pubkey_gen;
 mod trackers;
+mod types;
 
 #[cfg(feature = "encoding")]
 pub mod encoding {
@@ -49,12 +51,14 @@ pub mod encoding {
     }
 }
 
+pub use blinder::*;
 pub use constants::*;
 pub use explorer::*;
 pub use runner::*;
 pub use scripts::*;
 pub use taproot_pubkey_gen::*;
 pub use trackers::*;
+pub use types::*;
 
 #[cfg(feature = "encoding")]
 pub use encoding::Encodable;

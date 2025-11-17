@@ -1,0 +1,11 @@
+use crate::PUBLIC_SECRET_BLINDER_KEY;
+use simplicityhl::elements::bitcoin::secp256k1;
+use simplicityhl::elements::secp256k1_zkp::SecretKey;
+
+pub fn derive_public_blinder_key() -> anyhow::Result<secp256k1::Keypair> {
+    let blinder_key = secp256k1::Keypair::from_secret_key(
+        secp256k1::SECP256K1,
+        &SecretKey::from_slice(&PUBLIC_SECRET_BLINDER_KEY)?,
+    );
+    Ok(blinder_key)
+}
