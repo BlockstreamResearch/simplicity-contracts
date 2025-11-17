@@ -9,8 +9,8 @@ use simplicityhl::elements::hashes::sha256;
 use simplicityhl::elements::hashes::sha256::Midstate;
 use simplicityhl::elements::hex::ToHex;
 use simplicityhl::elements::schnorr::Keypair;
+use simplicityhl::elements::secp256k1_zkp::Secp256k1;
 use simplicityhl::elements::secp256k1_zkp::rand::thread_rng;
-use simplicityhl::elements::secp256k1_zkp::{Secp256k1, SecretKey};
 use simplicityhl::elements::{AssetId, Transaction, TxOutSecrets};
 use simplicityhl::simplicity::bitcoin::secp256k1;
 use simplicityhl::simplicity::elements::confidential::Asset;
@@ -321,10 +321,7 @@ impl Basic {
                 };
 
                 let keypair = derive_keypair(*account_index);
-                let blinding_key = secp256k1::Keypair::from_secret_key(
-                    secp256k1::SECP256K1,
-                    &SecretKey::from_slice(&[1; 32])?,
-                );
+                let blinding_key = derive_public_blinder_key();
 
                 let IssueAssetResponse {
                     tx,
@@ -379,7 +376,7 @@ impl Basic {
                 let asset_entropy = sha256::Midstate::from_byte_array(asset_entropy_bytes);
 
                 let keypair = derive_keypair(*account_index);
-                let blinding = derive_public_blinder_key()?;
+                let blinding = derive_public_blinder_key();
                 let ReissueAssetResponse {
                     tx,
                     asset_id,

@@ -1,7 +1,6 @@
 use crate::modules::keys::derive_secret_key_from_index;
 use simplicityhl::elements::bitcoin::secp256k1;
 use simplicityhl::elements::schnorr::Keypair;
-use simplicityhl::elements::secp256k1_zkp::SecretKey;
 
 pub fn derive_keypair(index: u32) -> Keypair {
     let keypair = secp256k1::Keypair::from_secret_key(

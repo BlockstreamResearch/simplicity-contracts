@@ -3,6 +3,21 @@
 version = 4
 
 [[package]]
+name = "adapter"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "config",
+ "contracts",
+ "dotenvy",
+ "hex",
+ "simplicityhl",
+ "simplicityhl-core",
+ "sled",
+]
+
+[[package]]
 name = "addr2line"
 version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -327,21 +342,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1d728cc89cf3aee9ff92b05e62b19ee65a02b5702cff7d5a377e32c6ae29d8d"
 
 [[package]]
-name = "cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "config",
- "contracts",
- "dotenvy",
- "hex",
- "simplicityhl",
- "simplicityhl-core",
- "sled",
-]
-
-[[package]]
 name = "colorchoice"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -397,10 +397,6 @@ dependencies = [
  "simplicityhl",
  "simplicityhl-core",
 ]
-
-[[package]]
-name = "contracts-adapter"
-version = "0.1.0"
 
 [[package]]
 name = "convert_case"
