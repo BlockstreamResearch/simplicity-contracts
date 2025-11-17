@@ -1,0 +1,17 @@
+[package]
+name = "contracts-adapter"
+version = "0.1.0"
+edition = "2024"
+description = "Simplicity helper CLI for Liquid testnet"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+
+[dependencies]
+hex = { workspace = true }
+anyhow = { workspace = true }
+
+contracts = { path = "../contracts" }
+
+simplicityhl = { workspace = true }
+
+simplicityhl-core = { path = "../simplicityhl-core" }

@@ -1,14 +1,11 @@
 [package]
-name = "adapter"
+name = "cli"
 version = "0.1.0"
 edition = "2024"
 description = "Simplicity helper CLI for Liquid testnet"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
-
-#[[bin]]
-#name = "cli"
-#path = "src/bin/main.rs"
+publish = false
 
 [dependencies]
 sled = "0.34.7"
@@ -25,3 +22,5 @@ contracts = { path = "../contracts" }
 simplicityhl = { workspace = true }
 
 simplicityhl-core = { path = "../simplicityhl-core" }
+
+contracts-adapter = { path = "../contracts-adapter"}
