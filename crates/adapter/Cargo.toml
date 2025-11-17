@@ -6,6 +6,10 @@ description = "Simplicity helper CLI for Liquid testnet"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 
+#[[bin]]
+#name = "cli"
+#path = "src/bin/main.rs"
+
 [dependencies]
 sled = "0.34.7"
 
