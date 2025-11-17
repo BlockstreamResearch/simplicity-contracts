@@ -391,6 +391,8 @@ fn ensure_correct_return_at(user_output_index: u32, asset_id: u256, amount_to_ge
             ensure_zero_bit(carry);
 
             constraint_percentage(calculated_total_amount, fee_basis_points, fee_amount);
+
+            // TODO: add check for the output script hash
         },
     };
 }
