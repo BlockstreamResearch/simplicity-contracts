@@ -104,11 +104,7 @@ pub fn handle(
         grantor_collateral_token_asset_id_hex_le: second_asset.to_string(),
         grantor_settlement_token_asset_id_hex_le: third_asset.to_string(),
         ratio_args: ratio_args.clone(),
-        oracle_public_key: dcd_init_params
-            .oracle_public_key
-            .x_only_public_key()
-            .0
-            .to_hex(),
+        oracle_public_key: dcd_init_params.oracle_public_key,
     };
 
     tracing::info!("Generated dcd_arguments: {dcd_arguments:?}");

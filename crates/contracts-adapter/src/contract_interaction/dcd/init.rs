@@ -11,7 +11,6 @@ use crate::dcd::{
 };
 use contracts::DCDArguments;
 use simplicityhl::elements::Transaction;
-use simplicityhl::elements::bitcoin::secp256k1;
 use simplicityhl_core::{AssetIdHex, TaprootPubkeyGen};
 use std::fmt::Debug;
 
@@ -30,7 +29,7 @@ pub struct DcdInitParams {
     pub strike_price: u64,
     pub collateral_asset_id: AssetIdHex,
     pub settlement_asset_id: AssetIdHex,
-    pub oracle_public_key: secp256k1::PublicKey,
+    pub oracle_public_key: String,
 }
 
 #[derive(Debug, Clone)]

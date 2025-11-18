@@ -5,7 +5,7 @@ use simplicityhl::elements::OutPoint;
 use simplicityhl::elements::bitcoin::secp256k1;
 use simplicityhl::elements::hex::ToHex;
 use simplicityhl::elements::pset::serialize::Serialize;
-use simplicityhl::elements::secp256k1_zkp::{PublicKey, SecretKey};
+use simplicityhl::elements::secp256k1_zkp::{PublicKey};
 use simplicityhl::simplicity::hex::DisplayHex;
 
 use simplicityhl_core::{
@@ -179,7 +179,7 @@ pub enum Dcd {
         settlement_asset_id: String,
         /// Oracle public key
         #[arg(long = "oracle-public-key")]
-        oracle_public_key: PublicKey,
+        oracle_public_key: String,
         /// Fee amount
         #[arg(long = "fee-amount")]
         fee_amount: u64,
@@ -606,15 +606,9 @@ impl Dcd {
             } => {
                 let store = Store::load()?;
 
-                let keypair = secp256k1::Keypair::from_secret_key(
-                    secp256k1::SECP256K1,
-                    &derive_secret_key_from_index(*account_index),
-                );
+                let keypair = derive_keypair(*account_index);
 
-                let blinding_key = secp256k1::Keypair::from_secret_key(
-                    secp256k1::SECP256K1,
-                    &SecretKey::from_slice(&[1; 32])?,
-                );
+                let blinding_key = derive_public_blinder_key();
 
                 let DcdInitResponse {
                     tx,
@@ -642,7 +636,7 @@ impl Dcd {
                             strike_price: *strike_price,
                             collateral_asset_id: COLLATERAL_ASSET_ID.to_hex(),
                             settlement_asset_id: settlement_asset_id.clone(),
-                            oracle_public_key: *oracle_public_key,
+                            oracle_public_key: oracle_public_key.to_string(),
                         },
                         fee_amount: *fee_amount,
                     },
@@ -707,18 +701,26 @@ impl Dcd {
                 else {
                     anyhow::bail!("First entropy not found");
                 };
+                let first_entropy_hex = String::from_utf8(first_entropy_hex.to_vec())?;
+                let first_entropy_hex = hex::decode(first_entropy_hex)?;
+
                 let Some(second_entropy_hex) = store
                     .store
                     .get(format!("second_entropy_{}", dcd_taproot_pubkey_gen))?
                 else {
                     anyhow::bail!("Second entropy not found");
                 };
+                let second_entropy_hex = String::from_utf8(second_entropy_hex.to_vec())?;
+                let second_entropy_hex = hex::decode(second_entropy_hex)?;
+
                 let Some(third_entropy_hex) = store
                     .store
                     .get(format!("third_entropy_{}", dcd_taproot_pubkey_gen))?
                 else {
                     anyhow::bail!("Third entropy not found");
                 };
+                let third_entropy_hex = String::from_utf8(third_entropy_hex.to_vec())?;
+                let third_entropy_hex = hex::decode(third_entropy_hex)?;
 
                 let dcd_arguments: DCDArguments = store.get_arguments(dcd_taproot_pubkey_gen)?;
                 let taproot_pubkey_gen = TaprootPubkeyGen::build_from_str(

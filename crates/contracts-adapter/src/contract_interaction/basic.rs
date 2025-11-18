@@ -178,7 +178,7 @@ pub fn issue_asset(
             asset: lbtc_asset,
         };
 
-        pst.inputs_mut()[0].blinded_issuance = Some(0x00);
+        issuance_tx.blinded_issuance = Some(0x00);
         pst.add_input(issuance_tx);
 
         inp_txout_sec.insert(0, issuance_secrets);
