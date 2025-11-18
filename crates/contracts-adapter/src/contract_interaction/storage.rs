@@ -1,7 +1,6 @@
 use anyhow::Result;
 
 use simplicityhl::simplicity::bitcoin::key::Keypair;
-use simplicityhl::simplicity::bitcoin::secp256k1::SecretKey;
 use simplicityhl::simplicity::jet::elements::{ElementsEnv, ElementsUtxo};
 use simplicityhl::{CompiledProgram, elements};
 use std::collections::HashMap;
@@ -24,8 +23,9 @@ use simplicityhl::simplicity::elements::{
 };
 use simplicityhl::simplicity::hashes::sha256;
 use simplicityhl_core::{
-    AssetEntropyBytes, TaprootPubkeyGen, control_block, create_p2tr_address, fetch_utxo,
-    finalize_p2pk_transaction, get_p2pk_address, get_random_seed, obtain_utxo_value,
+    AssetEntropyBytes, TaprootPubkeyGen, control_block, create_p2tr_address,
+    derive_public_blinder_key, fetch_utxo, finalize_p2pk_transaction, get_p2pk_address,
+    get_random_seed, obtain_utxo_value,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -48,7 +48,7 @@ pub fn update_storage(
     let reissuance_token_tx_out = fetch_utxo(reissuance_token_utxo)?;
     let fee_utxo_tx_out = fetch_utxo(fee_utxo)?;
 
-    let total_input_fee = fee_utxo_tx_out.value.explicit().unwrap();
+    let total_input_fee = obtain_utxo_value(&fee_utxo_tx_out)?;
 
     let asset_entropy_hex = hex::decode(asset_entropy_hex)?;
 
@@ -57,7 +57,7 @@ pub fn update_storage(
 
     let asset_entropy = sha256::Midstate::from_byte_array(asset_entropy_bytes);
 
-    let blinder_sk = SecretKey::from_slice(&[1; 32])?;
+    let blinder_sk = derive_public_blinder_key().secret_key();
     let unblinded = reissuance_token_tx_out.unblind(&Secp256k1::new(), blinder_sk)?;
 
     // Auto-unblind token UTXOs to obtain ABFs for reissuance nonce
@@ -255,7 +255,7 @@ pub fn init_state(
 
     let asset_entropy = get_random_seed();
 
-    let issuance_tx = {
+    let mut issuance_tx = {
         let mut input = Input::from_prevout(fee_utxo);
         input.witness_utxo = Some(utxo_tx_out.clone());
         input.issuance_value_amount = Some(1);
@@ -281,6 +281,8 @@ pub fn init_state(
 
     // Create issue tx input
     {
+        issuance_tx.blinded_issuance = Some(0x00);
+
         pst.add_input(issuance_tx);
         // For explicit inputs, the blinding factors are zero and values/assets are explicit.
         let input_secrets = TxOutSecrets {

@@ -136,6 +136,8 @@ impl Storage {
                         .as_bytes(),
                 )?;
 
+                println!("Taproot gen: {}", storage_taproot_pubkey_gen.to_string());
+
                 match broadcast {
                     true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
