@@ -7,6 +7,10 @@ license = "MIT OR Apache-2.0"
 readme = "README.md"
 publish = false
 
+[[bin]]
+name = "simplicity-cli"
+path = "src/main.rs"
+
 [dependencies]
 sled = "0.34.7"
 
