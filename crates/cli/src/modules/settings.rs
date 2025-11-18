@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use config::{Case, Config};
 
 #[derive(Clone, Debug)]

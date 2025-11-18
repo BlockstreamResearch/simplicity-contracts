@@ -27,4 +27,4 @@ simplicityhl = { workspace = true }
 
 simplicityhl-core = { path = "../simplicityhl-core" }
 
-contracts-adapter = { path = "../contracts-adapter"}
+contracts-adapter = { path = "../contracts-adapter" }

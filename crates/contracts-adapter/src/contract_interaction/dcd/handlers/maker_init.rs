@@ -1,19 +1,19 @@
 use crate::dcd::{
-    COLLATERAL_ASSET_ID, DcdInitParams, DcdInitResponse, FillerTokenEntropyHex,
-    GrantorCollateralAssetEntropyHex, GrantorSettlementAssetEntropyHex,
+    DcdInitParams, DcdInitResponse, FillerTokenEntropyHex, GrantorCollateralAssetEntropyHex,
+    GrantorSettlementAssetEntropyHex, COLLATERAL_ASSET_ID,
 };
-use contracts::{DCDArguments, DCDRatioArguments, get_dcd_address};
+use contracts::{get_dcd_address, DCDArguments, DCDRatioArguments};
 use simplicity::elements::{BlockHash, TxOut};
 use simplicityhl::elements::bitcoin::secp256k1;
 use simplicityhl::elements::confidential::{AssetBlindingFactor, ValueBlindingFactor};
 use simplicityhl::elements::hex::ToHex;
-use simplicityhl::elements::secp256k1_zkp::Secp256k1;
 use simplicityhl::elements::secp256k1_zkp::rand::thread_rng;
+use simplicityhl::elements::secp256k1_zkp::Secp256k1;
 use simplicityhl::elements::{AssetId, OutPoint, Transaction, TxOutSecrets};
 use simplicityhl::simplicity;
-use simplicityhl::simplicity::elements::AddressParams;
 use simplicityhl::simplicity::elements::pset::{Input, Output, PartiallySignedTransaction};
-use simplicityhl_core::{TaprootPubkeyGen, fetch_utxo, get_random_seed, obtain_utxo_value};
+use simplicityhl::simplicity::elements::AddressParams;
+use simplicityhl_core::{fetch_utxo, get_random_seed, obtain_utxo_value, TaprootPubkeyGen};
 use simplicityhl_core::{finalize_p2pk_transaction, get_new_asset_entropy, get_p2pk_address};
 
 #[allow(clippy::too_many_arguments)]

@@ -10,8 +10,8 @@ use simplicityhl::simplicity::elements::pset::serialize::Serialize;
 use simplicityhl::simplicity::elements::{Address, AddressParams, OutPoint};
 use simplicityhl::simplicity::hex::DisplayHex;
 use simplicityhl_core::{
-    LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_GENESIS, broadcast_tx, derive_public_blinder_key,
-    get_p2pk_address,
+    broadcast_tx, derive_public_blinder_key, get_p2pk_address, LIQUID_TESTNET_BITCOIN_ASSET,
+    LIQUID_TESTNET_GENESIS,
 };
 
 #[derive(Subcommand, Debug)]

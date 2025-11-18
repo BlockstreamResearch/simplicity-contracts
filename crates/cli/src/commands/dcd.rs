@@ -1,24 +1,24 @@
 use anyhow::Result;
 use clap::Subcommand;
 
-use simplicityhl::elements::OutPoint;
 use simplicityhl::elements::bitcoin::secp256k1;
 use simplicityhl::elements::hex::ToHex;
 use simplicityhl::elements::pset::serialize::Serialize;
 use simplicityhl::elements::secp256k1_zkp::{PublicKey, SecretKey};
+use simplicityhl::elements::OutPoint;
 use simplicityhl::simplicity::hex::DisplayHex;
 
 use simplicityhl_core::{
-    Encodable, LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_GENESIS, TaprootPubkeyGen,
-    broadcast_tx, derive_public_blinder_key,
+    broadcast_tx, derive_public_blinder_key, Encodable, TaprootPubkeyGen,
+    LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_GENESIS,
 };
 
 use crate::modules::keys::derive_secret_key_from_index;
 use crate::modules::store::Store;
 use crate::modules::utils::derive_keypair;
 use contracts::MergeBranch;
-use contracts::{DCDArguments, oracle_msg};
-use contracts_adapter::dcd::{COLLATERAL_ASSET_ID, DcdInitParams, DcdInitResponse};
+use contracts::{oracle_msg, DCDArguments};
+use contracts_adapter::dcd::{DcdInitParams, DcdInitResponse, COLLATERAL_ASSET_ID};
 use simplicityhl::simplicity::elements::AddressParams;
 
 /// DCD subcommands.

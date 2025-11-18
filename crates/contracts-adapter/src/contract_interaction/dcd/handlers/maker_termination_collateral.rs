@@ -4,12 +4,12 @@ use simplicityhl::elements::{OutPoint, Transaction};
 use simplicityhl::simplicity;
 use simplicityhl::simplicity::ToXOnlyPubkey;
 use simplicityhl_core::{
-    TaprootPubkeyGen, fetch_utxo, finalize_p2pk_transaction, finalize_transaction, get_p2pk_address,
+    fetch_utxo, finalize_p2pk_transaction, finalize_transaction, get_p2pk_address, TaprootPubkeyGen,
 };
 
 use crate::dcd::COLLATERAL_ASSET_ID;
 use contracts::{
-    DCDArguments, DcdBranch, MergeBranch, TokenBranch, build_dcd_witness, get_dcd_program,
+    build_dcd_witness, get_dcd_program, DCDArguments, DcdBranch, MergeBranch, TokenBranch,
 };
 use simplicityhl::simplicity::elements::pset::{Input, Output, PartiallySignedTransaction};
 use simplicityhl::simplicity::elements::{AddressParams, Script};

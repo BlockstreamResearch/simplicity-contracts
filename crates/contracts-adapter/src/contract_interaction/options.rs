@@ -1,24 +1,24 @@
 use contracts::build_witness::TokenBranch;
-use contracts::{OptionsArguments, finalize_options_funding_path_transaction, get_options_program};
+use contracts::{finalize_options_funding_path_transaction, get_options_program, OptionsArguments};
 
 use std::str::FromStr;
 
 use simplicityhl_core::{
-    AssetEntropyBytes, LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_GENESIS, TaprootPubkeyGen,
-    fetch_utxo, finalize_p2pk_transaction, finalize_transaction, get_p2pk_address, get_random_seed,
+    fetch_utxo, finalize_p2pk_transaction, finalize_transaction, get_p2pk_address,
+    get_random_seed, AssetEntropyBytes, TaprootPubkeyGen, LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_GENESIS,
 };
 
 use simplicityhl::simplicity::elements::confidential::{AssetBlindingFactor, ValueBlindingFactor};
 use simplicityhl::simplicity::elements::pset::{Input, Output, PartiallySignedTransaction};
-use simplicityhl::simplicity::elements::secp256k1_zkp::Secp256k1;
 use simplicityhl::simplicity::elements::secp256k1_zkp::rand::thread_rng;
+use simplicityhl::simplicity::elements::secp256k1_zkp::Secp256k1;
 use simplicityhl::simplicity::elements::{
     AddressParams, AssetId, LockTime, Script, Sequence, Transaction, TxOutSecrets,
 };
 use simplicityhl::simplicity::hashes::sha256;
 
 use simplicityhl::elements::schnorr::Keypair;
-use simplicityhl::elements::{OutPoint, confidential};
+use simplicityhl::elements::{confidential, OutPoint};
 use simplicityhl::simplicity::ToXOnlyPubkey;
 
 #[allow(clippy::too_many_arguments)]

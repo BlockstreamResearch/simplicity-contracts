@@ -1,13 +1,13 @@
 use contracts::{
-    DCDArguments, DcdBranch, MergeBranch, TokenBranch, finalize_dcd_transaction_on_liquid_testnet,
-    get_dcd_program,
+    finalize_dcd_transaction_on_liquid_testnet, get_dcd_program, DCDArguments, DcdBranch, MergeBranch,
+    TokenBranch,
 };
 use simplicityhl::elements::bitcoin::secp256k1;
 use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
 use simplicityhl::elements::{AddressParams, AssetId, LockTime, OutPoint, Script, Transaction};
 use simplicityhl::simplicity;
 use simplicityhl::simplicity::ToXOnlyPubkey;
-use simplicityhl_core::{TaprootPubkeyGen, fetch_utxo, finalize_p2pk_transaction};
+use simplicityhl_core::{fetch_utxo, finalize_p2pk_transaction, TaprootPubkeyGen};
 
 #[allow(clippy::too_many_arguments)]
 pub fn handle(

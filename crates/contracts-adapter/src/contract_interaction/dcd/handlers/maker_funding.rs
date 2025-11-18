@@ -1,24 +1,24 @@
+use contracts::{
+    build_dcd_witness, get_dcd_program, DCDArguments, DcdBranch, MergeBranch, TokenBranch,
+};
 use simplicity::elements::{BlockHash, TxOut};
 use simplicityhl::elements::bitcoin::secp256k1;
-use simplicityhl::elements::secp256k1_zkp::Secp256k1;
 use simplicityhl::elements::secp256k1_zkp::rand::thread_rng;
+use simplicityhl::elements::secp256k1_zkp::Secp256k1;
 use simplicityhl::elements::{AssetId, OutPoint, Transaction};
-use simplicityhl::simplicity::ToXOnlyPubkey;
 use simplicityhl::simplicity::elements::pset::{Input, Output, PartiallySignedTransaction};
 use simplicityhl::simplicity::elements::{AddressParams, Script};
-use simplicityhl::{CompiledProgram, WitnessValues, simplicity};
+use simplicityhl::simplicity::ToXOnlyPubkey;
+use simplicityhl::{simplicity, CompiledProgram, WitnessValues};
 use simplicityhl_core::{
-    AssetEntropyBytes, TaprootPubkeyGen, fetch_utxo, finalize_p2pk_transaction,
-    finalize_transaction, get_p2pk_address, obtain_utxo_value,
+    fetch_utxo, finalize_p2pk_transaction, finalize_transaction, get_p2pk_address,
+    obtain_utxo_value, AssetEntropyBytes, TaprootPubkeyGen,
 };
-use tracing::instrument;
 
+use crate::dcd::common::{raw_asset_entropy_bytes_to_midstate, AssetEntropyProcessed};
 use crate::dcd::COLLATERAL_ASSET_ID;
-use crate::dcd::common::{AssetEntropyProcessed, raw_asset_entropy_bytes_to_midstate};
-use contracts::{
-    DCDArguments, DcdBranch, MergeBranch, TokenBranch, build_dcd_witness, get_dcd_program,
-};
 use std::str::FromStr;
+use tracing::instrument;
 
 #[allow(clippy::too_many_arguments)]
 #[instrument(level = "debug", skip_all, err)]
