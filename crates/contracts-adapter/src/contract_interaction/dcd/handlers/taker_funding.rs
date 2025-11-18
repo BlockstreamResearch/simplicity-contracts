@@ -1,33 +1,44 @@
-use crate::dcd::COLLATERAL_ASSET_ID;
-use anyhow::anyhow;
-use contracts::{
-    build_dcd_witness, get_dcd_program, DCDArguments, DcdBranch, MergeBranch, TokenBranch,
+use crate::dcd::{
+    BaseContractContext, COLLATERAL_ASSET_ID, CommonContext, DcdContractContext,
+    TakerFundingContext,
 };
-use simplicity::elements::{AssetId, OutPoint, TxOut};
-use simplicityhl::elements::bitcoin::secp256k1;
+use anyhow::anyhow;
+use contracts::{DcdBranch, MergeBranch, TokenBranch, build_dcd_witness, get_dcd_program};
+use simplicity::elements::TxOut;
 use simplicityhl::elements::Transaction;
+use simplicityhl::elements::bitcoin::secp256k1;
 use simplicityhl::simplicity;
-use simplicityhl::simplicity::elements::pset::{Input, Output, PartiallySignedTransaction};
+use simplicityhl::simplicity::ToXOnlyPubkey;
 use simplicityhl::simplicity::elements::AddressParams;
 use simplicityhl::simplicity::elements::LockTime;
-use simplicityhl::simplicity::ToXOnlyPubkey;
+use simplicityhl::simplicity::elements::pset::{Input, Output, PartiallySignedTransaction};
 use simplicityhl_core::{
-    fetch_utxo, finalize_p2pk_transaction, finalize_transaction, get_p2pk_address, TaprootPubkeyGen,
+    fetch_utxo, finalize_p2pk_transaction, finalize_transaction, get_p2pk_address,
 };
 
-#[allow(clippy::too_many_arguments)]
 pub fn handle(
-    keypair: &secp256k1::Keypair,
-    filler_token_utxo: OutPoint,
-    collateral_token_utxo: OutPoint,
-    fee_amount: u64,
-    collateral_amount_to_deposit: u64,
-    dcd_taproot_pubkey_gen: &TaprootPubkeyGen,
-    dcd_arguments: &DCDArguments,
-    address_params: &'static AddressParams,
-    change_asset: AssetId,
-    genesis_block_hash: simplicity::elements::BlockHash,
+    common_context: &CommonContext,
+    taker_funding_context: TakerFundingContext,
+    dcd_contract_context: &DcdContractContext,
 ) -> anyhow::Result<Transaction> {
+    let CommonContext { keypair } = common_context;
+    let TakerFundingContext {
+        filler_token_utxo,
+        collateral_token_utxo,
+        fee_amount,
+        collateral_amount_to_deposit,
+    } = taker_funding_context;
+    let DcdContractContext {
+        dcd_taproot_pubkey_gen,
+        dcd_arguments,
+        base_contract_context:
+            BaseContractContext {
+                address_params,
+                lbtc_asset: change_asset,
+                genesis_block_hash,
+            },
+    } = dcd_contract_context;
+
     let filler_tx_out = fetch_utxo(filler_token_utxo)?;
     let collateral_tx_out = fetch_utxo(collateral_token_utxo)?;
 
@@ -100,11 +111,14 @@ pub fn handle(
     pst.add_output(Output::new_explicit(
         change_recipient.script_pubkey(),
         total_input_fee - fee_amount,
-        change_asset,
+        *change_asset,
         None,
     ));
 
-    pst.add_output(Output::from_txout(TxOut::new_fee(fee_amount, change_asset)));
+    pst.add_output(Output::from_txout(TxOut::new_fee(
+        fee_amount,
+        *change_asset,
+    )));
 
     let utxos = vec![filler_tx_out, collateral_tx_out];
 
@@ -128,10 +142,11 @@ pub fn handle(
         0,
         witness_values,
         address_params,
-        genesis_block_hash,
+        *genesis_block_hash,
     )?;
 
-    let tx = finalize_p2pk_transaction(tx, &utxos, keypair, 1, address_params, genesis_block_hash)?;
+    let tx =
+        finalize_p2pk_transaction(tx, &utxos, keypair, 1, address_params, *genesis_block_hash)?;
 
     tx.verify_tx_amt_proofs(secp256k1::SECP256K1, &utxos)?;
 

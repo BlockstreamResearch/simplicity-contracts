@@ -1,50 +1,74 @@
-use contracts::{
-    build_dcd_witness, get_dcd_program, DCDArguments, DcdBranch, MergeBranch, TokenBranch,
-};
+use contracts::{DcdBranch, MergeBranch, TokenBranch, build_dcd_witness, get_dcd_program};
 use simplicity::elements::{BlockHash, TxOut};
 use simplicityhl::elements::bitcoin::secp256k1;
-use simplicityhl::elements::secp256k1_zkp::rand::thread_rng;
 use simplicityhl::elements::secp256k1_zkp::Secp256k1;
+use simplicityhl::elements::secp256k1_zkp::rand::thread_rng;
 use simplicityhl::elements::{AssetId, OutPoint, Transaction};
+use simplicityhl::simplicity::ToXOnlyPubkey;
 use simplicityhl::simplicity::elements::pset::{Input, Output, PartiallySignedTransaction};
 use simplicityhl::simplicity::elements::{AddressParams, Script};
-use simplicityhl::simplicity::ToXOnlyPubkey;
-use simplicityhl::{simplicity, CompiledProgram, WitnessValues};
+use simplicityhl::{CompiledProgram, WitnessValues, simplicity};
 use simplicityhl_core::{
-    fetch_utxo, finalize_p2pk_transaction, finalize_transaction, get_p2pk_address,
-    obtain_utxo_value, AssetEntropyBytes, TaprootPubkeyGen,
+    AssetEntropyBytes, TaprootPubkeyGen, fetch_utxo, finalize_p2pk_transaction,
+    finalize_transaction, get_p2pk_address, obtain_utxo_value,
 };
 
-use crate::dcd::common::{raw_asset_entropy_bytes_to_midstate, AssetEntropyProcessed};
-use crate::dcd::COLLATERAL_ASSET_ID;
+use crate::dcd::common::{AssetEntropyProcessed, raw_asset_entropy_bytes_to_midstate};
+use crate::dcd::context::{CreationContext, DcdContractContext};
+use crate::dcd::{BaseContractContext, COLLATERAL_ASSET_ID};
 use std::str::FromStr;
 use tracing::instrument;
 
-#[allow(clippy::too_many_arguments)]
+// Context -> keypair, blinding_key,
+// ContractContext -> genesis_block_hash, change_asset, address_params, dcd_taproot_pubkey_gen, dcd_arguments
+// MakerFundingContext -> everything else.
+
+pub struct InnerMakerFundingContext {
+    pub filler_reissue_token_info: (OutPoint, AssetEntropyBytes),
+    pub grantor_collateral_reissue_token_info: (OutPoint, AssetEntropyBytes),
+    pub grantor_settlement_reissue_token_info: (OutPoint, AssetEntropyBytes),
+    pub settlement_asset_utxo: OutPoint,
+    pub fee_utxo: OutPoint,
+    pub fee_amount: u64,
+}
+
 #[instrument(level = "debug", skip_all, err)]
 pub fn handle(
-    keypair: &secp256k1::Keypair,
-    blinding_key: &secp256k1::Keypair,
-    filler_reissue_token_info: (OutPoint, AssetEntropyBytes),
-    grantor_collateral_reissue_token_info: (OutPoint, AssetEntropyBytes),
-    grantor_settlement_reissue_token_info: (OutPoint, AssetEntropyBytes),
-    settlement_asset_utxo: OutPoint,
-    fee_utxo: OutPoint,
-    fee_amount: u64,
-    dcd_taproot_pubkey_gen: &TaprootPubkeyGen,
-    dcd_arguments: &DCDArguments,
-    address_params: &'static AddressParams,
-    change_asset: AssetId,
-    genesis_block_hash: simplicity::elements::BlockHash,
+    context: &CreationContext,
+    funding_context: &InnerMakerFundingContext,
+    contract_context: &DcdContractContext,
 ) -> anyhow::Result<Transaction> {
+    let CreationContext {
+        keypair,
+        blinding_key,
+    } = context;
+    let InnerMakerFundingContext {
+        filler_reissue_token_info,
+        grantor_collateral_reissue_token_info,
+        grantor_settlement_reissue_token_info,
+        settlement_asset_utxo,
+        fee_utxo,
+        fee_amount,
+    } = funding_context;
+    let DcdContractContext {
+        dcd_taproot_pubkey_gen,
+        dcd_arguments,
+        base_contract_context:
+            BaseContractContext {
+                address_params,
+                lbtc_asset: change_asset,
+                genesis_block_hash,
+            },
+    } = contract_context;
+
     tracing::debug!(
         filler_token_info =? filler_reissue_token_info,
         grantor_collateral_token_info =? grantor_collateral_reissue_token_info,
         grantor_settlement_token_info =? grantor_settlement_reissue_token_info,
         settlement_asset_info =? settlement_asset_utxo,
         fee_utxo =? fee_utxo,
-        dcd_taproot_pubkey_gen =? dcd_taproot_pubkey_gen,
         fee_amount = fee_amount,
+        dcd_taproot_pubkey_gen =? dcd_taproot_pubkey_gen,
         "Executing maker fund with params"
     );
 
@@ -61,8 +85,8 @@ pub fn handle(
         fetch_utxo(grantor_settlement_reissue_token_info.0)?,
     );
     let (settlement_utxo, settlement_utxo_tx_out) =
-        (settlement_asset_utxo, fetch_utxo(settlement_asset_utxo)?);
-    let fee_utxo_tx_out = fetch_utxo(fee_utxo)?;
+        (settlement_asset_utxo, fetch_utxo(*settlement_asset_utxo)?);
+    let fee_utxo_tx_out = fetch_utxo(*fee_utxo)?;
 
     let total_input_fee = obtain_utxo_value(&fee_utxo_tx_out)?;
     let total_input_asset = obtain_utxo_value(&settlement_utxo_tx_out)?;
@@ -182,12 +206,12 @@ pub fn handle(
     }
 
     {
-        let mut asset_settlement_tx = Input::from_prevout(settlement_utxo);
+        let mut asset_settlement_tx = Input::from_prevout(*settlement_utxo);
         asset_settlement_tx.witness_utxo = Some(settlement_utxo_tx_out.clone());
         pst.add_input(asset_settlement_tx);
     }
     {
-        let mut fee_tx = Input::from_prevout(fee_utxo);
+        let mut fee_tx = Input::from_prevout(*fee_utxo);
         fee_tx.witness_utxo = Some(fee_utxo_tx_out.clone());
         pst.add_input(fee_tx);
     }
@@ -277,8 +301,8 @@ pub fn handle(
     // Fee
     pst.add_output(Output::new_explicit(
         Script::new(),
-        fee_amount,
-        change_asset,
+        *fee_amount,
+        *change_asset,
         None,
     ));
 
@@ -312,7 +336,7 @@ pub fn handle(
         &utxos,
         witness_values,
         address_params,
-        genesis_block_hash,
+        *genesis_block_hash,
     )?;
 
     tx.verify_tx_amt_proofs(secp256k1::SECP256K1, &utxos)?;

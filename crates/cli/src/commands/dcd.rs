@@ -1,24 +1,29 @@
 use anyhow::Result;
 use clap::Subcommand;
 
+use simplicityhl::elements::OutPoint;
 use simplicityhl::elements::bitcoin::secp256k1;
 use simplicityhl::elements::hex::ToHex;
 use simplicityhl::elements::pset::serialize::Serialize;
 use simplicityhl::elements::secp256k1_zkp::{PublicKey, SecretKey};
-use simplicityhl::elements::OutPoint;
 use simplicityhl::simplicity::hex::DisplayHex;
 
 use simplicityhl_core::{
-    broadcast_tx, derive_public_blinder_key, Encodable, TaprootPubkeyGen,
-    LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_GENESIS,
+    Encodable, LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_GENESIS, TaprootPubkeyGen,
+    broadcast_tx, derive_public_blinder_key,
 };
 
 use crate::modules::keys::derive_secret_key_from_index;
 use crate::modules::store::Store;
 use crate::modules::utils::derive_keypair;
 use contracts::MergeBranch;
-use contracts::{oracle_msg, DCDArguments};
-use contracts_adapter::dcd::{DcdInitParams, DcdInitResponse, COLLATERAL_ASSET_ID};
+use contracts::{DCDArguments, oracle_msg};
+use contracts_adapter::dcd::{
+    BaseContractContext, COLLATERAL_ASSET_ID, CommonContext, CreationContext, DcdContractContext,
+    DcdInitParams, DcdInitResponse, MakerFundingContext, MakerInitContext, MakerSettlementContext,
+    MakerTerminationCollateralContext, MakerTerminationSettlementContext, MergeTokensContext,
+    TakerFundingContext, TakerSettlementContext, TakerTerminationEarlyContext,
+};
 use simplicityhl::simplicity::elements::AddressParams;
 
 /// DCD subcommands.
@@ -449,16 +454,22 @@ impl Dcd {
                 );
 
                 let tx = contracts_adapter::dcd::DcdManager::merge_tokens(
-                    &keypair,
-                    &[*token_utxo_1, *token_utxo_2],
-                    *fee_utxo,
-                    *fee_amount,
-                    MergeBranch::Two,
-                    &taproot_pubkey_gen,
-                    &dcd_arguments,
-                    &AddressParams::LIQUID_TESTNET,
-                    LIQUID_TESTNET_BITCOIN_ASSET,
-                    *LIQUID_TESTNET_GENESIS,
+                    &CommonContext { keypair },
+                    MergeTokensContext {
+                        token_utxos: vec![*token_utxo_1, *token_utxo_2],
+                        fee_utxo: *fee_utxo,
+                        fee_amount: *fee_amount,
+                        merge_branch: MergeBranch::Two,
+                    },
+                    &DcdContractContext {
+                        dcd_taproot_pubkey_gen: taproot_pubkey_gen,
+                        dcd_arguments,
+                        base_contract_context: BaseContractContext {
+                            address_params: &AddressParams::LIQUID_TESTNET,
+                            lbtc_asset: LIQUID_TESTNET_BITCOIN_ASSET,
+                            genesis_block_hash: *LIQUID_TESTNET_GENESIS,
+                        },
+                    },
                 )?;
 
                 match broadcast {
@@ -493,16 +504,22 @@ impl Dcd {
                 );
 
                 let tx = contracts_adapter::dcd::DcdManager::merge_tokens(
-                    &keypair,
-                    &[*token_utxo_1, *token_utxo_2, *token_utxo_3],
-                    *fee_utxo,
-                    *fee_amount,
-                    MergeBranch::Three,
-                    &taproot_pubkey_gen,
-                    &dcd_arguments,
-                    &AddressParams::LIQUID_TESTNET,
-                    LIQUID_TESTNET_BITCOIN_ASSET,
-                    *LIQUID_TESTNET_GENESIS,
+                    &CommonContext { keypair },
+                    MergeTokensContext {
+                        token_utxos: vec![*token_utxo_1, *token_utxo_2, *token_utxo_3],
+                        fee_utxo: *fee_utxo,
+                        fee_amount: *fee_amount,
+                        merge_branch: MergeBranch::Three,
+                    },
+                    &DcdContractContext {
+                        dcd_taproot_pubkey_gen: taproot_pubkey_gen,
+                        dcd_arguments,
+                        base_contract_context: BaseContractContext {
+                            address_params: &AddressParams::LIQUID_TESTNET,
+                            lbtc_asset: LIQUID_TESTNET_BITCOIN_ASSET,
+                            genesis_block_hash: *LIQUID_TESTNET_GENESIS,
+                        },
+                    },
                 )?;
 
                 match broadcast {
@@ -538,16 +555,27 @@ impl Dcd {
                 );
 
                 let tx = contracts_adapter::dcd::DcdManager::merge_tokens(
-                    &keypair,
-                    &[*token_utxo_1, *token_utxo_2, *token_utxo_3, *token_utxo_4],
-                    *fee_utxo,
-                    *fee_amount,
-                    MergeBranch::Four,
-                    &taproot_pubkey_gen,
-                    &dcd_arguments,
-                    &AddressParams::LIQUID_TESTNET,
-                    LIQUID_TESTNET_BITCOIN_ASSET,
-                    *LIQUID_TESTNET_GENESIS,
+                    &CommonContext { keypair },
+                    MergeTokensContext {
+                        token_utxos: vec![
+                            *token_utxo_1,
+                            *token_utxo_2,
+                            *token_utxo_3,
+                            *token_utxo_4,
+                        ],
+                        fee_utxo: *fee_utxo,
+                        fee_amount: *fee_amount,
+                        merge_branch: MergeBranch::Four,
+                    },
+                    &DcdContractContext {
+                        dcd_taproot_pubkey_gen: taproot_pubkey_gen,
+                        dcd_arguments,
+                        base_contract_context: BaseContractContext {
+                            address_params: &AddressParams::LIQUID_TESTNET,
+                            lbtc_asset: LIQUID_TESTNET_BITCOIN_ASSET,
+                            genesis_block_hash: *LIQUID_TESTNET_GENESIS,
+                        },
+                    },
                 )?;
 
                 match broadcast {
@@ -596,27 +624,33 @@ impl Dcd {
                     taproot_pubkey_gen: dcd_taproot_pubkey_gen,
                     dcd_args: dcd_arguments,
                 } = contracts_adapter::dcd::DcdManager::maker_init(
-                    &keypair,
-                    &blinding_key,
-                    &[*first_fee_utxo, *second_fee_utxo, *third_fee_utxo],
-                    DcdInitParams {
-                        taker_funding_start_time: *taker_funding_start_time,
-                        taker_funding_end_time: *taker_funding_end_time,
-                        contract_expiry_time: *contract_expiry_time,
-                        early_termination_end_time: *early_termination_end_time,
-                        settlement_height: *settlement_height,
-                        principal_collateral_amount: *principal_collateral_amount,
-                        incentive_basis_points: *incentive_basis_points,
-                        filler_per_principal_collateral: *filler_per_principal_collateral,
-                        strike_price: *strike_price,
-                        collateral_asset_id: COLLATERAL_ASSET_ID.to_hex(),
-                        settlement_asset_id: settlement_asset_id.clone(),
-                        oracle_public_key: *oracle_public_key,
+                    &CreationContext {
+                        keypair,
+                        blinding_key,
                     },
-                    *fee_amount,
-                    &AddressParams::LIQUID_TESTNET,
-                    LIQUID_TESTNET_BITCOIN_ASSET,
-                    *LIQUID_TESTNET_GENESIS,
+                    MakerInitContext {
+                        input_utxos: [*first_fee_utxo, *second_fee_utxo, *third_fee_utxo],
+                        dcd_init_params: DcdInitParams {
+                            taker_funding_start_time: *taker_funding_start_time,
+                            taker_funding_end_time: *taker_funding_end_time,
+                            contract_expiry_time: *contract_expiry_time,
+                            early_termination_end_time: *early_termination_end_time,
+                            settlement_height: *settlement_height,
+                            principal_collateral_amount: *principal_collateral_amount,
+                            incentive_basis_points: *incentive_basis_points,
+                            filler_per_principal_collateral: *filler_per_principal_collateral,
+                            strike_price: *strike_price,
+                            collateral_asset_id: COLLATERAL_ASSET_ID.to_hex(),
+                            settlement_asset_id: settlement_asset_id.clone(),
+                            oracle_public_key: *oracle_public_key,
+                        },
+                        fee_amount: *fee_amount,
+                    },
+                    &BaseContractContext {
+                        address_params: &AddressParams::LIQUID_TESTNET,
+                        lbtc_asset: LIQUID_TESTNET_BITCOIN_ASSET,
+                        genesis_block_hash: *LIQUID_TESTNET_GENESIS,
+                    },
                 )?;
 
                 println!("dcd_taproot_pubkey_gen: {}", dcd_taproot_pubkey_gen);
@@ -695,19 +729,33 @@ impl Dcd {
                 )?;
 
                 let tx = contracts_adapter::dcd::DcdManager::maker_funding(
-                    &keypair,
-                    &blinding_key,
-                    (*filler_token_utxo, first_entropy_hex),
-                    (*grantor_collateral_token_utxo, second_entropy_hex),
-                    (*grantor_settlement_token_utxo, third_entropy_hex),
-                    *settlement_asset_utxo,
-                    *fee_utxo,
-                    *fee_amount,
-                    &taproot_pubkey_gen,
-                    &dcd_arguments,
-                    &AddressParams::LIQUID_TESTNET,
-                    LIQUID_TESTNET_BITCOIN_ASSET,
-                    *LIQUID_TESTNET_GENESIS,
+                    &CreationContext {
+                        keypair,
+                        blinding_key,
+                    },
+                    MakerFundingContext {
+                        filler_token_info: (*filler_token_utxo, first_entropy_hex),
+                        grantor_collateral_token_info: (
+                            *grantor_collateral_token_utxo,
+                            second_entropy_hex,
+                        ),
+                        grantor_settlement_token_info: (
+                            *grantor_settlement_token_utxo,
+                            third_entropy_hex,
+                        ),
+                        settlement_asset_utxo: *settlement_asset_utxo,
+                        fee_utxo: *fee_utxo,
+                        fee_amount: *fee_amount,
+                    },
+                    &DcdContractContext {
+                        dcd_taproot_pubkey_gen: taproot_pubkey_gen,
+                        dcd_arguments,
+                        base_contract_context: BaseContractContext {
+                            address_params: &AddressParams::LIQUID_TESTNET,
+                            lbtc_asset: LIQUID_TESTNET_BITCOIN_ASSET,
+                            genesis_block_hash: *LIQUID_TESTNET_GENESIS,
+                        },
+                    },
                 )?;
 
                 match broadcast {
@@ -741,16 +789,22 @@ impl Dcd {
                 )?;
 
                 let tx = contracts_adapter::dcd::DcdManager::taker_funding(
-                    &keypair,
-                    *filler_token_utxo,
-                    *collateral_utxo,
-                    *collateral_amount_to_deposit,
-                    *fee_amount,
-                    &taproot_pubkey_gen,
-                    &dcd_arguments,
-                    &AddressParams::LIQUID_TESTNET,
-                    LIQUID_TESTNET_BITCOIN_ASSET,
-                    *LIQUID_TESTNET_GENESIS,
+                    &CommonContext { keypair },
+                    TakerFundingContext {
+                        filler_token_utxo: *filler_token_utxo,
+                        collateral_token_utxo: *collateral_utxo,
+                        fee_amount: *collateral_amount_to_deposit,
+                        collateral_amount_to_deposit: *fee_amount,
+                    },
+                    &DcdContractContext {
+                        dcd_taproot_pubkey_gen: taproot_pubkey_gen,
+                        dcd_arguments,
+                        base_contract_context: BaseContractContext {
+                            address_params: &AddressParams::LIQUID_TESTNET,
+                            lbtc_asset: LIQUID_TESTNET_BITCOIN_ASSET,
+                            genesis_block_hash: *LIQUID_TESTNET_GENESIS,
+                        },
+                    },
                 )?;
 
                 match broadcast {
@@ -785,17 +839,23 @@ impl Dcd {
                 )?;
 
                 let tx = contracts_adapter::dcd::DcdManager::taker_early_termination(
-                    &keypair,
-                    *collateral_utxo,
-                    *filler_token_utxo,
-                    *fee_utxo,
-                    *filler_token_amount_to_return,
-                    *fee_amount,
-                    &taproot_pubkey_gen,
-                    &dcd_arguments,
-                    &AddressParams::LIQUID_TESTNET,
-                    LIQUID_TESTNET_BITCOIN_ASSET,
-                    *LIQUID_TESTNET_GENESIS,
+                    &CommonContext { keypair },
+                    TakerTerminationEarlyContext {
+                        filler_token_utxo: *collateral_utxo,
+                        collateral_token_utxo: *filler_token_utxo,
+                        fee_utxo: *fee_utxo,
+                        fee_amount: *filler_token_amount_to_return,
+                        filler_token_amount_to_return: *fee_amount,
+                    },
+                    &DcdContractContext {
+                        dcd_taproot_pubkey_gen: taproot_pubkey_gen,
+                        dcd_arguments,
+                        base_contract_context: BaseContractContext {
+                            address_params: &AddressParams::LIQUID_TESTNET,
+                            lbtc_asset: LIQUID_TESTNET_BITCOIN_ASSET,
+                            genesis_block_hash: *LIQUID_TESTNET_GENESIS,
+                        },
+                    },
                 )?;
 
                 match broadcast {
@@ -830,17 +890,23 @@ impl Dcd {
                 )?;
 
                 let tx = contracts_adapter::dcd::DcdManager::maker_collateral_termination(
-                    &keypair,
-                    *collateral_utxo,
-                    *grantor_collateral_token_utxo,
-                    *fee_utxo,
-                    *grantor_collateral_amount_to_burn,
-                    *fee_amount,
-                    &dcd_arguments,
-                    &taproot_pubkey_gen,
-                    &AddressParams::LIQUID_TESTNET,
-                    LIQUID_TESTNET_BITCOIN_ASSET,
-                    *LIQUID_TESTNET_GENESIS,
+                    &CommonContext { keypair },
+                    MakerTerminationCollateralContext {
+                        collateral_token_utxo: *collateral_utxo,
+                        grantor_collateral_token_utxo: *grantor_collateral_token_utxo,
+                        fee_utxo: *fee_utxo,
+                        fee_amount: *grantor_collateral_amount_to_burn,
+                        grantor_collateral_amount_to_burn: *fee_amount,
+                    },
+                    &DcdContractContext {
+                        dcd_taproot_pubkey_gen: taproot_pubkey_gen,
+                        dcd_arguments,
+                        base_contract_context: BaseContractContext {
+                            address_params: &AddressParams::LIQUID_TESTNET,
+                            lbtc_asset: LIQUID_TESTNET_BITCOIN_ASSET,
+                            genesis_block_hash: *LIQUID_TESTNET_GENESIS,
+                        },
+                    },
                 )?;
 
                 match broadcast {
@@ -876,17 +942,23 @@ impl Dcd {
                 )?;
 
                 let tx = contracts_adapter::dcd::DcdManager::maker_settlement_termination(
-                    &keypair,
-                    *settlement_asset_utxo,
-                    *grantor_settlement_token_utxo,
-                    *fee_utxo,
-                    *grantor_settlement_amount_to_burn,
-                    *fee_amount,
-                    &dcd_arguments,
-                    &taproot_pubkey_gen,
-                    &AddressParams::LIQUID_TESTNET,
-                    LIQUID_TESTNET_BITCOIN_ASSET,
-                    *LIQUID_TESTNET_GENESIS,
+                    &CommonContext { keypair },
+                    MakerTerminationSettlementContext {
+                        settlement_asset_utxo: *settlement_asset_utxo,
+                        grantor_settlement_token_utxo: *grantor_settlement_token_utxo,
+                        fee_utxo: *fee_utxo,
+                        fee_amount: *grantor_settlement_amount_to_burn,
+                        grantor_settlement_amount_to_burn: *fee_amount,
+                    },
+                    &DcdContractContext {
+                        dcd_taproot_pubkey_gen: taproot_pubkey_gen,
+                        dcd_arguments,
+                        base_contract_context: BaseContractContext {
+                            address_params: &AddressParams::LIQUID_TESTNET,
+                            lbtc_asset: LIQUID_TESTNET_BITCOIN_ASSET,
+                            genesis_block_hash: *LIQUID_TESTNET_GENESIS,
+                        },
+                    },
                 )?;
 
                 match broadcast {
@@ -924,20 +996,26 @@ impl Dcd {
                 )?;
 
                 let tx = contracts_adapter::dcd::DcdManager::maker_settlement(
-                    &keypair,
-                    *asset_utxo,
-                    *grantor_collateral_token_utxo,
-                    *grantor_settlement_token_utxo,
-                    *fee_utxo,
-                    *price_at_current_block_height,
-                    *grantor_amount_to_burn,
-                    oracle_signature.to_hex(),
-                    *fee_amount,
-                    &dcd_arguments,
-                    &taproot_pubkey_gen,
-                    &AddressParams::LIQUID_TESTNET,
-                    LIQUID_TESTNET_BITCOIN_ASSET,
-                    *LIQUID_TESTNET_GENESIS,
+                    &CommonContext { keypair },
+                    MakerSettlementContext {
+                        asset_utxo: *asset_utxo,
+                        grantor_collateral_token_utxo: *grantor_collateral_token_utxo,
+                        grantor_settlement_token_utxo: *grantor_settlement_token_utxo,
+                        fee_utxo: *fee_utxo,
+                        fee_amount: *price_at_current_block_height,
+                        price_at_current_block_height: *grantor_amount_to_burn,
+                        oracle_signature: oracle_signature.to_hex(),
+                        grantor_amount_to_burn: *fee_amount,
+                    },
+                    &DcdContractContext {
+                        dcd_taproot_pubkey_gen: taproot_pubkey_gen,
+                        dcd_arguments,
+                        base_contract_context: BaseContractContext {
+                            address_params: &AddressParams::LIQUID_TESTNET,
+                            lbtc_asset: LIQUID_TESTNET_BITCOIN_ASSET,
+                            genesis_block_hash: *LIQUID_TESTNET_GENESIS,
+                        },
+                    },
                 )?;
 
                 match broadcast {
@@ -973,19 +1051,25 @@ impl Dcd {
                 )?;
 
                 let tx = contracts_adapter::dcd::DcdManager::taker_settlement(
-                    &keypair,
-                    *asset_utxo,
-                    *filler_token_utxo,
-                    *fee_utxo,
-                    *price_at_current_block_height,
-                    *filler_amount_to_burn,
-                    *fee_amount,
-                    oracle_signature,
-                    &dcd_arguments,
-                    &taproot_pubkey_gen,
-                    &AddressParams::LIQUID_TESTNET,
-                    LIQUID_TESTNET_BITCOIN_ASSET,
-                    *LIQUID_TESTNET_GENESIS,
+                    &CommonContext { keypair },
+                    TakerSettlementContext {
+                        asset_utxo: *asset_utxo,
+                        filler_token_utxo: *filler_token_utxo,
+                        fee_utxo: *fee_utxo,
+                        fee_amount: *price_at_current_block_height,
+                        price_at_current_block_height: *filler_amount_to_burn,
+                        filler_amount_to_burn: *fee_amount,
+                        oracle_signature: oracle_signature.to_string(),
+                    },
+                    &DcdContractContext {
+                        dcd_taproot_pubkey_gen: taproot_pubkey_gen,
+                        dcd_arguments,
+                        base_contract_context: BaseContractContext {
+                            address_params: &AddressParams::LIQUID_TESTNET,
+                            genesis_block_hash: *LIQUID_TESTNET_GENESIS,
+                            lbtc_asset: LIQUID_TESTNET_BITCOIN_ASSET,
+                        },
+                    },
                 )?;
 
                 match broadcast {

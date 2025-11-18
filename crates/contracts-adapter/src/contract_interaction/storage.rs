@@ -3,7 +3,7 @@ use anyhow::Result;
 use simplicityhl::simplicity::bitcoin::key::Keypair;
 use simplicityhl::simplicity::bitcoin::secp256k1::SecretKey;
 use simplicityhl::simplicity::jet::elements::{ElementsEnv, ElementsUtxo};
-use simplicityhl::{elements, CompiledProgram};
+use simplicityhl::{CompiledProgram, elements};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -12,20 +12,20 @@ use simplicityhl::simplicity::ToXOnlyPubkey;
 use contracts::{execute_storage_program, get_storage_address, get_storage_compiled_program};
 
 use contracts::StorageArguments;
-use simplicityhl::elements::bitcoin::{secp256k1, XOnlyPublicKey};
 use simplicityhl::elements::OutPoint;
+use simplicityhl::elements::bitcoin::{XOnlyPublicKey, secp256k1};
 use simplicityhl::simplicity::elements::confidential::{AssetBlindingFactor, ValueBlindingFactor};
 use simplicityhl::simplicity::elements::hex::ToHex;
 use simplicityhl::simplicity::elements::pset::{Input, Output, PartiallySignedTransaction};
-use simplicityhl::simplicity::elements::secp256k1_zkp::rand::thread_rng;
 use simplicityhl::simplicity::elements::secp256k1_zkp::Secp256k1;
+use simplicityhl::simplicity::elements::secp256k1_zkp::rand::thread_rng;
 use simplicityhl::simplicity::elements::{
     AddressParams, AssetId, BlockHash, Script, Transaction, TxInWitness, TxOut, TxOutSecrets,
 };
 use simplicityhl::simplicity::hashes::sha256;
 use simplicityhl_core::{
-    control_block, create_p2tr_address, fetch_utxo, finalize_p2pk_transaction, get_p2pk_address,
-    get_random_seed, obtain_utxo_value, AssetEntropyBytes, TaprootPubkeyGen,
+    AssetEntropyBytes, TaprootPubkeyGen, control_block, create_p2tr_address, fetch_utxo,
+    finalize_p2pk_transaction, get_p2pk_address, get_random_seed, obtain_utxo_value,
 };
 
 #[allow(clippy::too_many_arguments)]

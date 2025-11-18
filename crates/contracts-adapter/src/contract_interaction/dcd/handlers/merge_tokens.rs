@@ -1,30 +1,38 @@
+use crate::dcd::{BaseContractContext, CommonContext, DcdContractContext, MergeTokensContext};
 use contracts::{
-    finalize_dcd_transaction_on_liquid_testnet, get_dcd_program, DCDArguments, DcdBranch, MergeBranch,
-    TokenBranch,
+    DcdBranch, TokenBranch, finalize_dcd_transaction_on_liquid_testnet, get_dcd_program,
 };
-use simplicityhl::elements::bitcoin::secp256k1;
 use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
-use simplicityhl::elements::{AddressParams, AssetId, LockTime, OutPoint, Script, Transaction};
-use simplicityhl::simplicity;
+use simplicityhl::elements::{AddressParams, LockTime, Script, Transaction};
 use simplicityhl::simplicity::ToXOnlyPubkey;
-use simplicityhl_core::{fetch_utxo, finalize_p2pk_transaction, TaprootPubkeyGen};
+use simplicityhl_core::{fetch_utxo, finalize_p2pk_transaction};
 
-#[allow(clippy::too_many_arguments)]
 pub fn handle(
-    keypair: &secp256k1::Keypair,
-    token_utxos: &[OutPoint],
-    fee_utxo: OutPoint,
-    fee_amount: u64,
-    merge_branch: MergeBranch,
-    dcd_taproot_pubkey_gen: &TaprootPubkeyGen,
-    dcd_arguments: &DCDArguments,
-    address_params: &'static AddressParams,
-    change_asset: AssetId,
-    genesis_block_hash: simplicity::elements::BlockHash,
+    common_context: &CommonContext,
+    merge_tokens_context: MergeTokensContext,
+    dcd_contract_context: &DcdContractContext,
 ) -> anyhow::Result<Transaction> {
+    let CommonContext { keypair } = common_context;
+    let MergeTokensContext {
+        token_utxos,
+        fee_utxo,
+        fee_amount,
+        merge_branch,
+    } = merge_tokens_context;
+    let DcdContractContext {
+        dcd_taproot_pubkey_gen,
+        dcd_arguments,
+        base_contract_context:
+            BaseContractContext {
+                address_params,
+                lbtc_asset: change_asset,
+                genesis_block_hash,
+            },
+    } = dcd_contract_context;
+
     // Fetch all token UTXOs
     let mut token_txouts = vec![];
-    for utxo in token_utxos {
+    for utxo in token_utxos.iter() {
         token_txouts.push(fetch_utxo(*utxo)?);
     }
 
@@ -95,7 +103,7 @@ pub fn handle(
     pst.add_output(Output::new_explicit(
         change_address.script_pubkey(),
         total_fee_amount - fee_amount,
-        change_asset,
+        *change_asset,
         None,
     ));
 
@@ -103,7 +111,7 @@ pub fn handle(
     pst.add_output(Output::new_explicit(
         Script::new(),
         fee_amount,
-        change_asset,
+        *change_asset,
         None,
     ));
 
@@ -134,7 +142,7 @@ pub fn handle(
         keypair,
         token_utxos.len(),
         address_params,
-        genesis_block_hash,
+        *genesis_block_hash,
     )?;
 
     Ok(tx)

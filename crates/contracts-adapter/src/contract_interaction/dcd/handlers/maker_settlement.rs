@@ -1,36 +1,47 @@
-use crate::dcd::COLLATERAL_ASSET_ID;
-use contracts::{
-    build_dcd_witness, get_dcd_program, DCDArguments, DcdBranch, MergeBranch, TokenBranch,
+use crate::dcd::{
+    BaseContractContext, COLLATERAL_ASSET_ID, CommonContext, DcdContractContext,
+    MakerSettlementContext,
 };
-use simplicity::elements::{AssetId, OutPoint, TxOut};
-use simplicityhl::elements::bitcoin::secp256k1;
+use contracts::{DcdBranch, MergeBranch, TokenBranch, build_dcd_witness, get_dcd_program};
+use simplicity::elements::{AssetId, TxOut};
 use simplicityhl::elements::Transaction;
+use simplicityhl::elements::bitcoin::secp256k1;
 use simplicityhl::simplicity;
+use simplicityhl::simplicity::ToXOnlyPubkey;
 use simplicityhl::simplicity::elements::pset::{Input, Output, PartiallySignedTransaction};
 use simplicityhl::simplicity::elements::{AddressParams, LockTime, Script, Sequence};
-use simplicityhl::simplicity::ToXOnlyPubkey;
 use simplicityhl_core::{
-    fetch_utxo, finalize_p2pk_transaction, finalize_transaction, get_p2pk_address, TaprootPubkeyGen,
+    fetch_utxo, finalize_p2pk_transaction, finalize_transaction, get_p2pk_address,
 };
 use std::str::FromStr;
 
-#[allow(clippy::too_many_arguments)]
 pub fn handle(
-    keypair: &secp256k1::Keypair,
-    asset_utxo: OutPoint,
-    grantor_collateral_token_utxo: OutPoint,
-    grantor_settlement_token_utxo: OutPoint,
-    fee_utxo: OutPoint,
-    fee_amount: u64,
-    price_at_current_block_height: u64,
-    oracle_signature: String,
-    grantor_amount_to_burn: u64,
-    dcd_arguments: &DCDArguments,
-    dcd_taproot_pubkey_gen: &TaprootPubkeyGen,
-    address_params: &'static AddressParams,
-    change_asset: AssetId,
-    genesis_block_hash: simplicity::elements::BlockHash,
+    common_context: &CommonContext,
+    maker_settlement_context: MakerSettlementContext,
+    dcd_contract_context: &DcdContractContext,
 ) -> anyhow::Result<Transaction> {
+    let CommonContext { keypair } = common_context;
+    let MakerSettlementContext {
+        asset_utxo,
+        grantor_collateral_token_utxo,
+        grantor_settlement_token_utxo,
+        fee_utxo,
+        fee_amount,
+        price_at_current_block_height,
+        oracle_signature,
+        grantor_amount_to_burn,
+    } = maker_settlement_context;
+    let DcdContractContext {
+        dcd_taproot_pubkey_gen,
+        dcd_arguments,
+        base_contract_context:
+            BaseContractContext {
+                address_params,
+                lbtc_asset: change_asset,
+                genesis_block_hash,
+            },
+    } = dcd_contract_context;
+
     // Fetch UTXOs
     let asset_txout = fetch_utxo(asset_utxo)?; // DCD input 0
     let grantor_coll_txout = fetch_utxo(grantor_collateral_token_utxo)?; // P2PK input 1
@@ -166,10 +177,13 @@ pub fn handle(
         pst.add_output(Output::new_explicit(
             change_recipient.script_pubkey(),
             total_fee_input - fee_amount,
-            change_asset,
+            *change_asset,
             None,
         ));
-        pst.add_output(Output::from_txout(TxOut::new_fee(fee_amount, change_asset)));
+        pst.add_output(Output::from_txout(TxOut::new_fee(
+            fee_amount,
+            *change_asset,
+        )));
 
         let utxos = vec![
             asset_txout,
@@ -199,14 +213,14 @@ pub fn handle(
             0,
             witness_values,
             &AddressParams::LIQUID_TESTNET,
-            genesis_block_hash,
+            *genesis_block_hash,
         )?;
         let tx =
-            finalize_p2pk_transaction(tx, &utxos, keypair, 1, address_params, genesis_block_hash)?;
+            finalize_p2pk_transaction(tx, &utxos, keypair, 1, address_params, *genesis_block_hash)?;
         let tx =
-            finalize_p2pk_transaction(tx, &utxos, keypair, 2, address_params, genesis_block_hash)?;
+            finalize_p2pk_transaction(tx, &utxos, keypair, 2, address_params, *genesis_block_hash)?;
         let tx =
-            finalize_p2pk_transaction(tx, &utxos, keypair, 3, address_params, genesis_block_hash)?;
+            finalize_p2pk_transaction(tx, &utxos, keypair, 3, address_params, *genesis_block_hash)?;
 
         tx.verify_tx_amt_proofs(secp256k1::SECP256K1, &utxos)?;
         tx
@@ -277,10 +291,13 @@ pub fn handle(
         pst.add_output(Output::new_explicit(
             change_recipient.script_pubkey(),
             total_fee_input - fee_amount,
-            change_asset,
+            *change_asset,
             None,
         ));
-        pst.add_output(Output::from_txout(TxOut::new_fee(fee_amount, change_asset)));
+        pst.add_output(Output::from_txout(TxOut::new_fee(
+            fee_amount,
+            *change_asset,
+        )));
 
         let utxos = vec![
             asset_txout,
@@ -310,7 +327,7 @@ pub fn handle(
             0,
             witness_values,
             &AddressParams::LIQUID_TESTNET,
-            genesis_block_hash,
+            *genesis_block_hash,
         )?;
         let tx = finalize_p2pk_transaction(
             tx,
@@ -318,7 +335,7 @@ pub fn handle(
             keypair,
             1,
             &AddressParams::LIQUID_TESTNET,
-            genesis_block_hash,
+            *genesis_block_hash,
         )?;
         let tx = finalize_p2pk_transaction(
             tx,
@@ -326,7 +343,7 @@ pub fn handle(
             keypair,
             2,
             &AddressParams::LIQUID_TESTNET,
-            genesis_block_hash,
+            *genesis_block_hash,
         )?;
         let tx = finalize_p2pk_transaction(
             tx,
@@ -334,7 +351,7 @@ pub fn handle(
             keypair,
             3,
             &AddressParams::LIQUID_TESTNET,
-            genesis_block_hash,
+            *genesis_block_hash,
         )?;
 
         tx.verify_tx_amt_proofs(secp256k1::SECP256K1, &utxos)?;

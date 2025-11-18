@@ -1,33 +1,43 @@
 use crate::dcd::{
-    DcdInitParams, DcdInitResponse, FillerTokenEntropyHex, GrantorCollateralAssetEntropyHex,
-    GrantorSettlementAssetEntropyHex, COLLATERAL_ASSET_ID,
+    BaseContractContext, COLLATERAL_ASSET_ID, CreationContext, DcdInitResponse,
+    FillerTokenEntropyHex, GrantorCollateralAssetEntropyHex, GrantorSettlementAssetEntropyHex,
+    MakerInitContext,
 };
-use contracts::{get_dcd_address, DCDArguments, DCDRatioArguments};
+use contracts::{DCDArguments, DCDRatioArguments, get_dcd_address};
 use simplicity::elements::{BlockHash, TxOut};
 use simplicityhl::elements::bitcoin::secp256k1;
 use simplicityhl::elements::confidential::{AssetBlindingFactor, ValueBlindingFactor};
 use simplicityhl::elements::hex::ToHex;
-use simplicityhl::elements::secp256k1_zkp::rand::thread_rng;
 use simplicityhl::elements::secp256k1_zkp::Secp256k1;
-use simplicityhl::elements::{AssetId, OutPoint, Transaction, TxOutSecrets};
+use simplicityhl::elements::secp256k1_zkp::rand::thread_rng;
+use simplicityhl::elements::{Transaction, TxOutSecrets};
 use simplicityhl::simplicity;
-use simplicityhl::simplicity::elements::pset::{Input, Output, PartiallySignedTransaction};
 use simplicityhl::simplicity::elements::AddressParams;
-use simplicityhl_core::{fetch_utxo, get_random_seed, obtain_utxo_value, TaprootPubkeyGen};
+use simplicityhl::simplicity::elements::pset::{Input, Output, PartiallySignedTransaction};
+use simplicityhl_core::{TaprootPubkeyGen, fetch_utxo, get_random_seed, obtain_utxo_value};
 use simplicityhl_core::{finalize_p2pk_transaction, get_new_asset_entropy, get_p2pk_address};
 
-#[allow(clippy::too_many_arguments)]
 #[tracing::instrument(level = "info", skip_all, err)]
 pub fn handle(
-    keypair: &secp256k1::Keypair,
-    blinding_key: &secp256k1::Keypair,
-    input_utxos: &[OutPoint; 3],
-    dcd_init_params: DcdInitParams,
-    fee_amount: u64,
-    address_params: &'static AddressParams,
-    change_asset: AssetId,
-    genesis_block_hash: simplicity::elements::BlockHash,
+    context: &CreationContext,
+    maker_init_context: MakerInitContext,
+    base_contract_context: &BaseContractContext,
 ) -> anyhow::Result<DcdInitResponse> {
+    let CreationContext {
+        keypair,
+        blinding_key,
+    } = context;
+    let MakerInitContext {
+        input_utxos,
+        dcd_init_params,
+        fee_amount,
+    } = maker_init_context;
+    let BaseContractContext {
+        address_params,
+        lbtc_asset: change_asset,
+        genesis_block_hash,
+    } = base_contract_context;
+
     tracing::debug!(
         input_utxos =? input_utxos,
         dcd_init_params =? dcd_init_params,
@@ -178,14 +188,17 @@ pub fn handle(
         let output = Output::new_explicit(
             change_recipient.script_pubkey(),
             total_input_fee - fee_amount,
-            change_asset,
+            *change_asset,
             None,
         );
         pst.add_output(output);
     }
 
     // Add fee
-    pst.add_output(Output::from_txout(TxOut::new_fee(fee_amount, change_asset)));
+    pst.add_output(Output::from_txout(TxOut::new_fee(
+        fee_amount,
+        *change_asset,
+    )));
 
     let first_input_secrets = TxOutSecrets {
         asset_bf: AssetBlindingFactor::zero(),
@@ -215,7 +228,7 @@ pub fn handle(
 
     let utxos = [first_utxo_tx_out, second_utxo_tx_out, third_utxo_tx_out];
 
-    let tx = finalize_tx_inner(keypair, address_params, genesis_block_hash, pst, &utxos)?;
+    let tx = finalize_tx_inner(keypair, address_params, *genesis_block_hash, pst, &utxos)?;
     tx.verify_tx_amt_proofs(secp256k1::SECP256K1, &utxos)?;
 
     Ok(DcdInitResponse {
