@@ -30,6 +30,12 @@ Workspace for prototyping and exercising Simplicity-based contracts on Liquid te
   - `storage` commands: initialize storage state and update state (mint/burn paths)
   - Uses a local sled store at `.cache/store` for argument persistence
 
+- `crates/contracts-adapter/contract_interaction` — Contract adapter for easy usage of code in other projects, not including local one. Implemented as standalone functions to use.
+  - `basic` commands for basic cli usage 
+  - `options` commands for Options contract
+  - `storage` commands for storage use and update state 
+  - `/dcd` commands wrapped into DcdManager to be able to execute DCD contract
+
 ### Note
 
 - Finalization and verification
