@@ -9,7 +9,6 @@ use simplicityhl::elements::secp256k1_zkp::rand::thread_rng;
 use simplicityhl::elements::{AssetId, Transaction, TxOutSecrets};
 use simplicityhl::simplicity::bitcoin::secp256k1;
 use simplicityhl::simplicity::elements::confidential::Asset;
-use simplicityhl::simplicity::elements::pset::serialize::Serialize;
 use simplicityhl::simplicity::elements::pset::{Input, Output, PartiallySignedTransaction};
 use simplicityhl::simplicity::elements::{Address, AddressParams, OutPoint, TxOut};
 use simplicityhl_core::{
@@ -30,6 +29,7 @@ pub struct ReissueAssetResponse {
     pub reissuance_asset_id: AssetId,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn reissue_asset(
     keypair: &Keypair,
     blinding_key: &Keypair,
@@ -123,13 +123,12 @@ pub fn reissue_asset(
     let tx = finalize_p2pk_transaction(
         pst.extract_tx()?,
         &utxos,
-        &keypair,
+        keypair,
         0,
         address_params,
         genesis_block_hash,
     )?;
-    let tx =
-        finalize_p2pk_transaction(tx, &utxos, &keypair, 1, address_params, genesis_block_hash)?;
+    let tx = finalize_p2pk_transaction(tx, &utxos, keypair, 1, address_params, genesis_block_hash)?;
     tx.verify_tx_amt_proofs(secp256k1::SECP256K1, &utxos)?;
     Ok(ReissueAssetResponse {
         tx,
@@ -137,7 +136,7 @@ pub fn reissue_asset(
         reissuance_asset_id,
     })
 }
-
+#[allow(clippy::too_many_arguments)]
 pub fn issue_asset(
     keypair: &Keypair,
     blinding_key: &Keypair,
@@ -221,7 +220,7 @@ pub fn issue_asset(
     let tx = finalize_p2pk_transaction(
         pst.extract_tx()?,
         std::slice::from_ref(&fee_utxo_tx_out),
-        &keypair,
+        keypair,
         0,
         address_params,
         genesis_block_hash,
@@ -236,6 +235,7 @@ pub fn issue_asset(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn transfer_asset(
     keypair: &Keypair,
     asset_utxo_outpoint: OutPoint,
@@ -307,15 +307,14 @@ pub fn transfer_asset(
     let tx = pst.extract_tx()?;
 
     let utxos = vec![asset_utxo_tx_out, fee_utxo_tx_out];
-    let tx =
-        finalize_p2pk_transaction(tx, &utxos, &keypair, 0, address_params, genesis_block_hash)?;
-    let tx =
-        finalize_p2pk_transaction(tx, &utxos, &keypair, 1, address_params, genesis_block_hash)?;
+    let tx = finalize_p2pk_transaction(tx, &utxos, keypair, 0, address_params, genesis_block_hash)?;
+    let tx = finalize_p2pk_transaction(tx, &utxos, keypair, 1, address_params, genesis_block_hash)?;
 
     tx.verify_tx_amt_proofs(secp256k1::SECP256K1, &utxos)?;
     Ok(tx)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn split_native_three(
     keypair: &Keypair,
     utxo_outpoint: OutPoint,
@@ -366,7 +365,7 @@ pub fn split_native_three(
     let tx = finalize_p2pk_transaction(
         pst.extract_tx()?,
         std::slice::from_ref(&utxo_tx_out),
-        &keypair,
+        keypair,
         0,
         address_params,
         genesis_block_hash,
@@ -376,6 +375,7 @@ pub fn split_native_three(
     Ok(tx)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn split_native(
     keypair: &Keypair,
     utxo_outpoint: OutPoint,
@@ -417,7 +417,7 @@ pub fn split_native(
     let tx = finalize_p2pk_transaction(
         pst.extract_tx()?,
         std::slice::from_ref(&utxo_tx_out),
-        &keypair,
+        keypair,
         0,
         address_params,
         genesis_block_hash,
@@ -427,6 +427,7 @@ pub fn split_native(
     Ok(tx)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn transfer_native(
     keypair: &Keypair,
     utxo_outpoint: OutPoint,
@@ -471,7 +472,7 @@ pub fn transfer_native(
     let tx = finalize_p2pk_transaction(
         pst.extract_tx()?,
         std::slice::from_ref(&utxo_tx_out),
-        &keypair,
+        keypair,
         0,
         address_params,
         genesis_block_hash,

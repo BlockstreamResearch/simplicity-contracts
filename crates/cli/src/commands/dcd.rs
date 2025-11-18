@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use anyhow::Result;
 use clap::Subcommand;
 
@@ -7,11 +5,12 @@ use simplicityhl::elements::OutPoint;
 use simplicityhl::elements::bitcoin::secp256k1;
 use simplicityhl::elements::hex::ToHex;
 use simplicityhl::elements::pset::serialize::Serialize;
-use simplicityhl::elements::secp256k1_zkp::SecretKey;
+use simplicityhl::elements::secp256k1_zkp::{PublicKey, SecretKey};
 use simplicityhl::simplicity::hex::DisplayHex;
 
 use simplicityhl_core::{
-    Encodable, TaprootPubkeyGen, broadcast_tx, derive_public_blinder_key, get_new_asset_entropy,
+    Encodable, LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_GENESIS, TaprootPubkeyGen,
+    broadcast_tx, derive_public_blinder_key,
 };
 
 use crate::modules::keys::derive_secret_key_from_index;
@@ -19,6 +18,7 @@ use crate::modules::store::Store;
 use crate::modules::utils::derive_keypair;
 use contracts::MergeBranch;
 use contracts::{DCDArguments, oracle_msg};
+use contracts_adapter::dcd::{COLLATERAL_ASSET_ID, DcdInitParams, DcdInitResponse};
 use simplicityhl::simplicity::elements::AddressParams;
 
 /// DCD subcommands.
@@ -174,7 +174,7 @@ pub enum Dcd {
         settlement_asset_id: String,
         /// Oracle public key
         #[arg(long = "oracle-public-key")]
-        oracle_public_key: String,
+        oracle_public_key: PublicKey,
         /// Fee amount
         #[arg(long = "fee-amount")]
         fee_amount: u64,
@@ -342,7 +342,7 @@ pub enum Dcd {
         price_at_current_block_height: u64,
         /// Oracle signature (hex)
         #[arg(long = "oracle-signature")]
-        oracle_signature: String,
+        oracle_signature: PublicKey,
         /// Grantor token amount to burn
         #[arg(long = "grantor-amount-to-burn")]
         grantor_amount_to_burn: u64,
@@ -392,6 +392,7 @@ pub enum Dcd {
 }
 
 impl Dcd {
+    #[allow(unused)]
     pub fn handle(&self) -> Result<()> {
         match self {
             Dcd::Import {
@@ -435,20 +436,29 @@ impl Dcd {
             } => {
                 let store = Store::load()?;
                 let dcd_arguments: DCDArguments = store.get_arguments(dcd_taproot_pubkey_gen)?;
+                let taproot_pubkey_gen = TaprootPubkeyGen::build_from_str(
+                    dcd_taproot_pubkey_gen,
+                    &dcd_arguments,
+                    &AddressParams::LIQUID_TESTNET,
+                    &contracts::get_dcd_address,
+                )?;
 
                 let keypair = secp256k1::Keypair::from_secret_key(
                     secp256k1::SECP256K1,
                     &derive_secret_key_from_index(*account_index),
                 );
 
-                let tx = contracts_adapter::dcd::handle_merge_tokens(
+                let tx = contracts_adapter::dcd::DcdManager::merge_tokens(
                     &keypair,
-                    &dcd_arguments,
-                    &vec![*token_utxo_1, *token_utxo_2],
+                    &[*token_utxo_1, *token_utxo_2],
                     *fee_utxo,
-                    dcd_taproot_pubkey_gen,
                     *fee_amount,
                     MergeBranch::Two,
+                    &taproot_pubkey_gen,
+                    &dcd_arguments,
+                    &AddressParams::LIQUID_TESTNET,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                    *LIQUID_TESTNET_GENESIS,
                 )?;
 
                 match broadcast {
@@ -470,20 +480,29 @@ impl Dcd {
             } => {
                 let store = Store::load()?;
                 let dcd_arguments: DCDArguments = store.get_arguments(dcd_taproot_pubkey_gen)?;
+                let taproot_pubkey_gen = TaprootPubkeyGen::build_from_str(
+                    dcd_taproot_pubkey_gen,
+                    &dcd_arguments,
+                    &AddressParams::LIQUID_TESTNET,
+                    &contracts::get_dcd_address,
+                )?;
 
                 let keypair = secp256k1::Keypair::from_secret_key(
                     secp256k1::SECP256K1,
                     &derive_secret_key_from_index(*account_index),
                 );
 
-                let tx = contracts_adapter::dcd::handle_merge_tokens(
+                let tx = contracts_adapter::dcd::DcdManager::merge_tokens(
                     &keypair,
-                    &dcd_arguments,
-                    &vec![*token_utxo_1, *token_utxo_2, *token_utxo_3],
+                    &[*token_utxo_1, *token_utxo_2, *token_utxo_3],
                     *fee_utxo,
-                    dcd_taproot_pubkey_gen,
                     *fee_amount,
                     MergeBranch::Three,
+                    &taproot_pubkey_gen,
+                    &dcd_arguments,
+                    &AddressParams::LIQUID_TESTNET,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                    *LIQUID_TESTNET_GENESIS,
                 )?;
 
                 match broadcast {
@@ -506,20 +525,29 @@ impl Dcd {
             } => {
                 let store = Store::load()?;
                 let dcd_arguments: DCDArguments = store.get_arguments(dcd_taproot_pubkey_gen)?;
+                let taproot_pubkey_gen = TaprootPubkeyGen::build_from_str(
+                    dcd_taproot_pubkey_gen,
+                    &dcd_arguments,
+                    &AddressParams::LIQUID_TESTNET,
+                    &contracts::get_dcd_address,
+                )?;
 
                 let keypair = secp256k1::Keypair::from_secret_key(
                     secp256k1::SECP256K1,
                     &derive_secret_key_from_index(*account_index),
                 );
 
-                let tx = contracts_adapter::dcd::handle_merge_tokens(
+                let tx = contracts_adapter::dcd::DcdManager::merge_tokens(
                     &keypair,
-                    &dcd_arguments,
-                    &vec![*token_utxo_1, *token_utxo_2, *token_utxo_3, *token_utxo_4],
+                    &[*token_utxo_1, *token_utxo_2, *token_utxo_3, *token_utxo_4],
                     *fee_utxo,
-                    dcd_taproot_pubkey_gen,
                     *fee_amount,
                     MergeBranch::Four,
+                    &taproot_pubkey_gen,
+                    &dcd_arguments,
+                    &AddressParams::LIQUID_TESTNET,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                    *LIQUID_TESTNET_GENESIS,
                 )?;
 
                 match broadcast {
@@ -560,31 +588,35 @@ impl Dcd {
                     &SecretKey::from_slice(&[1; 32])?,
                 );
 
-                let (
-                    first_asset_entropy,
-                    second_asset_entropy,
-                    third_asset_entropy,
-                    dcd_arguments,
-                    dcd_taproot_pubkey_gen,
+                let DcdInitResponse {
                     tx,
-                ) = contracts_adapter::dcd::dcd_creation(
+                    filler_token_entropy: first_asset_entropy,
+                    grantor_collateral_token_entropy: second_asset_entropy,
+                    grantor_settlement_token_entropy: third_asset_entropy,
+                    taproot_pubkey_gen: dcd_taproot_pubkey_gen,
+                    dcd_args: dcd_arguments,
+                } = contracts_adapter::dcd::DcdManager::maker_init(
                     &keypair,
                     &blinding_key,
-                    *first_fee_utxo,
-                    *second_fee_utxo,
-                    *third_fee_utxo,
-                    *taker_funding_start_time,
-                    *taker_funding_end_time,
-                    *contract_expiry_time,
-                    *early_termination_end_time,
-                    *settlement_height,
-                    *principal_collateral_amount,
-                    *incentive_basis_points,
-                    *filler_per_principal_collateral,
-                    *strike_price,
-                    settlement_asset_id,
-                    oracle_public_key,
+                    &[*first_fee_utxo, *second_fee_utxo, *third_fee_utxo],
+                    DcdInitParams {
+                        taker_funding_start_time: *taker_funding_start_time,
+                        taker_funding_end_time: *taker_funding_end_time,
+                        contract_expiry_time: *contract_expiry_time,
+                        early_termination_end_time: *early_termination_end_time,
+                        settlement_height: *settlement_height,
+                        principal_collateral_amount: *principal_collateral_amount,
+                        incentive_basis_points: *incentive_basis_points,
+                        filler_per_principal_collateral: *filler_per_principal_collateral,
+                        strike_price: *strike_price,
+                        collateral_asset_id: COLLATERAL_ASSET_ID.to_hex(),
+                        settlement_asset_id: settlement_asset_id.clone(),
+                        oracle_public_key: *oracle_public_key,
+                    },
                     *fee_amount,
+                    &AddressParams::LIQUID_TESTNET,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                    *LIQUID_TESTNET_GENESIS,
                 )?;
 
                 println!("dcd_taproot_pubkey_gen: {}", dcd_taproot_pubkey_gen);
@@ -598,23 +630,17 @@ impl Dcd {
 
                 store.store.insert(
                     format!("first_entropy_{}", dcd_taproot_pubkey_gen),
-                    get_new_asset_entropy(first_fee_utxo, first_asset_entropy)
-                        .to_hex()
-                        .as_bytes(),
+                    first_asset_entropy.as_bytes(),
                 )?;
 
                 store.store.insert(
                     format!("second_entropy_{}", dcd_taproot_pubkey_gen),
-                    get_new_asset_entropy(second_fee_utxo, second_asset_entropy)
-                        .to_hex()
-                        .as_bytes(),
+                    second_asset_entropy.as_bytes(),
                 )?;
 
                 store.store.insert(
                     format!("third_entropy_{}", dcd_taproot_pubkey_gen),
-                    get_new_asset_entropy(third_fee_utxo, third_asset_entropy)
-                        .to_hex()
-                        .as_bytes(),
+                    third_asset_entropy.as_bytes(),
                 )?;
 
                 match broadcast {
@@ -661,21 +687,27 @@ impl Dcd {
                 };
 
                 let dcd_arguments: DCDArguments = store.get_arguments(dcd_taproot_pubkey_gen)?;
+                let taproot_pubkey_gen = TaprootPubkeyGen::build_from_str(
+                    dcd_taproot_pubkey_gen,
+                    &dcd_arguments,
+                    &AddressParams::LIQUID_TESTNET,
+                    &contracts::get_dcd_address,
+                )?;
 
-                let tx = contracts_adapter::dcd::maker_funding_path(
+                let tx = contracts_adapter::dcd::DcdManager::maker_funding(
                     &keypair,
                     &blinding_key,
-                    *filler_token_utxo,
-                    *grantor_collateral_token_utxo,
-                    *grantor_settlement_token_utxo,
+                    (*filler_token_utxo, first_entropy_hex),
+                    (*grantor_collateral_token_utxo, second_entropy_hex),
+                    (*grantor_settlement_token_utxo, third_entropy_hex),
                     *settlement_asset_utxo,
                     *fee_utxo,
-                    dcd_taproot_pubkey_gen,
                     *fee_amount,
-                    first_entropy_hex,
-                    second_entropy_hex,
-                    third_entropy_hex,
+                    &taproot_pubkey_gen,
                     &dcd_arguments,
+                    &AddressParams::LIQUID_TESTNET,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                    *LIQUID_TESTNET_GENESIS,
                 )?;
 
                 match broadcast {
@@ -701,15 +733,24 @@ impl Dcd {
                     &derive_secret_key_from_index(*account_index),
                 );
                 let dcd_arguments: DCDArguments = store.get_arguments(dcd_taproot_pubkey_gen)?;
+                let taproot_pubkey_gen = TaprootPubkeyGen::build_from_str(
+                    dcd_taproot_pubkey_gen,
+                    &dcd_arguments,
+                    &AddressParams::LIQUID_TESTNET,
+                    &contracts::get_dcd_address,
+                )?;
 
-                let tx = contracts_adapter::dcd::taker_funding_path(
+                let tx = contracts_adapter::dcd::DcdManager::taker_funding(
                     &keypair,
                     *filler_token_utxo,
                     *collateral_utxo,
-                    dcd_taproot_pubkey_gen,
                     *collateral_amount_to_deposit,
                     *fee_amount,
+                    &taproot_pubkey_gen,
                     &dcd_arguments,
+                    &AddressParams::LIQUID_TESTNET,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                    *LIQUID_TESTNET_GENESIS,
                 )?;
 
                 match broadcast {
@@ -736,16 +777,25 @@ impl Dcd {
                     &derive_secret_key_from_index(*account_index),
                 );
                 let dcd_arguments: DCDArguments = store.get_arguments(dcd_taproot_pubkey_gen)?;
+                let taproot_pubkey_gen = TaprootPubkeyGen::build_from_str(
+                    dcd_taproot_pubkey_gen,
+                    &dcd_arguments,
+                    &AddressParams::LIQUID_TESTNET,
+                    &contracts::get_dcd_address,
+                )?;
 
-                let tx = contracts_adapter::dcd::taker_early_termination(
+                let tx = contracts_adapter::dcd::DcdManager::taker_early_termination(
                     &keypair,
                     *collateral_utxo,
                     *filler_token_utxo,
                     *fee_utxo,
-                    dcd_taproot_pubkey_gen,
                     *filler_token_amount_to_return,
                     *fee_amount,
+                    &taproot_pubkey_gen,
                     &dcd_arguments,
+                    &AddressParams::LIQUID_TESTNET,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                    *LIQUID_TESTNET_GENESIS,
                 )?;
 
                 match broadcast {
@@ -779,7 +829,7 @@ impl Dcd {
                     &contracts::get_dcd_address,
                 )?;
 
-                let tx = contracts_adapter::dcd::maker_collateral_termination(
+                let tx = contracts_adapter::dcd::DcdManager::maker_collateral_termination(
                     &keypair,
                     *collateral_utxo,
                     *grantor_collateral_token_utxo,
@@ -788,6 +838,9 @@ impl Dcd {
                     *fee_amount,
                     &dcd_arguments,
                     &taproot_pubkey_gen,
+                    &AddressParams::LIQUID_TESTNET,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                    *LIQUID_TESTNET_GENESIS,
                 )?;
 
                 match broadcast {
@@ -822,7 +875,7 @@ impl Dcd {
                     &contracts::get_dcd_address,
                 )?;
 
-                let tx = contracts_adapter::dcd::maker_settlement_termination(
+                let tx = contracts_adapter::dcd::DcdManager::maker_settlement_termination(
                     &keypair,
                     *settlement_asset_utxo,
                     *grantor_settlement_token_utxo,
@@ -831,6 +884,9 @@ impl Dcd {
                     *fee_amount,
                     &dcd_arguments,
                     &taproot_pubkey_gen,
+                    &AddressParams::LIQUID_TESTNET,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                    *LIQUID_TESTNET_GENESIS,
                 )?;
 
                 match broadcast {
@@ -867,18 +923,21 @@ impl Dcd {
                     &contracts::get_dcd_address,
                 )?;
 
-                let tx = contracts_adapter::dcd::maker_settlement(
+                let tx = contracts_adapter::dcd::DcdManager::maker_settlement(
                     &keypair,
                     *asset_utxo,
                     *grantor_collateral_token_utxo,
                     *grantor_settlement_token_utxo,
                     *fee_utxo,
                     *price_at_current_block_height,
-                    &oracle_signature,
                     *grantor_amount_to_burn,
+                    oracle_signature.to_hex(),
                     *fee_amount,
                     &dcd_arguments,
                     &taproot_pubkey_gen,
+                    &AddressParams::LIQUID_TESTNET,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                    *LIQUID_TESTNET_GENESIS,
                 )?;
 
                 match broadcast {
@@ -913,17 +972,20 @@ impl Dcd {
                     &contracts::get_dcd_address,
                 )?;
 
-                let tx = contracts_adapter::dcd::taker_settlement(
+                let tx = contracts_adapter::dcd::DcdManager::taker_settlement(
                     &keypair,
                     *asset_utxo,
                     *filler_token_utxo,
                     *fee_utxo,
                     *price_at_current_block_height,
-                    &oracle_signature,
                     *filler_amount_to_burn,
                     *fee_amount,
+                    oracle_signature,
                     &dcd_arguments,
                     &taproot_pubkey_gen,
+                    &AddressParams::LIQUID_TESTNET,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                    *LIQUID_TESTNET_GENESIS,
                 )?;
 
                 match broadcast {

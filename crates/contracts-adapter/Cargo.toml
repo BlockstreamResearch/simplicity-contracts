@@ -9,6 +9,7 @@ readme = "README.md"
 [dependencies]
 hex = { workspace = true }
 anyhow = { workspace = true }
+tracing = { workspace = true }
 
 contracts = { path = "../contracts" }
 

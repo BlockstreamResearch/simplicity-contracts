@@ -4,9 +4,8 @@ use contracts::{OptionsArguments, finalize_options_funding_path_transaction, get
 use std::str::FromStr;
 
 use simplicityhl_core::{
-    AssetEntropyBytes, Encodable, LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_GENESIS,
-    TaprootPubkeyGen, fetch_utxo, finalize_p2pk_transaction, finalize_transaction,
-    get_p2pk_address, get_random_seed,
+    AssetEntropyBytes, LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_GENESIS, TaprootPubkeyGen,
+    fetch_utxo, finalize_p2pk_transaction, finalize_transaction, get_p2pk_address, get_random_seed,
 };
 
 use simplicityhl::simplicity::elements::confidential::{AssetBlindingFactor, ValueBlindingFactor};
@@ -18,18 +17,18 @@ use simplicityhl::simplicity::elements::{
 };
 use simplicityhl::simplicity::hashes::sha256;
 
-use simplicityhl::elements::pset::serialize::Serialize;
 use simplicityhl::elements::schnorr::Keypair;
 use simplicityhl::elements::{OutPoint, confidential};
 use simplicityhl::simplicity::ToXOnlyPubkey;
 
+#[allow(clippy::too_many_arguments)]
 pub fn cancellation_option(
     keypair: &Keypair,
     collateral_utxo: &OutPoint,
     option_asset_utxo: &OutPoint,
     grantor_asset_utxo: &OutPoint,
     fee_utxo: &OutPoint,
-    option_taproot_pubkey_gen: &String,
+    option_taproot_pubkey_gen: &str,
     amount_to_burn: &u64,
     fee_amount: &u64,
     option_arguments: &OptionsArguments,
@@ -163,7 +162,7 @@ pub fn cancellation_option(
     tx.input[3].sequence = Sequence::ENABLE_LOCKTIME_NO_RBF;
 
     let utxos = vec![cov_utxo, option_utxo, grantor_utxo, fee_utxo_out];
-    let options_program = get_options_program(&option_arguments)?;
+    let options_program = get_options_program(option_arguments)?;
 
     let witness_values = contracts::build_witness::build_option_witness(
         TokenBranch::OptionToken,
@@ -189,7 +188,7 @@ pub fn cancellation_option(
     let tx = finalize_p2pk_transaction(
         tx,
         &utxos,
-        &keypair,
+        keypair,
         1,
         &AddressParams::LIQUID_TESTNET,
         *LIQUID_TESTNET_GENESIS,
@@ -199,7 +198,7 @@ pub fn cancellation_option(
     let tx = finalize_p2pk_transaction(
         tx,
         &utxos,
-        &keypair,
+        keypair,
         2,
         &AddressParams::LIQUID_TESTNET,
         *LIQUID_TESTNET_GENESIS,
@@ -209,7 +208,7 @@ pub fn cancellation_option(
     let tx = finalize_p2pk_transaction(
         tx,
         &utxos,
-        &keypair,
+        keypair,
         3,
         &AddressParams::LIQUID_TESTNET,
         *LIQUID_TESTNET_GENESIS,
@@ -217,11 +216,12 @@ pub fn cancellation_option(
     Ok(tx)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn expiry_option(
     collateral_utxo: &OutPoint,
     grantor_asset_utxo: &OutPoint,
     fee_utxo: &OutPoint,
-    option_taproot_pubkey_gen: &String,
+    option_taproot_pubkey_gen: &str,
     grantor_token_amount_to_burn: &u64,
     fee_amount: &u64,
     option_arguments: &OptionsArguments,
@@ -344,7 +344,7 @@ pub fn expiry_option(
             collateral_amount_to_withdraw: collateral_amount,
         },
     );
-    let options_program = get_options_program(&option_arguments)?;
+    let options_program = get_options_program(option_arguments)?;
     let tx = finalize_transaction(
         tx,
         &options_program,
@@ -358,7 +358,7 @@ pub fn expiry_option(
     let tx = finalize_p2pk_transaction(
         tx,
         &utxos,
-        &keypair,
+        keypair,
         1,
         &AddressParams::LIQUID_TESTNET,
         *LIQUID_TESTNET_GENESIS,
@@ -366,7 +366,7 @@ pub fn expiry_option(
     let tx = finalize_p2pk_transaction(
         tx,
         &utxos,
-        &keypair,
+        keypair,
         2,
         &AddressParams::LIQUID_TESTNET,
         *LIQUID_TESTNET_GENESIS,
@@ -374,11 +374,12 @@ pub fn expiry_option(
     Ok(tx)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn settlement_option(
     settlement_asset_utxo: &OutPoint,
     grantor_asset_utxo: &OutPoint,
     fee_utxo: &OutPoint,
-    option_taproot_pubkey_gen: &String,
+    option_taproot_pubkey_gen: &str,
     grantor_token_amount_to_burn: &u64,
     fee_amount: &u64,
     option_arguments: &OptionsArguments,
@@ -507,7 +508,7 @@ pub fn settlement_option(
     tx.input[2].sequence = Sequence::ENABLE_LOCKTIME_NO_RBF;
 
     let utxos = vec![target_utxo, grantor_utxo, fee_lbtc_utxo];
-    let options_program = get_options_program(&option_arguments)?;
+    let options_program = get_options_program(option_arguments)?;
 
     let witness_values = contracts::build_witness::build_option_witness(
         TokenBranch::GrantorToken,
@@ -534,7 +535,7 @@ pub fn settlement_option(
     let tx = finalize_p2pk_transaction(
         tx,
         &utxos,
-        &keypair,
+        keypair,
         1,
         &AddressParams::LIQUID_TESTNET,
         *LIQUID_TESTNET_GENESIS,
@@ -544,7 +545,7 @@ pub fn settlement_option(
     let tx = finalize_p2pk_transaction(
         tx,
         &utxos,
-        &keypair,
+        keypair,
         2,
         &AddressParams::LIQUID_TESTNET,
         *LIQUID_TESTNET_GENESIS,
@@ -552,12 +553,13 @@ pub fn settlement_option(
     Ok(tx)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn exercise_option(
     collateral_utxo: &OutPoint,
     option_asset_utxo: &OutPoint,
     asset_utxo: &OutPoint,
     fee_utxo: &OutPoint,
-    option_taproot_pubkey_gen: &String,
+    option_taproot_pubkey_gen: &str,
     amount_to_burn: &u64,
     fee_amount: &u64,
     keypair: &Keypair,
@@ -713,7 +715,7 @@ pub fn exercise_option(
     ));
 
     let utxos = vec![cov_utxo, option_utxo, asset_utxo_out, fee_utxo_out];
-    let options_program = get_options_program(&option_arguments)?;
+    let options_program = get_options_program(option_arguments)?;
 
     let witness_values = contracts::build_witness::build_option_witness(
         TokenBranch::OptionToken,
@@ -738,7 +740,7 @@ pub fn exercise_option(
     let tx = finalize_p2pk_transaction(
         tx,
         &utxos,
-        &keypair,
+        keypair,
         1,
         &AddressParams::LIQUID_TESTNET,
         *LIQUID_TESTNET_GENESIS,
@@ -746,7 +748,7 @@ pub fn exercise_option(
     let tx = finalize_p2pk_transaction(
         tx,
         &utxos,
-        &keypair,
+        keypair,
         2,
         &AddressParams::LIQUID_TESTNET,
         *LIQUID_TESTNET_GENESIS,
@@ -754,7 +756,7 @@ pub fn exercise_option(
     let tx = finalize_p2pk_transaction(
         tx,
         &utxos,
-        &keypair,
+        keypair,
         3,
         &AddressParams::LIQUID_TESTNET,
         *LIQUID_TESTNET_GENESIS,
@@ -762,11 +764,12 @@ pub fn exercise_option(
     Ok(tx)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn funding_option(
     option_asset_utxo: &OutPoint,
     grantor_asset_utxo: &OutPoint,
     collateral_and_fee_utxo: &OutPoint,
-    option_taproot_pubkey_gen: &String,
+    option_taproot_pubkey_gen: &str,
     collateral_amount: &u64,
     fee_amount: &u64,
     keypair: &Keypair,
@@ -932,7 +935,7 @@ pub fn funding_option(
     pst.blind_last(&mut thread_rng(), &Secp256k1::new(), &inp_tx_out_sec)?;
 
     let utxos = vec![option_utxo, grantor_utxo, collateral_utxo];
-    let options_program = get_options_program(&option_arguments)?;
+    let options_program = get_options_program(option_arguments)?;
 
     let tx = finalize_options_funding_path_transaction(
         pst.extract_tx()?,
@@ -956,7 +959,7 @@ pub fn funding_option(
     let tx = finalize_p2pk_transaction(
         tx,
         &utxos,
-        &keypair,
+        keypair,
         2,
         &AddressParams::LIQUID_TESTNET,
         *LIQUID_TESTNET_GENESIS,
@@ -964,6 +967,7 @@ pub fn funding_option(
     Ok(tx)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn creation_option(
     keypair: &Keypair,
     blinder_key: &Keypair,
@@ -1004,10 +1008,10 @@ pub fn creation_option(
     let (second_asset, second_reissuance_asset) = second_issuance_tx.issuance_ids();
 
     let option_arguments = OptionsArguments {
-        start_time: start_time,
-        expiry_time: expiry_time,
-        collateral_per_contract: collateral_per_contract,
-        settlement_per_contract: settlement_per_contract,
+        start_time,
+        expiry_time,
+        collateral_per_contract,
+        settlement_per_contract,
         collateral_asset_id_hex_le: LIQUID_TESTNET_BITCOIN_ASSET.to_string(),
         settlement_asset_id_hex_le: settlement_asset_id_hex_be.to_string(),
         option_token_asset_id_hex_le: first_asset.to_string(),
@@ -1112,7 +1116,7 @@ pub fn creation_option(
     let tx = finalize_p2pk_transaction(
         pst.extract_tx()?,
         &utxos,
-        &keypair,
+        keypair,
         0,
         &AddressParams::LIQUID_TESTNET,
         *LIQUID_TESTNET_GENESIS,
@@ -1120,7 +1124,7 @@ pub fn creation_option(
     let tx = finalize_p2pk_transaction(
         tx,
         &utxos,
-        &keypair,
+        keypair,
         1,
         &AddressParams::LIQUID_TESTNET,
         *LIQUID_TESTNET_GENESIS,

@@ -2,8 +2,6 @@ use anyhow::Result;
 use clap::Subcommand;
 use contracts::OptionsArguments;
 
-use std::str::FromStr;
-
 use simplicityhl_core::{
     Encodable, broadcast_tx, derive_public_blinder_key, get_new_asset_entropy,
 };
@@ -209,6 +207,7 @@ pub enum Options {
 }
 
 impl Options {
+    #[allow(unused)]
     pub fn handle(&self) -> Result<()> {
         match self {
             Options::Import {

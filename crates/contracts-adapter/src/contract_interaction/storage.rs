@@ -14,7 +14,6 @@ use contracts::{execute_storage_program, get_storage_address, get_storage_compil
 use contracts::StorageArguments;
 use simplicityhl::elements::OutPoint;
 use simplicityhl::elements::bitcoin::{XOnlyPublicKey, secp256k1};
-use simplicityhl::elements::pset::serialize::Serialize;
 use simplicityhl::simplicity::elements::confidential::{AssetBlindingFactor, ValueBlindingFactor};
 use simplicityhl::simplicity::elements::hex::ToHex;
 use simplicityhl::simplicity::elements::pset::{Input, Output, PartiallySignedTransaction};
@@ -25,10 +24,11 @@ use simplicityhl::simplicity::elements::{
 };
 use simplicityhl::simplicity::hashes::sha256;
 use simplicityhl_core::{
-    AssetEntropyBytes, Encodable, TaprootPubkeyGen, control_block, create_p2tr_address, fetch_utxo,
+    AssetEntropyBytes, TaprootPubkeyGen, control_block, create_p2tr_address, fetch_utxo,
     finalize_p2pk_transaction, get_p2pk_address, get_random_seed, obtain_utxo_value,
 };
 
+#[allow(clippy::too_many_arguments)]
 pub fn update_storage(
     keypair: &Keypair,
     blinder_key: &Keypair,
@@ -189,7 +189,7 @@ pub fn update_storage(
     } else {
         vec![storage_utxo_tx_out.clone(), fee_utxo_tx_out.clone()]
     };
-    let storage_program = get_storage_compiled_program(&storage_arguments);
+    let storage_program = get_storage_compiled_program(storage_arguments);
 
     let tx = pst.extract_tx()?;
     let tx = finalize_storage_transaction(
@@ -199,7 +199,7 @@ pub fn update_storage(
         &utxos,
         0,
         new_value,
-        &keypair,
+        keypair,
         address_params,
         genesis_block_hash,
     )?;
@@ -212,7 +212,7 @@ pub fn update_storage(
             &utxos,
             1,
             new_value,
-            &keypair,
+            keypair,
             address_params,
             genesis_block_hash,
         )?
@@ -223,7 +223,7 @@ pub fn update_storage(
     let tx = finalize_p2pk_transaction(
         tx,
         &utxos,
-        &keypair,
+        keypair,
         if is_burn { 1 } else { 2 },
         address_params,
         genesis_block_hash,
@@ -336,7 +336,7 @@ pub fn init_state(
     let tx = finalize_p2pk_transaction(
         pst.extract_tx()?,
         &utxos,
-        &keypair,
+        keypair,
         0,
         address_params,
         genesis_block_hash,
