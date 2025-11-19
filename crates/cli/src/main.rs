@@ -3,6 +3,7 @@
 //! This binary exposes multiple subcommand groups to work with Liquid testnet:
 //! - `basic`: P2PK utilities such as deriving addresses and building simple transfers.
 //! - `options`: Utilities for the options contract (address derivation and funding paths).
+//! - `dcd`: Dual Currency Deposit contract commands (creation, funding, termination, settlement, merge).
 //!
 //! Run `simplicity-cli --help` or any subcommand with `--help` for usage.
 
@@ -13,6 +14,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 use crate::commands::basic::Basic;
+use crate::commands::dcd::Dcd;
 use crate::commands::options::Options;
 use crate::commands::storage::Storage;
 
@@ -46,6 +48,11 @@ enum Commands {
         #[command(subcommand)]
         storage: Box<Storage>,
     },
+    /// Dual Currency Deposit Contract utilities
+    Dcd {
+        #[command(subcommand)]
+        dcd: Box<Dcd>,
+    },
 }
 
 fn main() -> Result<()> {
@@ -53,5 +60,6 @@ fn main() -> Result<()> {
         Commands::Basic { basic } => basic.handle(),
         Commands::Options { options } => options.handle(),
         Commands::Storage { storage } => storage.handle(),
+        Commands::Dcd { dcd } => dcd.handle(),
     }
 }

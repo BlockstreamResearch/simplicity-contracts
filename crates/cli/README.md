@@ -46,15 +46,24 @@ cargo run -p cli -- basic transfer-native \
   --broadcast
 ```
 
-- Split LBTC into two recipients
+- Split LBTC into two outputs (same recipient)
 
 ```
 cargo run -p cli -- basic split-native \
   --utxo <txid>:<vout> \
-  --first-to-address <addr1> \
-  --first-sats <sats1> \
-  --second-to-address <addr2> \
-  --second-sats <sats2> \
+  --recipient-address <addr> \
+  --send-sats <first_output_sats> \
+  --fee-sats <fee> \
+  --account-index 0
+```
+
+- Split LBTC into three outputs (same recipient)
+
+```
+cargo run -p cli -- basic split-native-three \
+  --utxo <txid>:<vout> \
+  --recipient-address <addr> \
+  --send-sats <first_two_outputs_sats_each> \
   --fee-sats <fee> \
   --account-index 0
 ```
@@ -119,10 +128,9 @@ Build and sign an issuance transaction that mints two reissuance tokens (option 
 Meaning of terms:
 - first-fee-utxo / second-fee-utxo: LBTC UTXOs to fund issuances and fees
 - start-time / expiry-time: UNIX seconds used by the covenant
-- contract-size: units of collateral per option token
-- asset-strike-price: target asset per unit of collateral
-- collateral-amount: total collateral to be posted at funding time (used to derive internal prices)
-- target-asset-id-hex-be: 32-byte hex asset id for the target asset (big-endian)
+- collateral-per-contract: amount of collateral asset per option token
+- settlement-per-contract: amount of settlement asset per option token
+- settlement-asset-id-hex-be: 32-byte hex asset id for the settlement asset (big-endian)
 - account-index: key index for P2PK change/signing of issuance inputs
 - fee-amount: LBTC miner fee
 
@@ -133,10 +141,9 @@ cargo run -p cli -- options creation-option \
   --second-fee-utxo <txid>:<vout> \
   --start-time 1760358546 \
   --expiry-time 1760958546 \
-  --contract-size 20 \
-  --asset-strike-price 2 \
-  --collateral-amount 1000 \
-  --target-asset-id-hex-be <32-byte-hex> \
+  --collateral-per-contract 20 \
+  --settlement-per-contract 2 \
+  --settlement-asset-id-hex-be <32-byte-hex> \
   --account-index 0 \
   --fee-amount 500 \
   --broadcast
@@ -169,12 +176,12 @@ cargo run -p cli -- options funding-option \
 
 ### Options Exercise (option holder burns options and settles)
 
-Spend the collateral UTXO at the covenant, burn option tokens, and post the settlement target asset back to the covenant.
+Spend the collateral UTXO at the covenant, burn option tokens, and post the settlement asset back to the covenant.
 
 Meaning of terms:
 - collateral-utxo: LBTC collateral UTXO at the options address
 - option-asset-utxo: option token UTXO to burn
-- asset-utxo: target asset UTXO to supply settlement asset
+- asset-utxo: settlement asset UTXO supplied by the option holder
 - fee-utxo: LBTC P2PK UTXO paying miner fee
 - option-taproot-pubkey-gen: the covenant instance
 - amount-to-burn: number of option tokens to burn
@@ -195,12 +202,12 @@ cargo run -p cli -- options exercise-option \
   --broadcast
 ```
 
-### Options Settlement (grantor burns tokens against target asset)
+### Options Settlement (grantor burns tokens against settlement asset)
 
-Spend the target asset UTXO at the covenant, burn grantor tokens, forward the settlement amount in target asset back to the covenant, and pay fees from a P2PK LBTC UTXO.
+Spend the settlement asset UTXO at the covenant, burn grantor tokens, forward the settlement amount back to the covenant, and pay fees from a P2PK LBTC UTXO.
 
 Meaning of terms:
-- target-asset-utxo: covenant UTXO holding the target asset
+- settlement-asset-utxo: covenant UTXO holding the settlement asset
 - grantor-asset-utxo: grantor token UTXO to burn
 - fee-utxo: LBTC P2PK UTXO paying miner fee
 - option-taproot-pubkey-gen: the covenant instance
@@ -211,7 +218,7 @@ Meaning of terms:
 Example:
 ```
 cargo run -p cli -- options settlement-option \
-  --target-asset-utxo <txid>:<vout> \
+  --settlement-asset-utxo <txid>:<vout> \
   --grantor-asset-utxo <txid>:<vout> \
   --fee-utxo <txid>:<vout> \
   --option-taproot-pubkey-gen <taproot-pubkey-gen> \
@@ -271,6 +278,321 @@ cargo run -p cli -- options cancellation-option \
   --broadcast
 ```
 
+## DCD Commands
+
+The DCD (Decentralized Collateralized Derivative) contract enables price-attested derivatives on Liquid Testnet.
+
+### DCD Creation
+
+Create a new DCD covenant by issuing three token types (filler, grantor collateral, grantor settlement) and storing the DCD arguments.
+
+- Meaning of terms:
+  - first-fee-utxo, second-fee-utxo, third-fee-utxo: Three LBTC UTXOs to use for token issuance
+  - taker-funding-start-time: Block time when taker can start funding
+  - taker-funding-end-time: Block time when taker funding period ends
+  - contract-expiry-time: Block time when contract expires
+  - early-termination-end-time: Block time when early termination is no longer allowed
+  - settlement-height: Block height at which oracle price is attested
+  - principal-collateral-amount: Base collateral amount
+  - incentive-basis-points: Incentive in basis points (1 bp = 0.01%)
+  - filler-per-principal-collateral: Filler token ratio
+  - strike-price: Oracle strike price for settlement
+  - settlement-asset-id: Asset ID (hex) for settlement
+  - oracle-public-key: X-only pubkey of oracle
+  - fee-amount: Transaction fee in satoshis
+  - account-index: Account index for signing
+  - broadcast: When set, broadcast transaction
+
+Example:
+```
+cargo run -p cli -- dcd creation \
+  --first-fee-utxo <txid>:<vout> \
+  --second-fee-utxo <txid>:<vout> \
+  --third-fee-utxo <txid>:<vout> \
+  --taker-funding-start-time 1700000000 \
+  --taker-funding-end-time 1700100000 \
+  --contract-expiry-time 1700200000 \
+  --early-termination-end-time 1700150000 \
+  --settlement-height 1200000 \
+  --principal-collateral-amount 1000000 \
+  --incentive-basis-points 100 \
+  --filler-per-principal-collateral 1000 \
+  --strike-price 115000 \
+  --settlement-asset-id <asset-id-hex> \
+  --oracle-public-key <xonly-pubkey-hex> \
+  --fee-amount 500 \
+  --account-index 0 \
+  --broadcast
+```
+
+### DCD Import/Export
+
+Persist or retrieve encoded DCD arguments for a given taproot pubkey gen in the local store.
+
+- Import (bind encoded args to a `taproot-pubkey-gen`):
+
+```
+cargo run -p cli -- dcd import \
+  --taproot-pubkey-gen <taproot-pubkey-gen> \
+  --encoded-dcd-arguments <hex>
+```
+
+- Export (print encoded args for a `taproot-pubkey-gen`):
+
+```
+cargo run -p cli -- dcd export \
+  --taproot-pubkey-gen <taproot-pubkey-gen>
+```
+
+### Oracle Signature
+
+Generate a Schnorr signature for price attestation at settlement.
+
+- Meaning of terms:
+  - price-at-current-block-height: Oracle price to attest
+  - settlement-height: Block height for settlement
+  - oracle-account-index: Account index for oracle key
+
+Example:
+```
+cargo run -p cli -- dcd oracle-signature \
+  --price-at-current-block-height 115000 \
+  --settlement-height 1200000 \
+  --oracle-account-index 2
+```
+
+### Merge Token UTXOs
+
+Merge 2, 3, or 4 token UTXOs into a single UTXO. Useful for consolidating fragmented token holdings.
+
+- Commands: `merge-2-tokens`, `merge-3-tokens`, `merge-4-tokens`
+- Common parameters:
+  - token-utxo-1, token-utxo-2, token-utxo-3, token-utxo-4: Token UTXOs to merge
+  - fee-utxo: LBTC UTXO for transaction fees
+  - dcd-taproot-pubkey-gen: DCD instance identifier
+  - fee-amount: Transaction fee in satoshis
+  - account-index: Account index for signing
+  - broadcast: When set, broadcast transaction
+
+Example (merging 2 tokens):
+```
+cargo run -p cli -- dcd merge2-tokens \
+  --token-utxo-1 <txid>:<vout> \
+  --token-utxo-2 <txid>:<vout> \
+  --fee-utxo <txid>:<vout> \
+  --dcd-taproot-pubkey-gen <taproot-pubkey-gen> \
+  --fee-amount 500 \
+  --account-index 0 \
+  --broadcast
+```
+
+### Maker Funding Path
+
+Maker deposits collateral and settlement assets, receives grantor tokens.
+
+- Meaning of terms:
+  - filler-token-utxo: Filler token UTXO for issuance
+  - grantor-collateral-token-utxo: Grantor collateral token UTXO
+  - grantor-settlement-token-utxo: Grantor settlement token UTXO
+  - settlement-asset-utxo: Settlement asset UTXO to deposit
+  - fee-utxo: LBTC UTXO for fees
+  - dcd-taproot-pubkey-gen: DCD instance identifier
+  - collateral-amount-to-deposit: Collateral amount to deposit
+  - fee-amount: Transaction fee
+  - account-index: Account index for signing
+  - broadcast: When set, broadcast transaction
+
+Example:
+```
+cargo run -p cli -- dcd maker-funding-path \
+  --filler-token-utxo <txid>:<vout> \
+  --grantor-collateral-token-utxo <txid>:<vout> \
+  --grantor-settlement-token-utxo <txid>:<vout> \
+  --settlement-asset-utxo <txid>:<vout> \
+  --fee-utxo <txid>:<vout> \
+  --dcd-taproot-pubkey-gen <taproot-pubkey-gen> \
+  --collateral-amount-to-deposit 100000 \
+  --fee-amount 500 \
+  --account-index 0 \
+  --broadcast
+```
+
+### Taker Funding Path
+
+Taker deposits collateral, receives filler tokens.
+
+- Meaning of terms:
+  - filler-token-utxo: Filler token UTXO from covenant
+  - collateral-utxo: Collateral UTXO to deposit
+  - fee-utxo: LBTC UTXO for fees
+  - dcd-taproot-pubkey-gen: DCD instance identifier
+  - collateral-amount-to-deposit: Collateral amount to deposit
+  - fee-amount: Transaction fee
+  - account-index: Account index for signing
+  - broadcast: When set, broadcast transaction
+
+Example:
+```
+cargo run -p cli -- dcd taker-funding-path \
+  --filler-token-utxo <txid>:<vout> \
+  --collateral-utxo <txid>:<vout> \
+  --fee-utxo <txid>:<vout> \
+  --dcd-taproot-pubkey-gen <taproot-pubkey-gen> \
+  --collateral-amount-to-deposit 50000 \
+  --fee-amount 500 \
+  --account-index 1 \
+  --broadcast
+```
+
+### Taker Early Termination
+
+Taker returns filler tokens, gets collateral back before contract expiry.
+
+- Meaning of terms:
+  - collateral-utxo: Collateral UTXO at covenant
+  - filler-token-utxo: Filler token UTXO to burn
+  - fee-utxo: LBTC UTXO for fees
+  - dcd-taproot-pubkey-gen: DCD instance identifier
+  - filler-token-amount-to-return: Amount of filler tokens to return
+  - fee-amount: Transaction fee
+  - account-index: Account index for signing
+  - broadcast: When set, broadcast transaction
+
+Example:
+```
+cargo run -p cli -- dcd taker-early-termination \
+  --collateral-utxo <txid>:<vout> \
+  --filler-token-utxo <txid>:<vout> \
+  --fee-utxo <txid>:<vout> \
+  --dcd-taproot-pubkey-gen <taproot-pubkey-gen> \
+  --filler-token-amount-to-return 1000 \
+  --fee-amount 500 \
+  --account-index 1 \
+  --broadcast
+```
+
+### Maker Collateral Termination
+
+Maker burns grantor collateral tokens, gets collateral back.
+
+- Meaning of terms:
+  - collateral-utxo: Collateral UTXO at covenant
+  - grantor-collateral-token-utxo: Grantor collateral token UTXO to burn
+  - fee-utxo: LBTC UTXO for fees
+  - dcd-taproot-pubkey-gen: DCD instance identifier
+  - grantor-collateral-amount-to-burn: Amount of grantor collateral tokens to burn
+  - fee-amount: Transaction fee
+  - account-index: Account index for signing
+  - broadcast: When set, broadcast transaction
+
+Example:
+```
+cargo run -p cli -- dcd maker-collateral-termination \
+  --collateral-utxo <txid>:<vout> \
+  --grantor-collateral-token-utxo <txid>:<vout> \
+  --fee-utxo <txid>:<vout> \
+  --dcd-taproot-pubkey-gen <taproot-pubkey-gen> \
+  --grantor-collateral-amount-to-burn 1000 \
+  --fee-amount 500 \
+  --account-index 0 \
+  --broadcast
+```
+
+### Maker Settlement Termination
+
+Maker burns grantor settlement tokens, gets settlement asset back.
+
+- Meaning of terms:
+  - settlement-asset-utxo: Settlement asset UTXO at covenant
+  - grantor-settlement-token-utxo: Grantor settlement token UTXO to burn
+  - fee-utxo: LBTC UTXO for fees
+  - dcd-taproot-pubkey-gen: DCD instance identifier
+  - grantor-settlement-amount-to-burn: Amount of grantor settlement tokens to burn
+  - fee-amount: Transaction fee
+  - account-index: Account index for signing
+  - broadcast: When set, broadcast transaction
+
+Example:
+```
+cargo run -p cli -- dcd maker-settlement-termination \
+  --settlement-asset-utxo <txid>:<vout> \
+  --grantor-settlement-token-utxo <txid>:<vout> \
+  --fee-utxo <txid>:<vout> \
+  --dcd-taproot-pubkey-gen <taproot-pubkey-gen> \
+  --grantor-settlement-amount-to-burn 1000 \
+  --fee-amount 500 \
+  --account-index 0 \
+  --broadcast
+```
+
+### Maker Settlement
+
+Maker settles at maturity based on oracle-attested price.
+
+- Meaning of terms:
+  - asset-utxo: Asset UTXO at covenant (collateral or settlement depending on price)
+  - grantor-collateral-token-utxo: Grantor collateral token UTXO to burn
+  - grantor-settlement-token-utxo: Grantor settlement token UTXO to burn
+  - fee-utxo: LBTC UTXO for fees
+  - dcd-taproot-pubkey-gen: DCD instance identifier
+  - price-at-current-block-height: Oracle-attested price
+  - oracle-signature: Schnorr signature from oracle
+  - grantor-amount-to-burn: Amount of grantor tokens to burn
+  - fee-amount: Transaction fee
+  - account-index: Account index for signing
+  - broadcast: When set, broadcast transaction
+
+Example:
+```
+cargo run -p cli -- dcd maker-settlement \
+  --asset-utxo <txid>:<vout> \
+  --grantor-collateral-token-utxo <txid>:<vout> \
+  --grantor-settlement-token-utxo <txid>:<vout> \
+  --fee-utxo <txid>:<vout> \
+  --dcd-taproot-pubkey-gen <taproot-pubkey-gen> \
+  --price-at-current-block-height 115000 \
+  --oracle-signature <hex> \
+  --grantor-amount-to-burn 1000 \
+  --fee-amount 500 \
+  --account-index 0 \
+  --broadcast
+```
+
+### Taker Settlement
+
+Taker settles at maturity based on oracle-attested price.
+
+- Meaning of terms:
+  - asset-utxo: Asset UTXO at covenant (collateral or settlement depending on price)
+  - filler-token-utxo: Filler token UTXO to burn
+  - fee-utxo: LBTC UTXO for fees
+  - dcd-taproot-pubkey-gen: DCD instance identifier
+  - price-at-current-block-height: Oracle-attested price
+  - oracle-signature: Schnorr signature from oracle
+  - filler-amount-to-burn: Amount of filler tokens to burn
+  - fee-amount: Transaction fee
+  - account-index: Account index for signing
+  - broadcast: When set, broadcast transaction
+
+Example:
+```
+cargo run -p cli -- dcd taker-settlement \
+  --asset-utxo <txid>:<vout> \
+  --filler-token-utxo <txid>:<vout> \
+  --fee-utxo <txid>:<vout> \
+  --dcd-taproot-pubkey-gen <taproot-pubkey-gen> \
+  --price-at-current-block-height 115000 \
+  --oracle-signature <hex> \
+  --filler-amount-to-burn 1000 \
+  --fee-amount 500 \
+  --account-index 1 \
+  --broadcast
+```
+
+### Options
+
+The Options contract and related CLI commands have moved to a separate repository and are no longer part of this CLI.
+
 ## Notes
 
 - Addresses are Liquid testnet P2TR derived from SEED_HEX and index.
@@ -285,107 +607,113 @@ OutPoint format note:
 
 ## Example run:
 
+
+```bash
+cargo run -p cli -- basic split-native \
+  --broadcast \
+  --utxo 07ecfc3fb98db1693b2721c5efeea1a0bb348b4bc6ff4ef57526e9d5d8e4867f:3 \
+  --recipient-address tex1pxztvg542emmh9h8txga43jcltt4uhphpt79lylqmlwrafzvcferq2qpdg9 \
+  --send-sats 2000 \
+  --fee-sats 50 \
+  --account-index 0
+```
+
+Done: https://liquid.network/testnet/tx/0ebb7bbe4d2bd72d5bf12e5d65cf5e8816a821c7d9600bd6c8bf3a6d80b9f0ee
+
+Done 2 (cancellation test): https://liquid.network/testnet/tx/0fb896c5620f9415172e02e48c98a3b27380398fe7af8d9d8c3ba974b55607dd
+
 ```bash
 cargo run -p cli -- options creation-option \
   --broadcast \
-  --first-fee-utxo 4b9673c0034090120dee92122a87971b6b76b74e5a0c2787d0e2407c4fb774fb:1 \
-  --second-fee-utxo 4b9673c0034090120dee92122a87971b6b76b74e5a0c2787d0e2407c4fb774fb:2 \
-  --start-time 1760358546 \
-  --expiry-time 1760358546 \
-  --contract-size 20 \
-  --asset-strike-price 2 \
-  --collateral-amount 2000 \
-  --target-asset-id-hex-be 38fca2d939696061a8f76d4e6b5eecd54e3b4221c846f24a6b279e79952850a5 \
+  --first-fee-utxo 0fb896c5620f9415172e02e48c98a3b27380398fe7af8d9d8c3ba974b55607dd:0 \
+  --second-fee-utxo 0fb896c5620f9415172e02e48c98a3b27380398fe7af8d9d8c3ba974b55607dd:1 \
+  --start-time 1761821609 \
+  --expiry-time 1761821609 \
+  --collateral-per-contract 20 \
+  --settlement-per-contract 5 \
+  --settlement-asset-id-hex-be 38fca2d939696061a8f76d4e6b5eecd54e3b4221c846f24a6b279e79952850a5 \
   --account-index 0 \
   --fee-amount 100
 ```
 
-options_taproot_pubkey_gen: 1a9058141ebe163ff26739beb2f2c297e59aeb0983bd1696bb3b5dd18812baac:0270e34efde3af793343554a45be7c11b2b7289a0abf568295f909f81caa6fdedf:tex1pyj9x7gghxxtex90cxzlderjt0v69hm9zlz7ezzjmpzu4v3nwhgpq7pdnpa
-Broadcasted txid: https://liquid.network/testnet/tx/1b723210d29a7941aab47cbb6f2f08853fa08d32ed744bb384f4eaf5b905480e
+options_taproot_pubkey_gen: 763d23b0bd02337bb267fa1282ae129cef814833e1456644afa3053b9031051f:027f8873a023e321ea3df56a0dcb098479030ee0be868f0f5fe6fba1da8d0bb9f9:tex1pt355pzatlmcxtuasd2rynd0wvmxh8l9g8y8kwk5fv7p0dckszd3sfwjnpv
 
--- Expiry test
-options_taproot_pubkey_gen: ca0367f594007e3b918b1d6390960a01a5f7704ee7d8902cbfa301cb276bb4a0:02e7ce0bbe949c9afe1671543bf8e49039f23bea800d3c4a89f9097b6ec7654889:tex1pxjm067n88g5xckhpqkss0cjntm3v27dky0qqenh8wpqqkr8mwxfqsag4uk
-Broadcasted txid: https://liquid.network/testnet/tx/d0d6d886386a19d5019d25a0eb7f0a19437996b85d70b688e1030f7d6eee8a36
+Done: https://liquid.network/testnet/tx/fe3e22444adb80b5da75aa44cbf4ab52c6b3a6ecbfd9a010e2bc9bb81dfa2a26
 
--- Cancellation test
-options_taproot_pubkey_gen: a69b166def4cae06313f0791bd5d20d20d671e56cb6606b6fde261e6c3f17676:02c082825f70e6dcd1f5368e30cc290bf58127cddb3f4a0e5db20d8efd2ba7c504:tex1pr2eec37d0stuflmjlw62hrhr0uppw0jfdy8qnr5s2al3na3jwjrq8ans2x
-Broadcasted txid: https://liquid.network/testnet/tx/d97de05cd0d721fb1c4902eab84787a6c8cf245bcee4e3c18fa307d807d05ad9
+options_taproot_pubkey_gen: 7efe3e23414653a1cf58cee8fed04113491ce002e225f28478733548dc51ec66:02b0a4727eefe4cae1748d20cc361b718d06b1bb5347b323ba1d71a617ee483933:tex1pahzvqxjle9zvdzf2gw3q86ps32hxet5tuy0zwdtys7zjg9s529jsf7ul2z
+
+Done 2 (cancellation test): https://liquid.network/testnet/tx/6ca00f7cab1db9e7ed09e9fbc446c4fcc83074b67d83faa15a02510183793b02
 
 ```bash
 cargo run -p cli -- options funding-option \
   --broadcast \
-  --option-asset-utxo d97de05cd0d721fb1c4902eab84787a6c8cf245bcee4e3c18fa307d807d05ad9:0 \
-  --grantor-asset-utxo d97de05cd0d721fb1c4902eab84787a6c8cf245bcee4e3c18fa307d807d05ad9:1 \
-  --collateral-and-fee-utxo d97de05cd0d721fb1c4902eab84787a6c8cf245bcee4e3c18fa307d807d05ad9:2 \
-  --option-taproot-pubkey-gen a69b166def4cae06313f0791bd5d20d20d671e56cb6606b6fde261e6c3f17676:02c082825f70e6dcd1f5368e30cc290bf58127cddb3f4a0e5db20d8efd2ba7c504:tex1pr2eec37d0stuflmjlw62hrhr0uppw0jfdy8qnr5s2al3na3jwjrq8ans2x \
+  --option-asset-utxo 6ca00f7cab1db9e7ed09e9fbc446c4fcc83074b67d83faa15a02510183793b02:0 \
+  --grantor-asset-utxo 6ca00f7cab1db9e7ed09e9fbc446c4fcc83074b67d83faa15a02510183793b02:1 \
+  --collateral-and-fee-utxo 6ca00f7cab1db9e7ed09e9fbc446c4fcc83074b67d83faa15a02510183793b02:2 \
+  --option-taproot-pubkey-gen 7efe3e23414653a1cf58cee8fed04113491ce002e225f28478733548dc51ec66:02b0a4727eefe4cae1748d20cc361b718d06b1bb5347b323ba1d71a617ee483933:tex1pahzvqxjle9zvdzf2gw3q86ps32hxet5tuy0zwdtys7zjg9s529jsf7ul2z \
   --collateral-amount 2000 \
   --account-index 0 \
   --fee-amount 205
 ```
 
-Done: https://liquid.network/testnet/tx/24dbb9f54f8302eae4610257898c218ae96c9e72512fe887f03a693180e7f037
-Done (expiry test): https://liquid.network/testnet/tx/ad7670fb7d7c6538eb2f2478243e3fd8672aa689c87656dcd615e66d74905288
-Done (cancellation test): https://liquid.network/testnet/tx/f4d171ac050d177e46b3ca68b33e42394e594bda2cc908113fed80a8c57dd8d0
+Done: https://liquid.network/testnet/tx/c71f1901a96d2f843eca628e595f97649a080668229d8800a2ca094051b77e5d
+
+Done 2 (cancellation test): https://liquid.network/testnet/tx/9480d87d08f6dc8c4213548d159c40d5f93f5068e59c06e174e21a7d50a75dd2
 
 ```bash
 cargo run -p cli -- options exercise-option \
   --broadcast \
-  --collateral-utxo 6dc876cd4f41d7de588fecc88da9c5be02f3bfd16c402c8f7f233863d4cb5af3:0 \
-  --option-asset-utxo 6dc876cd4f41d7de588fecc88da9c5be02f3bfd16c402c8f7f233863d4cb5af3:3 \
-  --asset-utxo 6dc876cd4f41d7de588fecc88da9c5be02f3bfd16c402c8f7f233863d4cb5af3:4 \
-  --fee-utxo 6dc876cd4f41d7de588fecc88da9c5be02f3bfd16c402c8f7f233863d4cb5af3:5 \
-  --option-taproot-pubkey-gen 1a9058141ebe163ff26739beb2f2c297e59aeb0983bd1696bb3b5dd18812baac:0270e34efde3af793343554a45be7c11b2b7289a0abf568295f909f81caa6fdedf:tex1pyj9x7gghxxtex90cxzlderjt0v69hm9zlz7ezzjmpzu4v3nwhgpq7pdnpa \
+  --collateral-utxo c71f1901a96d2f843eca628e595f97649a080668229d8800a2ca094051b77e5d:2 \
+  --option-asset-utxo c71f1901a96d2f843eca628e595f97649a080668229d8800a2ca094051b77e5d:3 \
+  --asset-utxo e8b5cc998d9fcc484cd6e0cf3768ca4dbd7376d8839f18599f9f000c1b9e0bd6:0 \
+  --fee-utxo c71f1901a96d2f843eca628e595f97649a080668229d8800a2ca094051b77e5d:5 \
+  --option-taproot-pubkey-gen 763d23b0bd02337bb267fa1282ae129cef814833e1456644afa3053b9031051f:027f8873a023e321ea3df56a0dcb098479030ee0be868f0f5fe6fba1da8d0bb9f9:tex1pt355pzatlmcxtuasd2rynd0wvmxh8l9g8y8kwk5fv7p0dckszd3sfwjnpv \
   --amount-to-burn 75 \
-  --fee-amount 160 \
+  --fee-amount 165 \
   --account-index 0
 ```
 
-Done 1: https://liquid.network/testnet/tx/6dc876cd4f41d7de588fecc88da9c5be02f3bfd16c402c8f7f233863d4cb5af3
-Done 2: https://liquid.network/testnet/tx/ced2be5ee885df4b6230676e5d6b51c4e810d15f2324bf845d93d80ade7d29bf (full)
+Done: https://liquid.network/testnet/tx/ceea050ab1da532ce4e60241eb948cc4a2ffaec8a320c494dc460ed75b376aae
 
 ```bash
 cargo run -p cli -- options settlement-option \
   --broadcast \
-  --target-asset-utxo 6dc876cd4f41d7de588fecc88da9c5be02f3bfd16c402c8f7f233863d4cb5af3:2 \
-  --grantor-asset-utxo 91cb8282b61ac6fd2d4ed9973d8c3e6ddef31277a28022f68e30e8c743fd792b:2 \
-  --fee-utxo 91cb8282b61ac6fd2d4ed9973d8c3e6ddef31277a28022f68e30e8c743fd792b:3 \
-  --option-taproot-pubkey-gen 1a9058141ebe163ff26739beb2f2c297e59aeb0983bd1696bb3b5dd18812baac:0270e34efde3af793343554a45be7c11b2b7289a0abf568295f909f81caa6fdedf:tex1pyj9x7gghxxtex90cxzlderjt0v69hm9zlz7ezzjmpzu4v3nwhgpq7pdnpa \
+  --settlement-asset-utxo ceea050ab1da532ce4e60241eb948cc4a2ffaec8a320c494dc460ed75b376aae:2 \
+  --grantor-asset-utxo c71f1901a96d2f843eca628e595f97649a080668229d8800a2ca094051b77e5d:4 \
+  --fee-utxo ceea050ab1da532ce4e60241eb948cc4a2ffaec8a320c494dc460ed75b376aae:5 \
+  --option-taproot-pubkey-gen 763d23b0bd02337bb267fa1282ae129cef814833e1456644afa3053b9031051f:027f8873a023e321ea3df56a0dcb098479030ee0be868f0f5fe6fba1da8d0bb9f9:tex1pt355pzatlmcxtuasd2rynd0wvmxh8l9g8y8kwk5fv7p0dckszd3sfwjnpv \
   --grantor-token-amount-to-burn 25 \
   --fee-amount 150 \
   --account-index 0
 ```
 
-Done 1: https://liquid.network/testnet/tx/935820952db0590c168fd12da86d3a9729889d12871ee0a20a57ff4d061a5c73
-Done 2: https://liquid.network/testnet/tx/91cb8282b61ac6fd2d4ed9973d8c3e6ddef31277a28022f68e30e8c743fd792b (full 1)
-Done 3: https://liquid.network/testnet/tx/edcf54badff020ab84c4be83c8020e4b44dcab954ba337aa4a9beb1568d1842a (full 2)
+Done: https://liquid.network/testnet/tx/4e07ca1481d6e8b39c29c89e784f436333e50596288af5f65f9a7151c5b8e19c
 
 ```bash
 cargo run -p cli -- options expiry-option \
-  --collateral-utxo a341cb1dbc256e2483ca9119852b0b4b3c2eb8f5d3bb9160785f4939733f3984:0 \
-  --grantor-asset-utxo a341cb1dbc256e2483ca9119852b0b4b3c2eb8f5d3bb9160785f4939733f3984:3 \
-  --fee-utxo a341cb1dbc256e2483ca9119852b0b4b3c2eb8f5d3bb9160785f4939733f3984:4 \
-  --option-taproot-pubkey-gen ca0367f594007e3b918b1d6390960a01a5f7704ee7d8902cbfa301cb276bb4a0:02e7ce0bbe949c9afe1671543bf8e49039f23bea800d3c4a89f9097b6ec7654889:tex1pxjm067n88g5xckhpqkss0cjntm3v27dky0qqenh8wpqqkr8mwxfqsag4uk \
-  --grantor-token-amount-to-burn 75 \
+  --collateral-utxo ceea050ab1da532ce4e60241eb948cc4a2ffaec8a320c494dc460ed75b376aae:0 \
+  --grantor-asset-utxo 4e07ca1481d6e8b39c29c89e784f436333e50596288af5f65f9a7151c5b8e19c:3 \
+  --fee-utxo 4e07ca1481d6e8b39c29c89e784f436333e50596288af5f65f9a7151c5b8e19c:4 \
+  --option-taproot-pubkey-gen 763d23b0bd02337bb267fa1282ae129cef814833e1456644afa3053b9031051f:027f8873a023e321ea3df56a0dcb098479030ee0be868f0f5fe6fba1da8d0bb9f9:tex1pt355pzatlmcxtuasd2rynd0wvmxh8l9g8y8kwk5fv7p0dckszd3sfwjnpv \
+  --grantor-token-amount-to-burn 25 \
   --fee-amount 150 \
   --account-index 0 \
   --broadcast 
 ```
 
-Done 1: https://liquid.network/testnet/tx/a341cb1dbc256e2483ca9119852b0b4b3c2eb8f5d3bb9160785f4939733f3984
-Done 2: https://liquid.network/testnet/tx/4b9673c0034090120dee92122a87971b6b76b74e5a0c2787d0e2407c4fb774fb (full)
+Done: https://liquid.network/testnet/tx/07ecfc3fb98db1693b2721c5efeea1a0bb348b4bc6ff4ef57526e9d5d8e4867f
 
 ```bash 
 cargo run -p cli -- options cancellation-option \
-  --collateral-utxo 2e622e2b235324d2a5731793deb0d384a346ccab8226ac848b25f710fbe8b6b4:0 \
-  --option-asset-utxo 2e622e2b235324d2a5731793deb0d384a346ccab8226ac848b25f710fbe8b6b4:4 \
-  --grantor-asset-utxo 2e622e2b235324d2a5731793deb0d384a346ccab8226ac848b25f710fbe8b6b4:5 \
-  --fee-utxo 2e622e2b235324d2a5731793deb0d384a346ccab8226ac848b25f710fbe8b6b4:6 \
-  --option-taproot-pubkey-gen a69b166def4cae06313f0791bd5d20d20d671e56cb6606b6fde261e6c3f17676:02c082825f70e6dcd1f5368e30cc290bf58127cddb3f4a0e5db20d8efd2ba7c504:tex1pr2eec37d0stuflmjlw62hrhr0uppw0jfdy8qnr5s2al3na3jwjrq8ans2x \
-  --amount-to-burn 65 \
+  --collateral-utxo 9480d87d08f6dc8c4213548d159c40d5f93f5068e59c06e174e21a7d50a75dd2:2 \
+  --option-asset-utxo 9480d87d08f6dc8c4213548d159c40d5f93f5068e59c06e174e21a7d50a75dd2:3 \
+  --grantor-asset-utxo 9480d87d08f6dc8c4213548d159c40d5f93f5068e59c06e174e21a7d50a75dd2:4 \
+  --fee-utxo 9480d87d08f6dc8c4213548d159c40d5f93f5068e59c06e174e21a7d50a75dd2:5 \
+  --option-taproot-pubkey-gen 7efe3e23414653a1cf58cee8fed04113491ce002e225f28478733548dc51ec66:02b0a4727eefe4cae1748d20cc361b718d06b1bb5347b323ba1d71a617ee483933:tex1pahzvqxjle9zvdzf2gw3q86ps32hxet5tuy0zwdtys7zjg9s529jsf7ul2z \
+  --amount-to-burn 100 \
   --fee-amount 150 \
   --account-index 0 \
   --broadcast
 ```
 
-Done 1: https://liquid.network/testnet/tx/2e622e2b235324d2a5731793deb0d384a346ccab8226ac848b25f710fbe8b6b4
-Done 2: https://liquid.network/testnet/tx/e469665ea2bfe6ad3741f19f74a87abf4757caca09f1b08ec40e5bda0565eea7 (full)
+Done: https://liquid.network/testnet/tx/86c10905302c54812af0bbcae917b6458a1108ef0292634eaa1dbb9340aa870f
