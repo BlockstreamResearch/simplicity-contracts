@@ -3,6 +3,7 @@ use anyhow::anyhow;
 use simplicityhl::elements;
 use simplicityhl::elements::confidential::{AssetBlindingFactor, ValueBlindingFactor};
 use simplicityhl::elements::hashes::sha256::Midstate;
+use simplicityhl::elements::hex::ToHex;
 use simplicityhl::elements::schnorr::Keypair;
 use simplicityhl::elements::secp256k1_zkp::Secp256k1;
 use simplicityhl::elements::secp256k1_zkp::rand::thread_rng;
@@ -12,15 +13,15 @@ use simplicityhl::simplicity::elements::confidential::Asset;
 use simplicityhl::simplicity::elements::pset::{Input, Output, PartiallySignedTransaction};
 use simplicityhl::simplicity::elements::{Address, AddressParams, OutPoint, TxOut};
 use simplicityhl_core::{
-    AssetEntropyBytes, LIQUID_TESTNET_BITCOIN_ASSET, fetch_utxo, finalize_p2pk_transaction,
-    get_p2pk_address, get_random_seed, obtain_utxo_value,
+    AssetEntropyHex, LIQUID_TESTNET_BITCOIN_ASSET, fetch_utxo, finalize_p2pk_transaction,
+    get_new_asset_entropy, get_p2pk_address, get_random_seed, obtain_utxo_value,
 };
 
 pub struct IssueAssetResponse {
     pub tx: Transaction,
     pub asset_id: AssetId,
     pub reissuance_asset_id: AssetId,
-    pub asset_entropy: AssetEntropyBytes,
+    pub asset_entropy: AssetEntropyHex,
 }
 
 pub struct ReissueAssetResponse {
@@ -155,6 +156,7 @@ pub fn issue_asset(
     }
 
     let asset_entropy = get_random_seed();
+    let asset_entropy_to_return = get_new_asset_entropy(&fee_utxo_outpoint, asset_entropy).to_hex();
 
     let mut issuance_tx = Input::from_prevout(fee_utxo_outpoint);
     issuance_tx.witness_utxo = Some(fee_utxo_tx_out.clone());
@@ -231,7 +233,7 @@ pub fn issue_asset(
         tx,
         asset_id,
         reissuance_asset_id,
-        asset_entropy,
+        asset_entropy: asset_entropy_to_return,
     })
 }
 

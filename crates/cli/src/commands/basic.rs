@@ -5,7 +5,6 @@ use crate::modules::utils::derive_keypair;
 use clap::Subcommand;
 use contracts_adapter::basic::{IssueAssetResponse, ReissueAssetResponse};
 use simplicityhl::elements::hashes::sha256;
-use simplicityhl::elements::hex::ToHex;
 use simplicityhl::simplicity::elements::pset::serialize::Serialize;
 use simplicityhl::simplicity::elements::{Address, AddressParams, OutPoint};
 use simplicityhl::simplicity::hex::DisplayHex;
@@ -317,19 +316,17 @@ impl Basic {
                     *LIQUID_TESTNET_GENESIS,
                 )?;
 
-                store
-                    .store
-                    .insert(asset_name, asset_entropy.to_hex().as_bytes())?;
-
                 println!(
                     "Asset id: {asset_id}, Reissuance asset: {reissuance_asset_id}, Asset entropy: {}",
-                    asset_entropy.to_hex()
+                    asset_entropy
                 );
 
                 match broadcast {
                     true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
                 }
+
+                store.store.insert(asset_name, asset_entropy.as_bytes())?;
 
                 Ok(())
             }
@@ -347,6 +344,7 @@ impl Basic {
                 let Some(asset_entropy) = store.store.get(asset_name)? else {
                     return Err(anyhow!("Asset name not found"));
                 };
+                let asset_entropy = String::from_utf8(asset_entropy.to_vec())?;
                 let asset_entropy = hex::decode(asset_entropy)?;
 
                 let mut asset_entropy_bytes: [u8; 32] = asset_entropy.try_into().unwrap();
