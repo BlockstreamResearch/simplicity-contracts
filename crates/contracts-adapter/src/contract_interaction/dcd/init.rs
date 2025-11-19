@@ -1,4 +1,4 @@
-use crate::dcd::common::convert_asset_entropy;
+use crate::dcd::common::convert_bytes_to_asset_entropy;
 use crate::dcd::context::{CreationContext, DcdContractContext, MakerFundingContext};
 use crate::dcd::handlers::maker_funding::InnerMakerFundingContext;
 use crate::dcd::types::{
@@ -74,15 +74,15 @@ impl DcdManager {
 
         let filler_token_info = (
             filler_token_info.0,
-            convert_asset_entropy(filler_token_info.1)?,
+            convert_bytes_to_asset_entropy(filler_token_info.1)?,
         );
         let grantor_collateral_token_info = (
             grantor_collateral_token_info.0,
-            convert_asset_entropy(grantor_collateral_token_info.1)?,
+            convert_bytes_to_asset_entropy(grantor_collateral_token_info.1)?,
         );
         let grantor_settlement_token_info = (
             grantor_settlement_token_info.0,
-            convert_asset_entropy(grantor_settlement_token_info.1)?,
+            convert_bytes_to_asset_entropy(grantor_settlement_token_info.1)?,
         );
         let inner_context = InnerMakerFundingContext {
             filler_reissue_token_info: filler_token_info,

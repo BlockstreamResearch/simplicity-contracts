@@ -18,7 +18,7 @@ pub fn raw_asset_entropy_bytes_to_midstate(mut bytes: AssetEntropyBytes) -> Asse
 }
 
 /// Converts bytes asset entropy to 32 bytes representation, without any changes
-pub fn convert_asset_entropy(val: impl AsRef<[u8]>) -> anyhow::Result<AssetEntropyBytes> {
+pub fn convert_bytes_to_asset_entropy(val: impl AsRef<[u8]>) -> anyhow::Result<AssetEntropyBytes> {
     let asset_entropy_vec = val.as_ref().to_vec();
     let asset_entropy: AssetEntropyBytes = asset_entropy_vec.try_into().map_err(|x: Vec<u8>| {
         anyhow!(
