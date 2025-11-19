@@ -22,6 +22,7 @@ pub struct DCDArguments {
     // Pricing parameters
     pub strike_price: u64,
     pub incentive_basis_points: u64,
+    pub fee_basis_points: u64,
 
     // Asset IDs (hex LE strings)
     pub collateral_asset_id_hex_le: String,
@@ -206,6 +207,7 @@ impl Default for DCDArguments {
             settlement_height: 0,
             strike_price: 0,
             incentive_basis_points: 0,
+            fee_basis_points: 0,
             collateral_asset_id_hex_le: "00".repeat(32),
             settlement_asset_id_hex_le: "00".repeat(32),
             filler_token_asset_id_hex_le: "00".repeat(32),
@@ -261,6 +263,10 @@ impl DCDArguments {
             (
                 WitnessName::from_str_unchecked("INCENTIVE_BASIS_POINTS"),
                 simplicityhl::Value::from(UIntValue::U64(self.incentive_basis_points)),
+            ),
+            (
+                WitnessName::from_str_unchecked("FEE_BASIS_POINTS"),
+                simplicityhl::Value::from(UIntValue::U64(self.fee_basis_points)),
             ),
             // Assets
             (

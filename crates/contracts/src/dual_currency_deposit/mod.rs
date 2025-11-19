@@ -213,6 +213,7 @@ mod dcd_merge_tests {
             settlement_height: 0,
             strike_price,
             incentive_basis_points,
+            fee_basis_points: 0,
             collateral_asset_id_hex_le: AssetId::LIQUID_BTC.to_string(),
             settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
             filler_token_asset_id_hex_le: first_asset_id.to_string(),
@@ -388,6 +389,7 @@ mod dcd_merge_tests {
             settlement_height: 0,
             strike_price,
             incentive_basis_points,
+            fee_basis_points: 0,
             collateral_asset_id_hex_le: AssetId::LIQUID_BTC.to_string(),
             settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
             filler_token_asset_id_hex_le: first_asset_id.to_string(),
@@ -511,6 +513,7 @@ mod dcd_merge_tests {
             settlement_height: 0,
             strike_price,
             incentive_basis_points,
+            fee_basis_points: 0,
             collateral_asset_id_hex_le: AssetId::LIQUID_BTC.to_string(),
             settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
             filler_token_asset_id_hex_le: first_asset_id.to_string(),
@@ -641,6 +644,7 @@ mod dcd_merge_tests {
             settlement_height: 0,
             strike_price,
             incentive_basis_points,
+            fee_basis_points: 0,
             collateral_asset_id_hex_le: AssetId::LIQUID_BTC.to_string(),
             settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
             filler_token_asset_id_hex_le: first_asset_id.to_string(),
@@ -769,6 +773,7 @@ mod dcd_merge_tests {
             settlement_height: 0,
             strike_price,
             incentive_basis_points,
+            fee_basis_points: 0,
             collateral_asset_id_hex_le: AssetId::LIQUID_BTC.to_string(),
             settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
             filler_token_asset_id_hex_le: first_asset_id.to_string(),
@@ -898,6 +903,7 @@ mod dcd_merge_tests {
             settlement_height,
             strike_price,
             incentive_basis_points,
+            fee_basis_points: 0,
             collateral_asset_id_hex_le: AssetId::LIQUID_BTC.to_string(),
             settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
             filler_token_asset_id_hex_le: first_asset_id.to_string(),
@@ -1035,6 +1041,7 @@ mod dcd_merge_tests {
             settlement_height,
             strike_price,
             incentive_basis_points,
+            fee_basis_points: 0,
             collateral_asset_id_hex_le: AssetId::LIQUID_BTC.to_string(),
             settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
             filler_token_asset_id_hex_le: first_asset_id.to_string(),
@@ -1172,6 +1179,7 @@ mod dcd_merge_tests {
             settlement_height,
             strike_price,
             incentive_basis_points,
+            fee_basis_points: 0,
             collateral_asset_id_hex_le: AssetId::LIQUID_BTC.to_string(),
             settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
             filler_token_asset_id_hex_le: first_asset_id.to_string(),
@@ -1269,6 +1277,135 @@ mod dcd_merge_tests {
     }
 
     #[test]
+    fn test_dcd_taker_settlement_path_with_fee_basis_points() -> Result<()> {
+        let now: u32 = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as u32;
+
+        let secp = Secp256k1::new();
+        let oracle_sk = secp256k1::SecretKey::from_slice(&[3u8; 32])?;
+        let oracle_kp = Keypair::from_secret_key(&secp, &oracle_sk);
+        let oracle_schnorr_kp = Keypair::from_secret_key(&secp, &oracle_sk);
+
+        let outpoint = OutPoint::new(Txid::from_slice(&[2; 32])?, 33);
+
+        let first_asset_entropy = get_new_asset_entropy(&outpoint, [1; 32]);
+        let second_asset_entropy = get_new_asset_entropy(&outpoint, [2; 32]);
+        let third_asset_entropy = get_new_asset_entropy(&outpoint, [3; 32]);
+
+        let first_asset_id = AssetId::from_entropy(first_asset_entropy); // FILLER
+        let second_asset_id = AssetId::from_entropy(second_asset_entropy); // GRANTOR_COLLATERAL
+        let third_asset_id = AssetId::from_entropy(third_asset_entropy); // GRANTOR_SETTLEMENT
+
+        let strike_price = 10;
+        let incentive_basis_points = 1000; // 10%
+        let fee_basis_points = 100;
+        let ratio_args =
+            DCDRatioArguments::build_from(1000, incentive_basis_points, strike_price, 10)?;
+
+        let settlement_height = 100u32;
+        let dcd_arguments = DCDArguments {
+            taker_funding_start_time: now,
+            taker_funding_end_time: now,
+            contract_expiry_time: now,
+            early_termination_end_time: now,
+            settlement_height,
+            strike_price,
+            incentive_basis_points,
+            fee_basis_points,
+            collateral_asset_id_hex_le: AssetId::LIQUID_BTC.to_string(),
+            settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
+            filler_token_asset_id_hex_le: first_asset_id.to_string(),
+            grantor_collateral_token_asset_id_hex_le: second_asset_id.to_string(),
+            grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
+            ratio_args: ratio_args.clone(),
+            oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
+        };
+
+        let keypair = Keypair::from_secret_key(
+            &Secp256k1::new(),
+            &secp256k1::SecretKey::from_slice(&[1u8; 32])?,
+        );
+        let dcd_address = get_dcd_address(
+            &keypair.x_only_public_key().0,
+            &dcd_arguments,
+            &AddressParams::LIQUID_TESTNET,
+        )?;
+
+        let amount_to_get = ratio_args.total_collateral_amount;
+        let filler_burn = ratio_args.filler_token_amount;
+        let fee_amount = amount_to_get * fee_basis_points / build_arguments::MAX_BASIS_POINTS;
+        let user_amount = amount_to_get - fee_amount;
+
+        let mut pst = PartiallySignedTransaction::new_v2();
+        pst.global.tx_data.fallback_locktime =
+            Some(elements::LockTime::from_height(settlement_height)?);
+        pst.add_input(Input::from_prevout(outpoint));
+        pst.inputs_mut()[0].sequence = Some(elements::Sequence::ENABLE_LOCKTIME_NO_RBF);
+
+        pst.add_output(Output::new_explicit(
+            Script::new_op_return("burn".as_bytes()),
+            filler_burn,
+            first_asset_id,
+            None,
+        ));
+
+        pst.add_output(Output::new_explicit(
+            dcd_address.script_pubkey(),
+            user_amount,
+            AssetId::LIQUID_BTC,
+            None,
+        ));
+
+        pst.add_output(Output::new_explicit(
+            Script::new(),
+            fee_amount,
+            AssetId::LIQUID_BTC,
+            None,
+        ));
+
+        let price = strike_price - 1; // price <= strike ensures taker receives collateral
+        let msg = oracle_msg(settlement_height, price);
+        let sig = secp.sign_schnorr(
+            &secp256k1::Message::from_digest_slice(&msg)?,
+            &oracle_schnorr_kp,
+        );
+
+        let program = get_compiled_dcd_program(&dcd_arguments);
+
+        let env = ElementsEnv::new(
+            Arc::new(pst.extract_tx()?),
+            vec![ElementsUtxo {
+                script_pubkey: dcd_address.script_pubkey(),
+                asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                value: Value::Explicit(amount_to_get),
+            }],
+            0,
+            simplicityhl::simplicity::Cmr::from_byte_array([0; 32]),
+            ControlBlock::from_slice(&[0xc0; 33])?,
+            None,
+            elements::BlockHash::all_zeros(),
+        );
+
+        let witness_values = build_dcd_witness(
+            TokenBranch::Taker,
+            DcdBranch::Settlement {
+                price_at_current_block_height: price,
+                oracle_sig: &sig,
+                index_to_spend: 0,
+                amount_to_burn: filler_burn,
+                amount_to_get,
+                is_change_needed: false,
+            },
+            MergeBranch::default(),
+        );
+
+        if run_program(&program, witness_values, env, RunnerLogLevel::Debug).is_err() {
+            panic!("expected success taker settlement with fees -- dcd price attested");
+        }
+
+        Ok(())
+    }
+
+    #[test]
     fn test_dcd_taker_settlement_path_price_gt_strike() -> Result<()> {
         let now: u32 = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as u32;
 
@@ -1301,6 +1438,7 @@ mod dcd_merge_tests {
             settlement_height,
             strike_price,
             incentive_basis_points,
+            fee_basis_points: 0,
             collateral_asset_id_hex_le: AssetId::LIQUID_BTC.to_string(),
             settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
             filler_token_asset_id_hex_le: first_asset_id.to_string(),
@@ -1429,6 +1567,7 @@ mod dcd_merge_tests {
             settlement_height: 0,
             strike_price,
             incentive_basis_points,
+            fee_basis_points: 0,
             collateral_asset_id_hex_le: AssetId::LIQUID_BTC.to_string(),
             settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
             filler_token_asset_id_hex_le: first_asset_id.to_string(),
@@ -1544,6 +1683,7 @@ mod dcd_merge_tests {
             settlement_height: 0,
             strike_price,
             incentive_basis_points,
+            fee_basis_points: 0,
             collateral_asset_id_hex_le: AssetId::LIQUID_BTC.to_string(),
             settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
             filler_token_asset_id_hex_le: first_asset_id.to_string(),
@@ -1665,6 +1805,7 @@ mod dcd_merge_tests {
             settlement_height: 0,
             strike_price,
             incentive_basis_points,
+            fee_basis_points: 0,
             collateral_asset_id_hex_le: AssetId::LIQUID_BTC.to_string(),
             settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
             filler_token_asset_id_hex_le: first_asset_id.to_string(),
