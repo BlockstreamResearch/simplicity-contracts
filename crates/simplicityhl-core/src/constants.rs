@@ -41,3 +41,5 @@ pub static LIQUID_TESTNET_GENESIS: std::sync::LazyLock<elements::BlockHash> =
             0x8e, 0xda, 0x71, 0xa7,
         ])
     });
+
+pub const PUBLIC_SECRET_BLINDER_KEY: [u8; 32] = [1; 32];

@@ -1,5 +1,4 @@
 use crate::modules::settings::Settings;
-
 use simplicityhl::elements::secp256k1_zkp as secp256k1;
 
 pub fn derive_secret_key_from_index(index: u32) -> secp256k1::SecretKey {

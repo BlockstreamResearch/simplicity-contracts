@@ -8,12 +8,14 @@ pub struct Store {
 }
 
 impl Store {
+    #[allow(unused)]
     pub fn load() -> anyhow::Result<Self> {
         Ok(Self {
             store: sled::open(".cache/store")?,
         })
     }
 
+    #[allow(unused)]
     pub fn import_arguments<A>(
         &self,
         taproot_pubkey_gen: &str,
@@ -35,6 +37,7 @@ impl Store {
         Ok(())
     }
 
+    #[allow(unused)]
     pub fn export_arguments(&self, taproot_pubkey_gen: &str) -> anyhow::Result<String> {
         if let Some(value) = self.store.get(taproot_pubkey_gen)? {
             return Ok(hex::encode(value));
@@ -43,11 +46,12 @@ impl Store {
         anyhow::bail!("Arguments not found");
     }
 
-    pub fn get_arguments<A>(&self, taproot_pubkey_gen: &str) -> anyhow::Result<A>
+    #[allow(unused)]
+    pub fn get_arguments<A>(&self, arg_name: &str) -> anyhow::Result<A>
     where
         A: Encodable + simplicityhl_core::encoding::Decode<()>,
     {
-        if let Some(value) = self.store.get(taproot_pubkey_gen)? {
+        if let Some(value) = self.store.get(arg_name)? {
             return Encodable::decode(&value).map_err(anyhow::Error::msg);
         }
 

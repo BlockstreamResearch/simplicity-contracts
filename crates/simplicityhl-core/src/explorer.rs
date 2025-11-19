@@ -66,6 +66,15 @@ fn extract_utxo(tx_hex: &str, vout: usize) -> anyhow::Result<TxOut> {
     Ok(transaction.output[vout].clone())
 }
 
+/// Extracts inner utxo value, if it's has value inside
+#[inline]
+pub fn obtain_utxo_value(tx_out: &TxOut) -> anyhow::Result<u64> {
+    tx_out
+        .value
+        .explicit()
+        .ok_or_else(|| anyhow::anyhow!("No value in utxo, check it, tx_out: {tx_out:?}"))
+}
+
 /// Resolve cache path for a given txid, ensuring directory exists
 fn cache_path_for_txid(txid: &str) -> Result<PathBuf> {
     let mut dir = std::env::current_dir()?;

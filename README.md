@@ -30,6 +30,12 @@ Workspace for prototyping and exercising Simplicity-based contracts on Liquid te
   - `storage` commands: initialize storage state and update state (mint/burn paths)
   - Uses a local sled store at `.cache/store` for argument persistence
 
+- `crates/contracts-adapter/contract_interaction` — Contract adapter for easy usage of code in other projects, not including local one. Implemented as standalone functions to use.
+  - `basic` commands for basic cli usage
+  - `options` commands for Options contract
+  - `storage` commands for storage use and update state
+  - `/dcd` commands wrapped into DcdManager to be able to execute DCD contract
+
 ### Note
 
 - Finalization and verification
@@ -123,10 +129,9 @@ Examples
   cargo run -p cli -- options import  --help
   cargo run -p cli -- options export  --help
   ```
+- Options flows (creation → funding → exercise/settlement/expiry/cancellation): see `crates/cli/README.md` for full command lines.
 
-- Options flows (creation → funding → exercise/settlement/expiry/cancellation): see [`crates/cli/README.md`](https://github.com/BlockstreamResearch/simplicity-contracts/blob/main/crates/cli/README.md) for full command lines and an example run with actual values.
-
-- Simple Storage flows, see [`crates/contracts/src/simple_storage/README.md`](https://github.com/BlockstreamResearch/simplicity-contracts/blob/main/crates/contracts/src/simple_storage/README.md) for the detailed explanation.
+- Simple Storage flows, see `crates/contracts/src/simple_storage/README.md` for the detailed explanation.
 
 ## Development tips
 
@@ -138,7 +143,7 @@ Examples
 
 - Debugging program execution
   - Use `RunnerLogLevel::{Debug,Trace}` and the provided trackers (`DefaultTracker`, `DebugTracker`) to observe `dbg!` values and jet traces during execution.
-  - **Logs can be printed only if the program is successfully executed!** 
+  - **Logs can be printed only if the program is successfully executed!**
 
 - Encoding and persistence
   - Enable the `encoding` feature in `simplicityhl-core` to use the `Encodable` trait for bincode encoding/decoding of arguments. The CLI persists encoded options arguments in a local sled store under `.cache/store`.
