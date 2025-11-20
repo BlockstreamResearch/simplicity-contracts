@@ -104,9 +104,7 @@ pub fn handle(
     let price = price_at_current_block_height;
 
     // Parse oracle signature
-    let oracle_sig = simplicityhl::simplicity::bitcoin::secp256k1::schnorr::Signature::from_slice(
-        &hex::decode(oracle_signature)?,
-    )?;
+    let oracle_sig = secp256k1::schnorr::Signature::from_slice(&hex::decode(oracle_signature)?)?;
 
     // Maker gets ALT when price <= strike
     let tx = if price <= dcd_arguments.strike_price {

@@ -89,9 +89,7 @@ pub fn handle(
     }
 
     let price = price_at_current_block_height;
-    let oracle_sig = simplicityhl::simplicity::bitcoin::secp256k1::schnorr::Signature::from_slice(
-        &hex::decode(oracle_signature)?,
-    )?;
+    let oracle_sig = secp256k1::schnorr::Signature::from_slice(&hex::decode(oracle_signature)?)?;
 
     let tx = if price <= dcd_arguments.strike_price {
         // Taker receives LBTC: amount_to_get = burn * FILLER_PER_SETTLEMENT_COLLATERAL

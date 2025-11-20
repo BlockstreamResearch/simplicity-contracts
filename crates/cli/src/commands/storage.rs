@@ -78,7 +78,6 @@ pub enum Storage {
 }
 
 impl Storage {
-    #[allow(unused)]
     pub fn handle(&self) -> Result<()> {
         match self {
             Storage::Import {

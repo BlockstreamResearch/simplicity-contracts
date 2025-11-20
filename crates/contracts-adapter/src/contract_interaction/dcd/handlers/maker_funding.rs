@@ -19,10 +19,6 @@ use crate::dcd::{BaseContractContext, COLLATERAL_ASSET_ID};
 use std::str::FromStr;
 use tracing::instrument;
 
-// Context -> keypair, blinding_key,
-// ContractContext -> genesis_block_hash, change_asset, address_params, dcd_taproot_pubkey_gen, dcd_arguments
-// MakerFundingContext -> everything else.
-
 pub struct InnerMakerFundingContext {
     pub filler_reissue_token_info: (OutPoint, AssetEntropyBytes),
     pub grantor_collateral_reissue_token_info: (OutPoint, AssetEntropyBytes),

@@ -207,7 +207,6 @@ pub enum Options {
 }
 
 impl Options {
-    #[allow(unused)]
     pub fn handle(&self) -> Result<()> {
         match self {
             Options::Import {
@@ -288,6 +287,7 @@ impl Options {
                     true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
                 }
+
                 Ok(())
             }
             Options::FundingOption {

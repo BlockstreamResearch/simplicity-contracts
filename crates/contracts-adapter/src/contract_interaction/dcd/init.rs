@@ -54,6 +54,7 @@ impl DcdManager {
             base_contract_context,
         )
     }
+
     pub fn maker_funding<
         T1: AsRef<[u8]> + Debug,
         T2: AsRef<[u8]> + Debug,
@@ -84,6 +85,7 @@ impl DcdManager {
             grantor_settlement_token_info.0,
             convert_bytes_to_asset_entropy(grantor_settlement_token_info.1)?,
         );
+
         let inner_context = InnerMakerFundingContext {
             filler_reissue_token_info: filler_token_info,
             grantor_collateral_reissue_token_info: grantor_collateral_token_info,
@@ -92,12 +94,14 @@ impl DcdManager {
             fee_utxo,
             fee_amount,
         };
+
         crate::dcd::handlers::maker_funding::handle(
             creation_context,
             &inner_context,
             dcd_contract_context,
         )
     }
+
     pub fn taker_funding(
         common_context: &CommonContext,
         taker_funding_context: TakerFundingContext,
@@ -109,6 +113,7 @@ impl DcdManager {
             dcd_contract_context,
         )
     }
+
     pub fn taker_early_termination(
         common_context: &CommonContext,
         taker_termination_early_context: TakerTerminationEarlyContext,
@@ -120,6 +125,7 @@ impl DcdManager {
             dcd_contract_context,
         )
     }
+
     pub fn maker_collateral_termination(
         common_context: &CommonContext,
         maker_termination_context: MakerTerminationCollateralContext,
@@ -131,6 +137,7 @@ impl DcdManager {
             dcd_contract_context,
         )
     }
+
     pub fn maker_settlement_termination(
         common_context: &CommonContext,
         maker_settlement_context: MakerTerminationSettlementContext,
@@ -142,6 +149,7 @@ impl DcdManager {
             dcd_contract_context,
         )
     }
+
     pub fn maker_settlement(
         common_context: &CommonContext,
         maker_settlement_context: MakerSettlementContext,
@@ -153,6 +161,7 @@ impl DcdManager {
             dcd_contract_context,
         )
     }
+
     pub fn taker_settlement(
         common_context: &CommonContext,
         taker_settlement_context: TakerSettlementContext,
@@ -164,6 +173,7 @@ impl DcdManager {
             dcd_contract_context,
         )
     }
+
     pub fn merge_tokens(
         common_context: &CommonContext,
         merge_tokens_context: MergeTokensContext,

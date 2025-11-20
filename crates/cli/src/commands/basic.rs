@@ -155,7 +155,6 @@ pub enum Basic {
 }
 
 impl Basic {
-    #[allow(unused)]
     pub fn handle(&self) -> anyhow::Result<()> {
         match self {
             Basic::Address { index } => {

@@ -397,7 +397,6 @@ pub enum Dcd {
 }
 
 impl Dcd {
-    #[allow(unused)]
     pub fn handle(&self) -> Result<()> {
         match self {
             Dcd::Import {
@@ -406,7 +405,7 @@ impl Dcd {
             } => Store::load()?.import_arguments(
                 taproot_pubkey_gen,
                 encoded_dcd_arguments,
-                &simplicityhl::simplicity::elements::AddressParams::LIQUID_TESTNET,
+                &AddressParams::LIQUID_TESTNET,
                 &contracts::get_dcd_address,
             ),
             Dcd::Export { taproot_pubkey_gen } => {

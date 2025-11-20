@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use simplicityhl::simplicity::bitcoin::key::Keypair;
 use simplicityhl::simplicity::jet::elements::{ElementsEnv, ElementsUtxo};
-use simplicityhl::{CompiledProgram, elements};
+use simplicityhl::CompiledProgram;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -42,8 +42,8 @@ pub fn update_storage(
     storage_arguments: &StorageArguments,
     address_params: &'static AddressParams,
     lbtc_asset: AssetId,
-    genesis_block_hash: elements::BlockHash,
-) -> anyhow::Result<Transaction> {
+    genesis_block_hash: BlockHash,
+) -> Result<Transaction> {
     let storage_utxo_tx_out = fetch_utxo(storage_utxo)?;
     let reissuance_token_tx_out = fetch_utxo(reissuance_token_utxo)?;
     let fee_utxo_tx_out = fetch_utxo(fee_utxo)?;
@@ -241,8 +241,8 @@ pub fn init_state(
     fee_amount: u64,
     address_params: &'static AddressParams,
     lbtc_asset: AssetId,
-    genesis_block_hash: elements::BlockHash,
-) -> anyhow::Result<(
+    genesis_block_hash: BlockHash,
+) -> Result<(
     AssetEntropyBytes,
     StorageArguments,
     TaprootPubkeyGen,

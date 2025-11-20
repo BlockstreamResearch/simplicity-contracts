@@ -91,7 +91,6 @@ pub fn handle(
         pst.add_input(in2);
     }
 
-    // Outputs per SIMF indices
     if is_change_needed {
         // 0: collateral change back to covenant
         pst.add_output(Output::new_explicit(
