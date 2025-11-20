@@ -1,8 +1,8 @@
 use anyhow::Result;
 
+use simplicityhl::CompiledProgram;
 use simplicityhl::simplicity::bitcoin::key::Keypair;
 use simplicityhl::simplicity::jet::elements::{ElementsEnv, ElementsUtxo};
-use simplicityhl::CompiledProgram;
 use std::collections::HashMap;
 use std::sync::Arc;
 
