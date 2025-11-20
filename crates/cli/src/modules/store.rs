@@ -43,11 +43,11 @@ impl Store {
         anyhow::bail!("Arguments not found");
     }
 
-    pub fn get_arguments<A>(&self, taproot_pubkey_gen: &str) -> anyhow::Result<A>
+    pub fn get_arguments<A>(&self, arg_name: &str) -> anyhow::Result<A>
     where
         A: Encodable + simplicityhl_core::encoding::Decode<()>,
     {
-        if let Some(value) = self.store.get(taproot_pubkey_gen)? {
+        if let Some(value) = self.store.get(arg_name)? {
             return Encodable::decode(&value).map_err(anyhow::Error::msg);
         }
 

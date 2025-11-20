@@ -6,6 +6,7 @@
 .idea/
 .vscode/
 .cache
+.env
 
 # Debugging data
 logs.md
