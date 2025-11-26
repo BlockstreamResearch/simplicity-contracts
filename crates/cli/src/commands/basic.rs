@@ -3,6 +3,7 @@ use anyhow::anyhow;
 use crate::modules::store::Store;
 use crate::modules::utils::derive_keypair;
 use clap::Subcommand;
+use contracts_adapter::basic;
 use contracts_adapter::basic::{IssueAssetResponse, ReissueAssetResponse};
 use simplicityhl::elements::hashes::sha256;
 use simplicityhl::simplicity::elements::pset::serialize::Serialize;
@@ -77,6 +78,23 @@ pub enum Basic {
         #[arg(long = "fee-sats")]
         fee_amount: u64,
         /// Account index to use for signing input
+        #[arg(long = "account-index", default_value_t = 0)]
+        account_index: u32,
+        /// When set, broadcast the built transaction via Esplora and print txid
+        #[arg(long = "broadcast")]
+        broadcast: bool,
+    },
+    #[command(about = "Splits given utxo into given amount of outs")]
+    SplitNativeAny {
+        /// Parts on which utxo would be split
+        #[arg(long = "split-parts")]
+        split_parts: u64,
+        /// Fee utxo
+        #[arg(long = "fee-utxo")]
+        fee_utxo: OutPoint,
+        #[arg(long = "fee-amount", default_value_t = 500)]
+        fee_amount: u64,
+        /// Account index to use for change address
         #[arg(long = "account-index", default_value_t = 0)]
         account_index: u32,
         /// When set, broadcast the built transaction via Esplora and print txid
@@ -256,6 +274,32 @@ impl Basic {
                 match broadcast {
                     true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
+                }
+
+                Ok(())
+            }
+            Basic::SplitNativeAny {
+                split_parts: split_amount,
+                fee_utxo,
+                fee_amount,
+                account_index,
+                broadcast,
+            } => {
+                let keypair = derive_keypair(*account_index);
+
+                let transaction = basic::split_native_any(
+                    keypair,
+                    *fee_utxo,
+                    *split_amount,
+                    *fee_amount,
+                    &AddressParams::LIQUID_TESTNET,
+                    LIQUID_TESTNET_BITCOIN_ASSET,
+                    *LIQUID_TESTNET_GENESIS,
+                )?;
+
+                match broadcast {
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&transaction)?),
+                    false => println!("{}", transaction.serialize().to_lower_hex_string()),
                 }
 
                 Ok(())

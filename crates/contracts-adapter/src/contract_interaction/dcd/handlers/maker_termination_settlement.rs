@@ -57,7 +57,7 @@ pub fn handle(
 
     anyhow::ensure!(
         grantor_settlement_amount_to_burn <= available_grantor_settle,
-        "grantor settlement burn amount exceeds available"
+        "grantor settlement burn amount exceeds available, has to be at least: {grantor_settlement_amount_to_burn}, got: {available_grantor_settle}"
     );
 
     // amount_to_get = burn * GRANTOR_SETTLEMENT_PER_DEPOSITED_ASSET
@@ -68,7 +68,7 @@ pub fn handle(
 
     anyhow::ensure!(
         amount_to_get <= available_settlement,
-        "required settlement exceeds available"
+        "required settlement exceeds available, has to be at least: {amount_to_get}, got: {available_settlement}"
     );
 
     let is_change_needed = available_settlement != amount_to_get;
@@ -129,7 +129,10 @@ pub fn handle(
     }
 
     // fee change + fee
-    anyhow::ensure!(fee_amount <= total_fee_input, "fee exceeds input value");
+    anyhow::ensure!(
+        fee_amount <= total_fee_input,
+        "fee exceeds input value, has to be at least: {fee_amount}, got: {total_fee_input}"
+    );
     pst.add_output(Output::new_explicit(
         change_recipient.script_pubkey(),
         total_fee_input - fee_amount,

@@ -100,7 +100,7 @@ pub fn handle(
 
         anyhow::ensure!(
             amount_to_get <= available_onchain_asset,
-            "required collateral exceeds available"
+            "required collateral exceeds available, has to be at least: {amount_to_get}, got {available_onchain_asset}",
         );
 
         let is_change_needed = available_onchain_asset != amount_to_get;
@@ -140,7 +140,10 @@ pub fn handle(
             ));
         }
 
-        anyhow::ensure!(fee_amount <= total_fee_input, "fee exceeds input value");
+        anyhow::ensure!(
+            fee_amount <= total_fee_input,
+            "fee exceeds input value, has to be at least: {fee_amount}, got: {total_fee_input}"
+        );
         pst.add_output(Output::new_explicit(
             change_recipient.script_pubkey(),
             total_fee_input - fee_amount,
@@ -192,7 +195,7 @@ pub fn handle(
 
         anyhow::ensure!(
             amount_to_get <= available_onchain_asset,
-            "required settlement exceeds available"
+            "required settlement exceeds available, has to be at least: {amount_to_get}, got: {available_onchain_asset}"
         );
 
         let is_change_needed = available_onchain_asset != amount_to_get;
@@ -232,7 +235,10 @@ pub fn handle(
             ));
         }
 
-        anyhow::ensure!(fee_amount <= total_fee_input, "fee exceeds input value");
+        anyhow::ensure!(
+            fee_amount <= total_fee_input,
+            "fee exceeds input value, has to be at least: {fee_amount}, got: {total_fee_input}"
+        );
         pst.add_output(Output::new_explicit(
             change_recipient.script_pubkey(),
             total_fee_input - fee_amount,

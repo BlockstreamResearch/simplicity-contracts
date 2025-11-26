@@ -1,5 +1,6 @@
 use anyhow::Result;
 use reqwest::blocking::Client;
+use simplicityhl::elements::AssetId;
 use simplicityhl::simplicity::elements::{OutPoint, Transaction, TxOut, encode};
 use std::{fs, path::PathBuf, time::Duration};
 
@@ -82,6 +83,20 @@ pub fn obtain_utxo_value(tx_out: &TxOut) -> anyhow::Result<u64> {
         .value
         .explicit()
         .ok_or_else(|| anyhow::anyhow!("No value in utxo, check it, tx_out: {tx_out:?}"))
+}
+
+/// Extracts inner utxo value, if it has value inside
+///
+/// # Errors
+/// Returns error if the UTXO asset is confidential (blinded).
+#[inline]
+pub fn obtain_utxo_asset_id(tx_out: &TxOut) -> anyhow::Result<AssetId> {
+    tx_out.asset.explicit().ok_or_else(|| {
+        anyhow::anyhow!(
+            "No asset in utxo, check it, tx_out: {tx_out:?}, committed asset: {:?}",
+            tx_out.asset
+        )
+    })
 }
 
 /// Resolve cache path for a given txid, ensuring directory exists
