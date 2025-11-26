@@ -1,2 +1,4 @@
-mod commands;
-mod modules;
+#![warn(clippy::all, clippy::pedantic)]
+
+pub mod commands;
+pub mod modules;

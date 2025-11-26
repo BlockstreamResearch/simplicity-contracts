@@ -31,7 +31,7 @@ use simplicityhl::simplicity::elements::AddressParams;
 pub enum Dcd {
     /// Import previously-encoded DCD arguments and bind to taproot pubkey gen
     Import {
-        /// TaprootPubkeyGen string
+        /// `TaprootPubkeyGen` string
         #[arg(long = "taproot-pubkey-gen")]
         taproot_pubkey_gen: String,
         /// Encoded DCD arguments (hex)
@@ -40,7 +40,7 @@ pub enum Dcd {
     },
     /// Export stored DCD arguments (hex) by taproot pubkey gen
     Export {
-        /// TaprootPubkeyGen string
+        /// `TaprootPubkeyGen` string
         #[arg(long = "taproot-pubkey-gen")]
         taproot_pubkey_gen: String,
     },
@@ -52,7 +52,7 @@ pub enum Dcd {
         /// Settlement height
         #[arg(long = "settlement-height")]
         settlement_height: u32,
-        /// Oracle account index to derive key from SEED_HEX
+        /// Oracle account index to derive key from `SEED_HEX`
         #[arg(long = "oracle-account-index")]
         oracle_account_index: u32,
     },
@@ -180,6 +180,9 @@ pub enum Dcd {
         /// Oracle public key
         #[arg(long = "oracle-public-key")]
         oracle_public_key: String,
+        /// Fee script hash (hex LE)
+        #[arg(long = "fee-script-hash")]
+        fee_script_hash: String,
         /// Fee amount
         #[arg(long = "fee-amount")]
         fee_amount: u64,
@@ -397,7 +400,11 @@ pub enum Dcd {
 }
 
 impl Dcd {
-    #[allow(unused)]
+    /// Handle DCD CLI subcommand execution.
+    ///
+    /// # Errors
+    /// Returns error if the subcommand operation fails.
+    #[expect(clippy::too_many_lines)]
     pub fn handle(&self) -> Result<()> {
         match self {
             Dcd::Import {
@@ -406,7 +413,7 @@ impl Dcd {
             } => Store::load()?.import_arguments(
                 taproot_pubkey_gen,
                 encoded_dcd_arguments,
-                &simplicityhl::simplicity::elements::AddressParams::LIQUID_TESTNET,
+                &AddressParams::LIQUID_TESTNET,
                 &contracts::get_dcd_address,
             ),
             Dcd::Export { taproot_pubkey_gen } => {
@@ -600,6 +607,7 @@ impl Dcd {
                 strike_price,
                 settlement_asset_id,
                 oracle_public_key,
+                fee_script_hash,
                 fee_amount,
                 account_index,
                 broadcast,
@@ -636,7 +644,8 @@ impl Dcd {
                             strike_price: *strike_price,
                             collateral_asset_id: COLLATERAL_ASSET_ID.to_hex(),
                             settlement_asset_id: settlement_asset_id.clone(),
-                            oracle_public_key: oracle_public_key.to_string(),
+                            oracle_public_key: oracle_public_key.clone(),
+                            fee_script_hash: fee_script_hash.clone(),
                         },
                         fee_amount: *fee_amount,
                     },
@@ -647,7 +656,7 @@ impl Dcd {
                     },
                 )?;
 
-                println!("dcd_taproot_pubkey_gen: {}", dcd_taproot_pubkey_gen);
+                println!("dcd_taproot_pubkey_gen: {dcd_taproot_pubkey_gen}");
 
                 store.import_arguments(
                     &dcd_taproot_pubkey_gen.to_string(),
@@ -657,17 +666,17 @@ impl Dcd {
                 )?;
 
                 store.store.insert(
-                    format!("first_entropy_{}", dcd_taproot_pubkey_gen),
+                    format!("first_entropy_{dcd_taproot_pubkey_gen}"),
                     first_asset_entropy.as_bytes(),
                 )?;
 
                 store.store.insert(
-                    format!("second_entropy_{}", dcd_taproot_pubkey_gen),
+                    format!("second_entropy_{dcd_taproot_pubkey_gen}"),
                     second_asset_entropy.as_bytes(),
                 )?;
 
                 store.store.insert(
-                    format!("third_entropy_{}", dcd_taproot_pubkey_gen),
+                    format!("third_entropy_{dcd_taproot_pubkey_gen}"),
                     third_asset_entropy.as_bytes(),
                 )?;
 
@@ -697,7 +706,7 @@ impl Dcd {
 
                 let Some(first_entropy_hex) = store
                     .store
-                    .get(format!("first_entropy_{}", dcd_taproot_pubkey_gen))?
+                    .get(format!("first_entropy_{dcd_taproot_pubkey_gen}"))?
                 else {
                     anyhow::bail!("First entropy not found");
                 };
@@ -706,7 +715,7 @@ impl Dcd {
 
                 let Some(second_entropy_hex) = store
                     .store
-                    .get(format!("second_entropy_{}", dcd_taproot_pubkey_gen))?
+                    .get(format!("second_entropy_{dcd_taproot_pubkey_gen}"))?
                 else {
                     anyhow::bail!("Second entropy not found");
                 };
@@ -715,7 +724,7 @@ impl Dcd {
 
                 let Some(third_entropy_hex) = store
                     .store
-                    .get(format!("third_entropy_{}", dcd_taproot_pubkey_gen))?
+                    .get(format!("third_entropy_{dcd_taproot_pubkey_gen}"))?
                 else {
                     anyhow::bail!("Third entropy not found");
                 };
@@ -1061,7 +1070,7 @@ impl Dcd {
                         fee_amount: *price_at_current_block_height,
                         price_at_current_block_height: *filler_amount_to_burn,
                         filler_amount_to_burn: *fee_amount,
-                        oracle_signature: oracle_signature.to_string(),
+                        oracle_signature: oracle_signature.clone(),
                     },
                     &DcdContractContext {
                         dcd_taproot_pubkey_gen: taproot_pubkey_gen,

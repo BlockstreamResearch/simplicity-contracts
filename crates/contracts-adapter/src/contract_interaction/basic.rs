@@ -31,7 +31,14 @@ pub struct ReissueAssetResponse {
     pub reissuance_asset_id: AssetId,
 }
 
-#[allow(clippy::too_many_arguments)]
+/// Reissue an existing asset by spending its reissuance token.
+///
+/// # Errors
+/// Returns error if UTXO fetch fails, fee exceeds input, or transaction finalization fails.
+///
+/// # Panics
+/// Panics if the fee UTXO value is confidential.
+#[expect(clippy::too_many_arguments)]
 pub fn reissue_asset(
     keypair: &Keypair,
     blinding_key: &Keypair,
@@ -140,7 +147,15 @@ pub fn reissue_asset(
         reissuance_asset_id,
     })
 }
-#[allow(clippy::too_many_arguments)]
+
+/// Issue a new asset with given amount.
+///
+/// # Errors
+/// Returns error if UTXO fetch fails, fee exceeds input, or transaction finalization fails.
+///
+/// # Panics
+/// Panics if UTXO value is confidential.
+#[expect(clippy::too_many_arguments)]
 pub fn issue_asset(
     keypair: &Keypair,
     blinding_key: &Keypair,
@@ -242,7 +257,11 @@ pub fn issue_asset(
     })
 }
 
-#[allow(clippy::too_many_arguments)]
+/// Transfer an asset to another address.
+///
+/// # Errors
+/// Returns error if UTXO fetch fails, amount exceeds balance, or transaction finalization fails.
+#[expect(clippy::too_many_arguments)]
 pub fn transfer_asset(
     keypair: &Keypair,
     asset_utxo_outpoint: OutPoint,
@@ -269,9 +288,8 @@ pub fn transfer_asset(
         ));
     }
 
-    let explicit_asset_id = match asset_utxo_tx_out.asset {
-        Asset::Explicit(id) => id,
-        _ => return Err(anyhow!("asset utxo must be explicit (unblinded) asset")),
+    let Asset::Explicit(explicit_asset_id) = asset_utxo_tx_out.asset else {
+        return Err(anyhow!("asset utxo must be explicit (unblinded) asset"));
     };
 
     // Ensure the fee input is LBTC
@@ -323,7 +341,11 @@ pub fn transfer_asset(
     Ok(tx)
 }
 
-#[allow(clippy::too_many_arguments)]
+/// Split a native UTXO into three outputs of equal amount plus change.
+///
+/// # Errors
+/// Returns error if UTXO fetch fails or transaction finalization fails.
+#[expect(clippy::too_many_arguments)]
 pub fn split_native_three(
     keypair: &Keypair,
     utxo_outpoint: OutPoint,
@@ -384,7 +406,11 @@ pub fn split_native_three(
     Ok(tx)
 }
 
-#[allow(clippy::too_many_arguments)]
+/// Split a native UTXO into two outputs: specified amount and change.
+///
+/// # Errors
+/// Returns error if UTXO fetch fails or transaction finalization fails.
+#[expect(clippy::too_many_arguments)]
 pub fn split_native(
     keypair: &Keypair,
     utxo_outpoint: OutPoint,
@@ -436,9 +462,13 @@ pub fn split_native(
     Ok(tx)
 }
 
+/// Split a native UTXO into any number of outputs + change
+///
+/// # Errors
+/// Returns error if UTXO fetch fails or transaction finalization fails.
 #[instrument(skip_all, level = "debug", err)]
 pub fn split_native_any(
-    keypair: secp256k1::Keypair,
+    keypair: Keypair,
     fee_utxo: OutPoint,
     parts_to_split: u64,
     mut fee_amount: u64,
@@ -494,7 +524,11 @@ pub fn split_native_any(
     Ok(tx)
 }
 
-#[allow(clippy::too_many_arguments)]
+/// Transfer native asset (LBTC) to another address.
+///
+/// # Errors
+/// Returns error if amount+fee exceeds balance or transaction finalization fails.
+#[expect(clippy::too_many_arguments)]
 pub fn transfer_native(
     keypair: &Keypair,
     utxo_outpoint: OutPoint,

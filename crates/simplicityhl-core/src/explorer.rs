@@ -6,6 +6,9 @@ use std::{fs, path::PathBuf, time::Duration};
 
 /// Broadcast a transaction to Liquid testnet Esplora.
 /// Returns the txid string on success.
+///
+/// # Errors
+/// Returns error if the HTTP request fails or the server rejects the transaction.
 pub fn broadcast_tx(tx: &Transaction) -> Result<String> {
     let client = reqwest::blocking::Client::new();
     let tx_hex = encode::serialize_hex(tx);
@@ -30,7 +33,10 @@ pub fn broadcast_tx(tx: &Transaction) -> Result<String> {
     Ok(text.trim().to_string())
 }
 
-/// Fetch UTXO given the txid and vout
+/// Fetch UTXO given the txid and vout from Esplora with local caching.
+///
+/// # Errors
+/// Returns error if the network request fails or the transaction cannot be decoded.
 pub fn fetch_utxo(outpoint: OutPoint) -> anyhow::Result<TxOut> {
     // Check file cache first
     let txid_str = outpoint.txid.to_string();
@@ -61,13 +67,16 @@ fn extract_utxo(tx_hex: &str, vout: usize) -> anyhow::Result<TxOut> {
     let transaction: Transaction = encode::deserialize(&tx_bytes)?;
 
     if vout >= transaction.output.len() {
-        return Err(anyhow::anyhow!("Invalid vout index: {}", vout));
+        return Err(anyhow::anyhow!("Invalid vout index: {vout}"));
     }
 
     Ok(transaction.output[vout].clone())
 }
 
-/// Extracts inner utxo value, if it's has value inside
+/// Extracts inner utxo value if it has an explicit value.
+///
+/// # Errors
+/// Returns error if the UTXO value is confidential (blinded).
 #[inline]
 pub fn obtain_utxo_value(tx_out: &TxOut) -> anyhow::Result<u64> {
     tx_out
@@ -76,7 +85,10 @@ pub fn obtain_utxo_value(tx_out: &TxOut) -> anyhow::Result<u64> {
         .ok_or_else(|| anyhow::anyhow!("No value in utxo, check it, tx_out: {tx_out:?}"))
 }
 
-/// Extracts inner utxo value, if it's has value inside
+/// Extracts inner utxo value, if it has value inside
+///
+/// # Errors
+/// Returns error if the UTXO asset is confidential (blinded).
 #[inline]
 pub fn obtain_utxo_asset_id(tx_out: &TxOut) -> anyhow::Result<AssetId> {
     tx_out.asset.explicit().ok_or_else(|| {
@@ -95,6 +107,6 @@ fn cache_path_for_txid(txid: &str) -> Result<PathBuf> {
     dir.push("tx");
     fs::create_dir_all(&dir)?;
     let mut path = dir;
-    path.push(format!("{}.hex", txid));
+    path.push(format!("{txid}.hex"));
     Ok(path)
 }

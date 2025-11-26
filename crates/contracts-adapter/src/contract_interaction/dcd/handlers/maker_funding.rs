@@ -20,10 +20,6 @@ use anyhow::ensure;
 use std::str::FromStr;
 use tracing::instrument;
 
-// Context -> keypair, blinding_key,
-// ContractContext -> genesis_block_hash, change_asset, address_params, dcd_taproot_pubkey_gen, dcd_arguments
-// MakerFundingContext -> everything else.
-
 pub struct InnerMakerFundingContext {
     pub filler_reissue_token_info: (OutPoint, AssetEntropyBytes),
     pub grantor_collateral_reissue_token_info: (OutPoint, AssetEntropyBytes),
@@ -34,6 +30,7 @@ pub struct InnerMakerFundingContext {
 }
 
 #[instrument(level = "debug", skip_all, err)]
+#[expect(clippy::too_many_lines)]
 pub fn handle(
     context: &CreationContext,
     funding_context: &InnerMakerFundingContext,
@@ -326,7 +323,7 @@ pub fn handle(
 
     let witness_values = build_dcd_witness(
         TokenBranch::default(),
-        DcdBranch::MakerFunding {
+        &DcdBranch::MakerFunding {
             principal_collateral_amount: dcd_arguments.ratio_args.principal_collateral_amount,
             principal_asset_amount: dcd_arguments.ratio_args.principal_asset_amount,
             interest_collateral_amount: dcd_arguments.ratio_args.interest_collateral_amount,
@@ -336,9 +333,9 @@ pub fn handle(
     );
 
     let tx = finalize_transaction_inner(
-        pst,
+        &pst,
         keypair,
-        dcd_program,
+        &dcd_program,
         dcd_taproot_pubkey_gen,
         &utxos,
         witness_values,
@@ -353,9 +350,9 @@ pub fn handle(
 
 #[allow(clippy::too_many_arguments)]
 fn finalize_transaction_inner(
-    pst: PartiallySignedTransaction,
+    pst: &PartiallySignedTransaction,
     keypair: &secp256k1::Keypair,
-    dcd_program: CompiledProgram,
+    dcd_program: &CompiledProgram,
     taproot_pubkey_gen: &TaprootPubkeyGen,
     utxos: &[TxOut; 5],
     witness_values: WitnessValues,
@@ -363,10 +360,10 @@ fn finalize_transaction_inner(
     genesis_block_hash: BlockHash,
 ) -> anyhow::Result<Transaction> {
     let taproot_x_only_pubkey = taproot_pubkey_gen.pubkey.to_x_only_pubkey();
-    let tx = pst.extract_tx()?;
+    let tx = pst.clone().extract_tx()?;
     let tx = finalize_transaction(
         tx,
-        &dcd_program,
+        dcd_program,
         &taproot_x_only_pubkey,
         utxos,
         0,
@@ -376,7 +373,7 @@ fn finalize_transaction_inner(
     )?;
     let tx = finalize_transaction(
         tx,
-        &dcd_program,
+        dcd_program,
         &taproot_x_only_pubkey,
         utxos,
         1,
@@ -386,7 +383,7 @@ fn finalize_transaction_inner(
     )?;
     let tx = finalize_transaction(
         tx,
-        &dcd_program,
+        dcd_program,
         &taproot_x_only_pubkey,
         utxos,
         2,

@@ -8,14 +8,20 @@ pub struct Store {
 }
 
 impl Store {
-    #[allow(unused)]
+    /// Load or create the local argument store.
+    ///
+    /// # Errors
+    /// Returns error if the store database cannot be opened.
     pub fn load() -> anyhow::Result<Self> {
         Ok(Self {
             store: sled::open(".cache/store")?,
         })
     }
 
-    #[allow(unused)]
+    /// Import and validate encoded arguments into the store.
+    ///
+    /// # Errors
+    /// Returns error if hex decoding, validation, or storage fails.
     pub fn import_arguments<A>(
         &self,
         taproot_pubkey_gen: &str,
@@ -37,7 +43,10 @@ impl Store {
         Ok(())
     }
 
-    #[allow(unused)]
+    /// Export stored arguments as hex-encoded string.
+    ///
+    /// # Errors
+    /// Returns error if arguments are not found.
     pub fn export_arguments(&self, taproot_pubkey_gen: &str) -> anyhow::Result<String> {
         if let Some(value) = self.store.get(taproot_pubkey_gen)? {
             return Ok(hex::encode(value));
@@ -46,7 +55,10 @@ impl Store {
         anyhow::bail!("Arguments not found");
     }
 
-    #[allow(unused)]
+    /// Retrieve and decode arguments by name.
+    ///
+    /// # Errors
+    /// Returns error if arguments are not found or decoding fails.
     pub fn get_arguments<A>(&self, arg_name: &str) -> anyhow::Result<A>
     where
         A: Encodable + simplicityhl_core::encoding::Decode<()>,

@@ -19,11 +19,20 @@ pub use build_witness::build_storage_witness;
 
 pub const SIMPLE_STORAGE_SOURCE: &str = include_str!("source_simf/simple_storage.simf");
 
+/// Get the storage template program for instantiation.
+///
+/// # Panics
+/// Panics if the embedded source fails to compile (should never happen).
+#[must_use]
 pub fn get_storage_template_program() -> TemplateProgram {
     TemplateProgram::new(SIMPLE_STORAGE_SOURCE)
         .expect("INTERNAL: expected to compile successfully.")
 }
 
+/// Derive P2TR address for a storage contract.
+///
+/// # Errors
+/// Returns error if program compilation fails.
 pub fn get_storage_address(
     public_key: &XOnlyPublicKey,
     args: &StorageArguments,
@@ -40,6 +49,11 @@ fn get_storage_program(args: &StorageArguments) -> anyhow::Result<CompiledProgra
     load_program(SIMPLE_STORAGE_SOURCE, build_storage_arguments(args))
 }
 
+/// Get compiled storage program, panicking on failure.
+///
+/// # Panics
+/// Panics if program instantiation fails.
+#[must_use]
 pub fn get_storage_compiled_program(args: &StorageArguments) -> CompiledProgram {
     let program = get_storage_template_program();
 
@@ -48,11 +62,15 @@ pub fn get_storage_compiled_program(args: &StorageArguments) -> CompiledProgram 
         .unwrap()
 }
 
+/// Execute storage program with signature and new value.
+///
+/// # Errors
+/// Returns error if program execution fails.
 pub fn execute_storage_program(
     new_value: u64,
     keypair: &Keypair,
     compiled_program: &CompiledProgram,
-    env: ElementsEnv<Arc<Transaction>>,
+    env: &ElementsEnv<Arc<Transaction>>,
 ) -> anyhow::Result<Arc<RedeemNode<Elements>>> {
     let sighash_all = secp256k1::Message::from_digest(env.c_tx_env().sighash_all().to_byte_array());
 
@@ -143,9 +161,10 @@ mod simple_storage_tests {
             elements::BlockHash::all_zeros(),
         );
 
-        if execute_storage_program(new_value, &keypair, &program, env).is_err() {
-            panic!("expected success mint path");
-        }
+        assert!(
+            execute_storage_program(new_value, &keypair, &program, &env).is_ok(),
+            "expected success mint path"
+        );
 
         Ok(())
     }
@@ -209,9 +228,10 @@ mod simple_storage_tests {
             elements::BlockHash::all_zeros(),
         );
 
-        if execute_storage_program(new_value, &keypair, &program, env).is_err() {
-            panic!("expected success burn path");
-        }
+        assert!(
+            execute_storage_program(new_value, &keypair, &program, &env).is_ok(),
+            "expected success burn path"
+        );
 
         Ok(())
     }

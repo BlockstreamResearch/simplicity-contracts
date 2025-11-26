@@ -17,7 +17,7 @@ use simplicityhl::simplicity::hex::DisplayHex;
 
 #[derive(Subcommand, Debug)]
 pub enum Options {
-    /// Compute Options address and OPTION_SCRIPT_HASH for creation program
+    /// Compute Options address and `OPTION_SCRIPT_HASH` for creation program
     CreationOption {
         /// First fee utxo
         #[arg(long = "first-fee-utxo")]
@@ -207,7 +207,11 @@ pub enum Options {
 }
 
 impl Options {
-    #[allow(unused)]
+    /// Handle options CLI subcommand execution.
+    ///
+    /// # Errors
+    /// Returns error if the subcommand operation fails.
+    #[expect(clippy::too_many_lines)]
     pub fn handle(&self) -> Result<()> {
         match self {
             Options::Import {
@@ -272,13 +276,13 @@ impl Options {
                 )?;
 
                 store.store.insert(
-                    format!("first_entropy_{}", options_taproot_pubkey_gen),
+                    format!("first_entropy_{options_taproot_pubkey_gen}"),
                     get_new_asset_entropy(first_fee_utxo, first_asset_entropy)
                         .to_hex()
                         .as_bytes(),
                 )?;
                 store.store.insert(
-                    format!("second_entropy_{}", options_taproot_pubkey_gen),
+                    format!("second_entropy_{options_taproot_pubkey_gen}"),
                     get_new_asset_entropy(second_fee_utxo, second_asset_entropy)
                         .to_hex()
                         .as_bytes(),
@@ -288,6 +292,7 @@ impl Options {
                     true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
                 }
+
                 Ok(())
             }
             Options::FundingOption {
@@ -307,13 +312,13 @@ impl Options {
 
                 let Some(first_entropy_hex) = store
                     .store
-                    .get(format!("first_entropy_{}", option_taproot_pubkey_gen))?
+                    .get(format!("first_entropy_{option_taproot_pubkey_gen}"))?
                 else {
                     anyhow::bail!("First entropy not found");
                 };
                 let Some(second_entropy_hex) = store
                     .store
-                    .get(format!("second_entropy_{}", option_taproot_pubkey_gen))?
+                    .get(format!("second_entropy_{option_taproot_pubkey_gen}"))?
                 else {
                     anyhow::bail!("Second entropy not found");
                 };

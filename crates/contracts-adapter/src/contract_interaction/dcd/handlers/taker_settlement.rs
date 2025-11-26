@@ -15,6 +15,7 @@ use simplicityhl_core::{
 };
 use std::str::FromStr;
 
+#[expect(clippy::too_many_lines)]
 pub fn handle(
     common_context: &CommonContext,
     taker_settlement_context: TakerSettlementContext,
@@ -89,9 +90,7 @@ pub fn handle(
     }
 
     let price = price_at_current_block_height;
-    let oracle_sig = simplicityhl::simplicity::bitcoin::secp256k1::schnorr::Signature::from_slice(
-        &hex::decode(oracle_signature)?,
-    )?;
+    let oracle_sig = secp256k1::schnorr::Signature::from_slice(&hex::decode(oracle_signature)?)?;
 
     let tx = if price <= dcd_arguments.strike_price {
         // Taker receives LBTC: amount_to_get = burn * FILLER_PER_SETTLEMENT_COLLATERAL
@@ -160,7 +159,7 @@ pub fn handle(
         let dcd_program = get_dcd_program(dcd_arguments)?;
         let witness_values = build_dcd_witness(
             TokenBranch::Taker,
-            DcdBranch::Settlement {
+            &DcdBranch::Settlement {
                 price_at_current_block_height: price,
                 oracle_sig: &oracle_sig,
                 index_to_spend: 0,
@@ -255,7 +254,7 @@ pub fn handle(
         let dcd_program = get_dcd_program(dcd_arguments)?;
         let witness_values = build_dcd_witness(
             TokenBranch::Taker,
-            DcdBranch::Settlement {
+            &DcdBranch::Settlement {
                 price_at_current_block_height: price,
                 oracle_sig: &oracle_sig,
                 index_to_spend: 0,

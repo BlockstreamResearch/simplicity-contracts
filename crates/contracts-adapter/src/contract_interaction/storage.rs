@@ -1,8 +1,8 @@
 use anyhow::Result;
 
+use simplicityhl::CompiledProgram;
 use simplicityhl::simplicity::bitcoin::key::Keypair;
 use simplicityhl::simplicity::jet::elements::{ElementsEnv, ElementsUtxo};
-use simplicityhl::{CompiledProgram, elements};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -28,7 +28,14 @@ use simplicityhl_core::{
     get_random_seed, obtain_utxo_value,
 };
 
-#[allow(clippy::too_many_arguments)]
+/// Update storage contract value by reissuing storage token.
+///
+/// # Errors
+/// Returns error if UTXO fetch or transaction finalization fails.
+///
+/// # Panics
+/// Panics if entropy conversion fails.
+#[expect(clippy::too_many_arguments, clippy::too_many_lines)]
 pub fn update_storage(
     keypair: &Keypair,
     blinder_key: &Keypair,
@@ -42,8 +49,8 @@ pub fn update_storage(
     storage_arguments: &StorageArguments,
     address_params: &'static AddressParams,
     lbtc_asset: AssetId,
-    genesis_block_hash: elements::BlockHash,
-) -> anyhow::Result<Transaction> {
+    genesis_block_hash: BlockHash,
+) -> Result<Transaction> {
     let storage_utxo_tx_out = fetch_utxo(storage_utxo)?;
     let reissuance_token_tx_out = fetch_utxo(reissuance_token_utxo)?;
     let fee_utxo_tx_out = fetch_utxo(fee_utxo)?;
@@ -180,14 +187,14 @@ pub fn update_storage(
         pst.blind_last(&mut thread_rng(), &Secp256k1::new(), &inp_txout_sec)?;
     }
 
-    let utxos = if !is_burn {
+    let utxos = if is_burn {
+        vec![storage_utxo_tx_out.clone(), fee_utxo_tx_out.clone()]
+    } else {
         vec![
             storage_utxo_tx_out.clone(),
             reissuance_token_tx_out.clone(),
             fee_utxo_tx_out.clone(),
         ]
-    } else {
-        vec![storage_utxo_tx_out.clone(), fee_utxo_tx_out.clone()]
     };
     let storage_program = get_storage_compiled_program(storage_arguments);
 
@@ -204,7 +211,9 @@ pub fn update_storage(
         genesis_block_hash,
     )?;
 
-    let tx = if !is_burn {
+    let tx = if is_burn {
+        tx
+    } else {
         finalize_storage_transaction(
             tx,
             &storage_program,
@@ -216,8 +225,6 @@ pub fn update_storage(
             address_params,
             genesis_block_hash,
         )?
-    } else {
-        tx
     };
 
     let tx = finalize_p2pk_transaction(
@@ -234,6 +241,10 @@ pub fn update_storage(
     Ok(tx)
 }
 
+/// Initialize a new storage contract with token issuance.
+///
+/// # Errors
+/// Returns error if UTXO fetch or transaction finalization fails.
 pub fn init_state(
     keypair: &Keypair,
     blinder_key: &Keypair,
@@ -241,8 +252,8 @@ pub fn init_state(
     fee_amount: u64,
     address_params: &'static AddressParams,
     lbtc_asset: AssetId,
-    genesis_block_hash: elements::BlockHash,
-) -> anyhow::Result<(
+    genesis_block_hash: BlockHash,
+) -> Result<(
     AssetEntropyBytes,
     StorageArguments,
     TaprootPubkeyGen,
@@ -353,6 +364,13 @@ pub fn init_state(
     ))
 }
 
+/// Finalize storage transaction with Simplicity witness.
+///
+/// # Errors
+/// Returns error if program execution fails.
+///
+/// # Panics
+/// Panics if UTXO index is out of bounds or script pubkey mismatch.
 #[allow(clippy::too_many_arguments)]
 pub fn finalize_storage_transaction(
     mut tx: Transaction,
@@ -397,7 +415,7 @@ pub fn finalize_storage_transaction(
         genesis_hash,
     );
 
-    let pruned = execute_storage_program(new_value, keypair, program, env)?;
+    let pruned = execute_storage_program(new_value, keypair, program, &env)?;
 
     let (simplicity_program_bytes, simplicity_witness_bytes) = pruned.to_vec_with_witness();
     let cmr = pruned.cmr();

@@ -1,5 +1,7 @@
 use anyhow::anyhow;
+
 use simplicityhl::elements::hashes::sha256;
+
 use simplicityhl_core::AssetEntropyBytes;
 
 #[derive(Debug)]
@@ -9,6 +11,7 @@ pub struct AssetEntropyProcessed {
 }
 
 #[inline]
+#[must_use]
 pub fn raw_asset_entropy_bytes_to_midstate(mut bytes: AssetEntropyBytes) -> AssetEntropyProcessed {
     bytes.reverse();
     AssetEntropyProcessed {
@@ -17,9 +20,13 @@ pub fn raw_asset_entropy_bytes_to_midstate(mut bytes: AssetEntropyBytes) -> Asse
     }
 }
 
-/// Converts bytes asset entropy to 32 bytes representation, without any changes
+/// Converts bytes asset entropy to 32 bytes representation, without any changes.
+///
+/// # Errors
+/// Returns error if input length is not exactly 32 bytes.
 pub fn convert_bytes_to_asset_entropy(val: impl AsRef<[u8]>) -> anyhow::Result<AssetEntropyBytes> {
     let asset_entropy_vec = val.as_ref().to_vec();
+
     let asset_entropy: AssetEntropyBytes = asset_entropy_vec.try_into().map_err(|x: Vec<u8>| {
         anyhow!(
             "Failed to parse asset entropy, got len: {}, has to be: {}",
@@ -27,5 +34,6 @@ pub fn convert_bytes_to_asset_entropy(val: impl AsRef<[u8]>) -> anyhow::Result<A
             AssetEntropyBytes::default().len()
         )
     })?;
+
     Ok(asset_entropy)
 }

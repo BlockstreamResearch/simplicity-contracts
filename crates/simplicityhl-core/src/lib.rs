@@ -1,3 +1,5 @@
+#![warn(clippy::all, clippy::pedantic)]
+
 //! High-level helpers for building and executing Simplicity programs on Liquid.
 //!
 //! This crate provides:
@@ -19,7 +21,12 @@ mod types;
 pub mod encoding {
     pub use bincode::{Decode, Encode};
 
+    /// Trait for binary encoding/decoding with hex string support.
     pub trait Encodable {
+        /// Encode to binary bytes.
+        ///
+        /// # Errors
+        /// Returns error if encoding fails.
         fn encode(&self) -> anyhow::Result<Vec<u8>>
         where
             Self: Encode,
@@ -27,6 +34,10 @@ pub mod encoding {
             bincode::encode_to_vec(self, bincode::config::standard()).map_err(anyhow::Error::msg)
         }
 
+        /// Decode from binary bytes.
+        ///
+        /// # Errors
+        /// Returns error if decoding fails.
         fn decode(buf: &[u8]) -> anyhow::Result<Self>
         where
             Self: Sized,
@@ -35,6 +46,10 @@ pub mod encoding {
             Ok(bincode::decode_from_slice(buf, bincode::config::standard())?.0)
         }
 
+        /// Encode to hex string.
+        ///
+        /// # Errors
+        /// Returns error if encoding fails.
         fn to_hex(&self) -> anyhow::Result<String>
         where
             Self: Encode,
@@ -42,6 +57,10 @@ pub mod encoding {
             Ok(hex::encode(Encodable::encode(self)?))
         }
 
+        /// Decode from hex string.
+        ///
+        /// # Errors
+        /// Returns error if hex decoding or binary decoding fails.
         fn from_hex(hex: &str) -> anyhow::Result<Self>
         where
             Self: bincode::Decode<()>,
@@ -82,6 +101,9 @@ use simplicityhl::{CompiledProgram, Value, WitnessValues, elements};
 pub const P2PK_SOURCE: &str = include_str!("source_simf/p2pk.simf");
 
 /// Construct a P2TR address for the embedded P2PK program and the provided public key.
+///
+/// # Errors
+/// Returns error if the P2PK program fails to compile.
 pub fn get_p2pk_address(
     x_only_public_key: &XOnlyPublicKey,
     params: &'static AddressParams,
@@ -94,6 +116,9 @@ pub fn get_p2pk_address(
 }
 
 /// Compile the embedded P2PK program with the given X-only public key as argument.
+///
+/// # Errors
+/// Returns error if program compilation fails.
 pub fn get_p2pk_program(account_public_key: &XOnlyPublicKey) -> anyhow::Result<CompiledProgram> {
     let arguments = simplicityhl::Arguments::from(HashMap::from([(
         WitnessName::from_str_unchecked("PUBLIC_KEY"),
@@ -104,10 +129,13 @@ pub fn get_p2pk_program(account_public_key: &XOnlyPublicKey) -> anyhow::Result<C
 }
 
 /// Execute the compiled P2PK program against the provided env, producing a pruned redeem node.
+///
+/// # Errors
+/// Returns error if program execution fails.
 pub fn execute_p2pk_program(
     compiled_program: &CompiledProgram,
     keypair: &Keypair,
-    env: ElementsEnv<Arc<Transaction>>,
+    env: &ElementsEnv<Arc<Transaction>>,
     runner_log_level: RunnerLogLevel,
 ) -> anyhow::Result<Arc<RedeemNode<Elements>>> {
     let sighash_all = secp256k1::Message::from_digest(env.c_tx_env().sighash_all().to_byte_array());
@@ -124,6 +152,9 @@ pub fn execute_p2pk_program(
 ///
 /// Preconditions:
 /// - `utxos[input_index]` must match the P2PK address derived from `keypair` and program CMR.
+///
+/// # Errors
+/// Returns error if program compilation, execution, or environment verification fails.
 pub fn finalize_p2pk_transaction(
     mut tx: Transaction,
     utxos: &[TxOut],
@@ -144,7 +175,7 @@ pub fn finalize_p2pk_transaction(
         input_index,
     )?;
 
-    let pruned = execute_p2pk_program(&p2pk_program, keypair, env, RunnerLogLevel::None)?;
+    let pruned = execute_p2pk_program(&p2pk_program, keypair, &env, RunnerLogLevel::None)?;
 
     let (simplicity_program_bytes, simplicity_witness_bytes) = pruned.to_vec_with_witness();
     let cmr = pruned.cmr();
@@ -164,6 +195,10 @@ pub fn finalize_p2pk_transaction(
     Ok(tx)
 }
 
+/// Finalize transaction with a Simplicity witness for the specified input.
+///
+/// # Errors
+/// Returns error if environment verification or program execution fails.
 #[allow(clippy::too_many_arguments)]
 pub fn finalize_transaction(
     mut tx: Transaction,
@@ -185,7 +220,7 @@ pub fn finalize_transaction(
         input_index,
     )?;
 
-    let pruned = run_program(program, witness_values, env, RunnerLogLevel::None)?.0;
+    let pruned = run_program(program, witness_values, &env, RunnerLogLevel::None)?.0;
 
     let (simplicity_program_bytes, simplicity_witness_bytes) = pruned.to_vec_with_witness();
     let cmr = pruned.cmr();
@@ -205,6 +240,10 @@ pub fn finalize_transaction(
     Ok(tx)
 }
 
+/// Build and verify an Elements environment for program execution.
+///
+/// # Errors
+/// Returns error if UTXO index is invalid or script pubkey doesn't match.
 pub fn get_and_verify_env(
     tx: &Transaction,
     program: &CompiledProgram,
@@ -239,7 +278,7 @@ pub fn get_and_verify_env(
                 value: utxo.value,
             })
             .collect(),
-        input_index as u32,
+        u32::try_from(input_index)?,
         cmr,
         control_block(cmr, *program_public_key),
         None,

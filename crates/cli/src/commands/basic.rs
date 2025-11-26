@@ -173,7 +173,14 @@ pub enum Basic {
 }
 
 impl Basic {
-    #[allow(unused)]
+    /// Handle basic CLI subcommand execution.
+    ///
+    /// # Errors
+    /// Returns error if the subcommand operation fails.
+    ///
+    /// # Panics
+    /// Panics if asset entropy conversion fails.
+    #[expect(clippy::too_many_lines)]
     pub fn handle(&self) -> anyhow::Result<()> {
         match self {
             Basic::Address { index } => {
@@ -182,8 +189,8 @@ impl Basic {
                 let public_key = keypair.x_only_public_key().0;
                 let address = get_p2pk_address(&public_key, &AddressParams::LIQUID_TESTNET)?;
 
-                println!("X Only Public Key: {}", public_key);
-                println!("P2PK Address: {}", address);
+                println!("X Only Public Key: {public_key}");
+                println!("P2PK Address: {address}");
 
                 Ok(())
             }
@@ -339,7 +346,7 @@ impl Basic {
 
                 if store.store.get(asset_name)?.is_some() {
                     return Err(anyhow!("Asset name already exists"));
-                };
+                }
 
                 let keypair = derive_keypair(*account_index);
                 let blinding_key = derive_public_blinder_key();
@@ -361,8 +368,7 @@ impl Basic {
                 )?;
 
                 println!(
-                    "Asset id: {asset_id}, Reissuance asset: {reissuance_asset_id}, Asset entropy: {}",
-                    asset_entropy
+                    "Asset id: {asset_id}, Reissuance asset: {reissuance_asset_id}, Asset entropy: {asset_entropy}"
                 );
 
                 match broadcast {
