@@ -15,6 +15,7 @@ use crate::dcd::{
 use simplicityhl::simplicity::elements::pset::{Input, Output, PartiallySignedTransaction};
 use simplicityhl::simplicity::elements::{AddressParams, Script};
 
+#[expect(clippy::too_many_lines)]
 pub fn handle(
     common_context: &CommonContext,
     maker_termination_context: MakerTerminationSettlementContext,
@@ -146,7 +147,7 @@ pub fn handle(
 
     let witness_values = build_dcd_witness(
         TokenBranch::Taker,
-        DcdBranch::MakerTermination {
+        &DcdBranch::MakerTermination {
             is_change_needed,
             index_to_spend: 0,
             grantor_token_amount_to_burn: grantor_settlement_amount_to_burn,

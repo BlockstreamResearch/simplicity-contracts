@@ -18,6 +18,7 @@ pub struct DebugTracker<'a> {
 }
 
 impl<'a> DebugTracker<'a> {
+    #[must_use]
     pub fn new(debug_symbols: &'a DebugSymbols) -> Self {
         Self {
             debug_symbols,
@@ -26,7 +27,7 @@ impl<'a> DebugTracker<'a> {
     }
 }
 
-impl<'a> ExecTracker<Elements> for DebugTracker<'a> {
+impl ExecTracker<Elements> for DebugTracker<'_> {
     fn track_left(&mut self, _: simplicityhl::simplicity::Ihr) {}
 
     fn track_right(&mut self, _: simplicityhl::simplicity::Ihr) {}
@@ -66,20 +67,20 @@ mod test {
     use simplicityhl::simplicity::jet::elements::ElementsEnv;
     use simplicityhl::{Arguments, TemplateProgram, WitnessValues};
 
-    pub const MOCKED_PROGRAM_SOURCE: &str = r#"
+    pub const MOCKED_PROGRAM_SOURCE: &str = r"
     fn main() {
         let a: u64 = 1;
         let b: u64 = dbg!(a);
         assert!(true);
     }
-    "#;
+    ";
 
     #[test]
     fn test_debug_tracker() -> anyhow::Result<()> {
-        let program = TemplateProgram::new(MOCKED_PROGRAM_SOURCE).map_err(|e| anyhow!("{}", e))?;
+        let program = TemplateProgram::new(MOCKED_PROGRAM_SOURCE).map_err(|e| anyhow!("{e}"))?;
         let program = program
             .instantiate(Arguments::default(), true)
-            .map_err(|e| anyhow!("{}", e))?;
+            .map_err(|e| anyhow!("{e}"))?;
 
         let tx = PartiallySignedTransaction::new_v2();
 
@@ -95,7 +96,7 @@ mod test {
 
         let satisfied = program
             .satisfy(WitnessValues::default())
-            .map_err(|e| anyhow!("{}", e))?;
+            .map_err(|e| anyhow!("{e}"))?;
 
         let pruned = match satisfied.redeem().prune(&env) {
             Ok(pruned) => pruned,
@@ -110,7 +111,7 @@ mod test {
         match mac.exec_with_tracker(&pruned, &env, &mut tracker) {
             Ok(_) => {}
             Err(e) => return Err(e.into()),
-        };
+        }
 
         let logs = tracker.debug_logs.iter().collect::<Vec<_>>();
         assert_eq!(logs.len(), 1);

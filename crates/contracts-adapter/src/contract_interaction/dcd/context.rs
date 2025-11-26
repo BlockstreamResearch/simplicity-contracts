@@ -52,7 +52,7 @@ pub struct MakerFundingContext<T1, T2, T3> {
     pub fee_amount: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct TakerFundingContext {
     pub filler_token_utxo: OutPoint,
     pub collateral_token_utxo: OutPoint,
@@ -60,7 +60,7 @@ pub struct TakerFundingContext {
     pub collateral_amount_to_deposit: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct MakerTerminationCollateralContext {
     pub collateral_token_utxo: OutPoint,
     pub grantor_collateral_token_utxo: OutPoint,
@@ -69,7 +69,7 @@ pub struct MakerTerminationCollateralContext {
     pub grantor_collateral_amount_to_burn: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct MakerTerminationSettlementContext {
     pub settlement_asset_utxo: OutPoint,
     pub grantor_settlement_token_utxo: OutPoint,
@@ -78,7 +78,7 @@ pub struct MakerTerminationSettlementContext {
     pub grantor_settlement_amount_to_burn: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct TakerTerminationEarlyContext {
     pub filler_token_utxo: OutPoint,
     pub collateral_token_utxo: OutPoint,

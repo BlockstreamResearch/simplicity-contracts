@@ -24,17 +24,20 @@ pub enum RunnerLogLevel {
 
 /// Satisfy and execute a compiled program in the provided environment.
 /// Returns the pruned program and the resulting value.
+///
+/// # Errors
+/// Returns error if witness satisfaction or program execution fails.
 pub fn run_program(
     program: &CompiledProgram,
     witness_values: WitnessValues,
-    env: ElementsEnv<Arc<Transaction>>,
+    env: &ElementsEnv<Arc<Transaction>>,
     log_level: RunnerLogLevel,
 ) -> anyhow::Result<(Arc<RedeemNode<Elements>>, Value)> {
     let satisfied = program
         .satisfy(witness_values)
-        .map_err(|e| anyhow::anyhow!("{}", e))?;
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
 
-    let pruned = match satisfied.redeem().prune(&env) {
+    let pruned = match satisfied.redeem().prune(env) {
         Ok(pruned) => pruned,
         Err(e) => return Err(e.into()),
     };
@@ -54,7 +57,7 @@ pub fn run_program(
         t
     };
 
-    match mac.exec_with_tracker(&pruned, &env, &mut tracker) {
+    match mac.exec_with_tracker(&pruned, env, &mut tracker) {
         Ok(res) => Ok((pruned, res)),
         Err(e) => Err(e.into()),
     }

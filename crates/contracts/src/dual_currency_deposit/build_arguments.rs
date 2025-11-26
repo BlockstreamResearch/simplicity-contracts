@@ -22,7 +22,6 @@ pub struct DCDArguments {
     // Pricing parameters
     pub strike_price: u64,
     pub incentive_basis_points: u64,
-    pub fee_basis_points: u64,
 
     // Asset IDs (hex LE strings)
     pub collateral_asset_id_hex_le: String,
@@ -30,6 +29,10 @@ pub struct DCDArguments {
     pub filler_token_asset_id_hex_le: String,
     pub grantor_collateral_token_asset_id_hex_le: String,
     pub grantor_settlement_token_asset_id_hex_le: String,
+
+    // Fee parameters
+    pub fee_basis_points: u64,
+    pub fee_script_hash_hex_le: String,
 
     // Ratio/denominator parameters
     pub ratio_args: DCDRatioArguments,
@@ -61,6 +64,11 @@ pub struct DCDRatioArguments {
 pub const MAX_BASIS_POINTS: u64 = 10000;
 
 impl DCDRatioArguments {
+    /// Build ratio arguments from contract parameters.
+    ///
+    /// # Errors
+    /// Returns error if arithmetic overflow occurs or divisibility requirements aren't met.
+    #[expect(clippy::too_many_lines)]
     pub fn build_from(
         principal_collateral_amount: u64,
         incentive_basis_points: u64,
@@ -68,20 +76,21 @@ impl DCDRatioArguments {
         filler_per_principal_collateral: u64,
     ) -> Result<Self> {
         // interest_collateral_amount = (principal_collateral_amount * incentive_basis_points) / MAX_BASIS_POINTS
-        let ic_num: u128 = (principal_collateral_amount as u128)
-            .checked_mul(incentive_basis_points as u128)
+        let interest_collateral_amount: u128 = u128::from(principal_collateral_amount)
+            .checked_mul(u128::from(incentive_basis_points))
             .ok_or_else(|| {
                 anyhow!("overflow while computing interest_collateral_amount numerator")
             })?;
         ensure!(
-            ic_num.is_multiple_of(MAX_BASIS_POINTS as u128),
+            interest_collateral_amount.is_multiple_of(u128::from(MAX_BASIS_POINTS)),
             "principal_collateral_amount * incentive_basis_points must be divisible by MAX_BASIS_POINTS ({}), remainder {}",
             MAX_BASIS_POINTS,
-            ic_num % (MAX_BASIS_POINTS as u128)
+            interest_collateral_amount % u128::from(MAX_BASIS_POINTS)
         );
-        let interest_collateral_amount: u64 = (ic_num / (MAX_BASIS_POINTS as u128))
-            .try_into()
-            .map_err(|_| anyhow!("interest_collateral_amount exceeds u64"))?;
+        let interest_collateral_amount: u64 = (interest_collateral_amount
+            / u128::from(MAX_BASIS_POINTS))
+        .try_into()
+        .map_err(|_| anyhow!("interest_collateral_amount exceeds u64"))?;
 
         let total_collateral_amount = principal_collateral_amount
             .checked_add(interest_collateral_amount)
@@ -93,16 +102,16 @@ impl DCDRatioArguments {
             .ok_or_else(|| anyhow!("overflow while computing principal_asset_amount"))?;
 
         // interest_asset_amount = (principal_asset_amount * incentive_basis_points) / MAX_BASIS_POINTS
-        let ia_num: u128 = (principal_asset_amount as u128)
-            .checked_mul(incentive_basis_points as u128)
+        let interest_asset_amount: u128 = u128::from(principal_asset_amount)
+            .checked_mul(u128::from(incentive_basis_points))
             .ok_or_else(|| anyhow!("overflow while computing interest_asset_amount numerator"))?;
         ensure!(
-            ia_num.is_multiple_of(MAX_BASIS_POINTS as u128),
+            interest_asset_amount.is_multiple_of(u128::from(MAX_BASIS_POINTS)),
             "principal_asset_amount * incentive_basis_points must be divisible by MAX_BASIS_POINTS ({}), remainder {}",
             MAX_BASIS_POINTS,
-            ia_num % (MAX_BASIS_POINTS as u128)
+            interest_asset_amount % u128::from(MAX_BASIS_POINTS)
         );
-        let interest_asset_amount: u64 = (ia_num / (MAX_BASIS_POINTS as u128))
+        let interest_asset_amount: u64 = (interest_asset_amount / u128::from(MAX_BASIS_POINTS))
             .try_into()
             .map_err(|_| anyhow!("interest_asset_amount exceeds u64"))?;
 
@@ -213,6 +222,7 @@ impl Default for DCDArguments {
             filler_token_asset_id_hex_le: "00".repeat(32),
             grantor_collateral_token_asset_id_hex_le: "00".repeat(32),
             grantor_settlement_token_asset_id_hex_le: "00".repeat(32),
+            fee_script_hash_hex_le: "00".repeat(32),
             ratio_args: DCDRatioArguments::default(),
             oracle_public_key: String::new(),
         }
@@ -220,6 +230,12 @@ impl Default for DCDArguments {
 }
 
 impl DCDArguments {
+    /// Convert to Simplicity program arguments.
+    ///
+    /// # Panics
+    /// Panics if asset IDs or public key cannot be parsed.
+    #[must_use]
+    #[expect(clippy::too_many_lines)]
     pub fn build_arguments(&self) -> Arguments {
         let collateral_asset = u256_from_le_hex(&self.collateral_asset_id_hex_le);
         let settlement_asset = u256_from_le_hex(&self.settlement_asset_id_hex_le);
@@ -228,6 +244,7 @@ impl DCDArguments {
             u256_from_le_hex(&self.grantor_collateral_token_asset_id_hex_le);
         let grantor_settlement_token_asset =
             u256_from_le_hex(&self.grantor_settlement_token_asset_id_hex_le);
+        let fee_script_hash = u256_from_le_hex(&self.fee_script_hash_hex_le);
 
         let oracle_bytes = XOnlyPublicKey::from_str(self.oracle_public_key.as_str())
             .unwrap()
@@ -331,6 +348,10 @@ impl DCDArguments {
                 simplicityhl::Value::from(UIntValue::U64(
                     self.ratio_args.grantor_per_settlement_asset,
                 )),
+            ),
+            (
+                WitnessName::from_str_unchecked("FEE_SCRIPT_HASH"),
+                simplicityhl::Value::from(UIntValue::U256(fee_script_hash)),
             ),
             // Oracle
             (

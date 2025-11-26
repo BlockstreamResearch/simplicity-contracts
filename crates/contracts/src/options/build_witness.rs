@@ -4,7 +4,7 @@ use simplicityhl::{
     ResolvedType, WitnessValues, parse::ParseFromStr, str::WitnessName, types::TypeConstructible,
 };
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Copy)]
 pub enum TokenBranch {
     #[default]
     OptionToken,
@@ -12,7 +12,7 @@ pub enum TokenBranch {
 }
 
 impl TokenBranch {
-    fn to_str(&self) -> &str {
+    fn to_str(self) -> &'static str {
         match self {
             TokenBranch::OptionToken => "Left(())",
             TokenBranch::GrantorToken => "Right(())",
@@ -20,7 +20,7 @@ impl TokenBranch {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum OptionBranch {
     Funding {
         expected_asset_amount: u64,
@@ -46,6 +46,11 @@ pub enum OptionBranch {
     },
 }
 
+/// Build witness values for options program execution.
+///
+/// # Panics
+/// Panics if type parsing fails (should never happen with valid constants).
+#[must_use]
 pub fn build_option_witness(token_branch: TokenBranch, branch: OptionBranch) -> WitnessValues {
     let single = ResolvedType::parse_from_str("u64").unwrap();
     let triple = ResolvedType::parse_from_str("(bool, u32, u64, u64, u64)").unwrap();

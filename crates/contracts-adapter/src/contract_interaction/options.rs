@@ -21,7 +21,14 @@ use simplicityhl::elements::schnorr::Keypair;
 use simplicityhl::elements::{OutPoint, confidential};
 use simplicityhl::simplicity::ToXOnlyPubkey;
 
-#[allow(clippy::too_many_arguments)]
+/// Cancel an option contract by burning option and grantor tokens.
+///
+/// # Errors
+/// Returns error if UTXO fetch or transaction finalization fails.
+///
+/// # Panics
+/// Panics if UTXO script doesn't match expected address.
+#[expect(clippy::too_many_arguments, clippy::too_many_lines)]
 pub fn cancellation_option(
     keypair: &Keypair,
     collateral_utxo: &OutPoint,
@@ -216,7 +223,14 @@ pub fn cancellation_option(
     Ok(tx)
 }
 
-#[allow(clippy::too_many_arguments)]
+/// Withdraw collateral at option expiry by burning grantor tokens.
+///
+/// # Errors
+/// Returns error if UTXO fetch or transaction finalization fails.
+///
+/// # Panics
+/// Panics if UTXO script doesn't match expected address.
+#[expect(clippy::too_many_arguments, clippy::too_many_lines)]
 pub fn expiry_option(
     collateral_utxo: &OutPoint,
     grantor_asset_utxo: &OutPoint,
@@ -374,7 +388,14 @@ pub fn expiry_option(
     Ok(tx)
 }
 
-#[allow(clippy::too_many_arguments)]
+/// Settle an option by burning grantor tokens to withdraw settlement asset.
+///
+/// # Errors
+/// Returns error if UTXO fetch or transaction finalization fails.
+///
+/// # Panics
+/// Panics if UTXO script doesn't match expected address.
+#[expect(clippy::too_many_arguments, clippy::too_many_lines)]
 pub fn settlement_option(
     settlement_asset_utxo: &OutPoint,
     grantor_asset_utxo: &OutPoint,
@@ -553,7 +574,14 @@ pub fn settlement_option(
     Ok(tx)
 }
 
-#[allow(clippy::too_many_arguments)]
+/// Exercise an option by burning option tokens to withdraw collateral.
+///
+/// # Errors
+/// Returns error if UTXO fetch or transaction finalization fails.
+///
+/// # Panics
+/// Panics if UTXO script doesn't match expected address.
+#[expect(clippy::too_many_arguments, clippy::too_many_lines)]
 pub fn exercise_option(
     collateral_utxo: &OutPoint,
     option_asset_utxo: &OutPoint,
@@ -764,7 +792,14 @@ pub fn exercise_option(
     Ok(tx)
 }
 
-#[allow(clippy::too_many_arguments)]
+/// Fund an option contract by depositing collateral and reissuing tokens.
+///
+/// # Errors
+/// Returns error if UTXO fetch or transaction finalization fails.
+///
+/// # Panics
+/// Panics if UTXO value is confidential or entropy conversion fails.
+#[expect(clippy::too_many_arguments, clippy::too_many_lines)]
 pub fn funding_option(
     option_asset_utxo: &OutPoint,
     grantor_asset_utxo: &OutPoint,
@@ -967,7 +1002,14 @@ pub fn funding_option(
     Ok(tx)
 }
 
-#[allow(clippy::too_many_arguments)]
+/// Create a new option contract with option and grantor token issuance.
+///
+/// # Errors
+/// Returns error if UTXO fetch or transaction finalization fails.
+///
+/// # Panics
+/// Panics if UTXO values are confidential.
+#[expect(clippy::too_many_arguments, clippy::too_many_lines)]
 pub fn creation_option(
     keypair: &Keypair,
     blinder_key: &Keypair,
@@ -1024,7 +1066,7 @@ pub fn creation_option(
         &contracts::get_options_address,
     )?;
 
-    println!("options_taproot_pubkey_gen: {}", options_taproot_pubkey_gen);
+    println!("options_taproot_pubkey_gen: {options_taproot_pubkey_gen}");
 
     let change_recipient = get_p2pk_address(
         &keypair.x_only_public_key().0,

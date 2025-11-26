@@ -11,13 +11,17 @@ use simplicityhl::simplicity::hashes::{Hash, sha256};
 use simplicityhl::{Arguments, CompiledProgram};
 
 /// Load program source and compile it to a Simplicity program.
+///
+/// # Errors
+/// Returns error if the program fails to compile.
 pub fn load_program(source: &str, arguments: Arguments) -> anyhow::Result<CompiledProgram> {
     let compiled = CompiledProgram::new(source, arguments, true)
-        .map_err(|e| anyhow!("Failed to compile Simplicity program: {}", e))?;
+        .map_err(|e| anyhow!("Failed to compile Simplicity program: {e}"))?;
     Ok(compiled)
 }
 
 /// Generate a non-confidential P2TR address for the given program CMR and key.
+#[must_use]
 pub fn create_p2tr_address(
     cmr: simplicityhl::simplicity::Cmr,
     x_only_public_key: &XOnlyPublicKey,
@@ -55,6 +59,11 @@ fn taproot_spending_info(
         .expect("tap tree should be valid")
 }
 
+/// Compute the Taproot control block for script-path spending.
+///
+/// # Panics
+/// Panics if the taproot tree is invalid (should never happen with valid CMR).
+#[must_use]
 pub fn control_block(
     cmr: simplicityhl::simplicity::Cmr,
     internal_key: XOnlyPublicKey,
@@ -66,13 +75,15 @@ pub fn control_block(
 }
 
 /// SHA256 hash of an address's scriptPubKey bytes.
-pub fn hash_script_pubkey(address: Address) -> [u8; 32] {
+#[must_use]
+pub fn hash_script_pubkey(address: &Address) -> [u8; 32] {
     let mut hasher = Sha256::new();
     sha2::digest::Update::update(&mut hasher, address.script_pubkey().as_bytes());
     hasher.finalize().into()
 }
 
 /// Compute issuance entropy for a new asset given an outpoint and contract hash entropy.
+#[must_use]
 pub fn get_new_asset_entropy(outpoint: &OutPoint, entropy: [u8; 32]) -> sha256::Midstate {
     let contract_hash = ContractHash::from_byte_array(entropy);
     AssetId::generate_asset_entropy(*outpoint, contract_hash)

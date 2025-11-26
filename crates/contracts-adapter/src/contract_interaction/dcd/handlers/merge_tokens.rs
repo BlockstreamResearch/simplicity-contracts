@@ -7,6 +7,7 @@ use simplicityhl::elements::{AddressParams, LockTime, Script, Transaction};
 use simplicityhl::simplicity::ToXOnlyPubkey;
 use simplicityhl_core::{fetch_utxo, finalize_p2pk_transaction};
 
+#[expect(clippy::too_many_lines)]
 pub fn handle(
     common_context: &CommonContext,
     merge_tokens_context: MergeTokensContext,
@@ -32,7 +33,7 @@ pub fn handle(
 
     // Fetch all token UTXOs
     let mut token_txouts = vec![];
-    for utxo in token_utxos.iter() {
+    for utxo in &token_utxos {
         token_txouts.push(fetch_utxo(*utxo)?);
     }
 
@@ -128,9 +129,9 @@ pub fn handle(
             &dcd_program,
             &dcd_pubkey,
             &all_utxos,
-            i as u32,
+            u32::try_from(i)?,
             TokenBranch::default(),
-            DcdBranch::Merge,
+            &DcdBranch::Merge,
             merge_branch,
         )?;
     }
