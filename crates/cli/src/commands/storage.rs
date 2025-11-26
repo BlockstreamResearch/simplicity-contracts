@@ -78,6 +78,10 @@ pub enum Storage {
 }
 
 impl Storage {
+    /// Handle storage CLI subcommand execution.
+    ///
+    /// # Errors
+    /// Returns error if the subcommand operation fails.
     pub fn handle(&self) -> Result<()> {
         match self {
             Storage::Import {
@@ -129,13 +133,13 @@ impl Storage {
                 )?;
 
                 store.store.insert(
-                    format!("entropy_{}", storage_taproot_pubkey_gen),
+                    format!("entropy_{storage_taproot_pubkey_gen}"),
                     get_new_asset_entropy(fee_utxo, asset_entropy)
                         .to_hex()
                         .as_bytes(),
                 )?;
 
-                println!("Taproot gen: {}", storage_taproot_pubkey_gen);
+                println!("Taproot gen: {storage_taproot_pubkey_gen}");
 
                 match broadcast {
                     true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
@@ -155,7 +159,7 @@ impl Storage {
                 let store = Store::load()?;
 
                 let Some(asset_entropy_hex) =
-                    store.store.get(format!("entropy_{}", taproot_pubkey_gen))?
+                    store.store.get(format!("entropy_{taproot_pubkey_gen}"))?
                 else {
                     anyhow::bail!("First entropy not found");
                 };

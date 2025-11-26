@@ -20,11 +20,20 @@ pub use build_arguments::OptionsArguments;
 
 pub const OPTION_SOURCE: &str = include_str!("source_simf/options.simf");
 
+/// Get the options template program for instantiation.
+///
+/// # Panics
+/// Panics if the embedded source fails to compile (should never happen).
+#[must_use]
 pub fn get_options_template_program() -> TemplateProgram {
     TemplateProgram::new(OPTION_SOURCE)
         .expect("INTERNAL: expected Options Program to compile successfully.")
 }
 
+/// Derive P2TR address for an options contract.
+///
+/// # Errors
+/// Returns error if program compilation fails.
 pub fn get_options_address(
     x_only_public_key: &XOnlyPublicKey,
     arguments: &OptionsArguments,
@@ -37,10 +46,19 @@ pub fn get_options_address(
     ))
 }
 
+/// Compile options program with the given arguments.
+///
+/// # Errors
+/// Returns error if compilation fails.
 pub fn get_options_program(arguments: &OptionsArguments) -> anyhow::Result<CompiledProgram> {
     load_program(OPTION_SOURCE, arguments.build_option_arguments())
 }
 
+/// Get compiled options program, panicking on failure.
+///
+/// # Panics
+/// Panics if program instantiation fails.
+#[must_use]
 pub fn get_compiled_options_program(arguments: &OptionsArguments) -> CompiledProgram {
     let program = get_options_template_program();
 
@@ -49,9 +67,13 @@ pub fn get_compiled_options_program(arguments: &OptionsArguments) -> CompiledPro
         .unwrap()
 }
 
+/// Execute options program for funding path.
+///
+/// # Errors
+/// Returns error if program execution fails.
 pub fn execute_options_program(
     compiled_program: &CompiledProgram,
-    env: ElementsEnv<Arc<Transaction>>,
+    env: &ElementsEnv<Arc<Transaction>>,
     expected_asset_amount: u64,
     token_branch: TokenBranch,
     runner_log_level: RunnerLogLevel,
@@ -66,6 +88,13 @@ pub fn execute_options_program(
     Ok(run_program(compiled_program, witness_values, env, runner_log_level)?.0)
 }
 
+/// Finalize options funding path transaction with Simplicity witness.
+///
+/// # Errors
+/// Returns error if program execution fails.
+///
+/// # Panics
+/// Panics if UTXO script pubkey doesn't match expected options address.
 pub fn finalize_options_funding_path_transaction(
     mut tx: Transaction,
     options_public_key: &XOnlyPublicKey,
@@ -97,7 +126,7 @@ pub fn finalize_options_funding_path_transaction(
                 value: utxo.value,
             })
             .collect(),
-        input_index as u32,
+        u32::try_from(input_index)?,
         cmr,
         control_block(cmr, *options_public_key),
         None,
@@ -106,7 +135,7 @@ pub fn finalize_options_funding_path_transaction(
 
     let pruned = execute_options_program(
         options_program,
-        env,
+        &env,
         expected_asset_amount,
         token_branch,
         RunnerLogLevel::None,
@@ -131,6 +160,7 @@ pub fn finalize_options_funding_path_transaction(
 }
 
 #[cfg(test)]
+#[expect(clippy::too_many_lines)]
 mod options_tests {
     use super::*;
     use std::vec;
@@ -273,9 +303,10 @@ mod options_tests {
             },
         );
 
-        if run_program(&program, witness_values, env, RunnerLogLevel::None).is_err() {
-            panic!("expected success funding path -- option token");
-        }
+        assert!(
+            run_program(&program, witness_values, &env, RunnerLogLevel::None).is_ok(),
+            "expected success funding path -- option token"
+        );
 
         Ok(())
     }
@@ -378,9 +409,10 @@ mod options_tests {
             },
         );
 
-        if run_program(&program, witness_values, env, RunnerLogLevel::None).is_err() {
-            panic!("expected success funding path -- option token");
-        }
+        assert!(
+            run_program(&program, witness_values, &env, RunnerLogLevel::None).is_ok(),
+            "expected success funding path -- option token"
+        );
 
         Ok(())
     }
@@ -406,7 +438,7 @@ mod options_tests {
         let asset_amount_to_pay = option_amount_to_burn * settlement_per_contract; // 450
 
         let option_arguments = OptionsArguments {
-            start_time: 1760358546,
+            start_time: 1_760_358_546,
             expiry_time: 0,
             collateral_per_contract,
             settlement_per_contract,
@@ -486,9 +518,10 @@ mod options_tests {
             },
         );
 
-        if run_program(&program, witness_values, env, RunnerLogLevel::None).is_err() {
-            panic!("expected success exercise path -- option token");
-        }
+        assert!(
+            run_program(&program, witness_values, &env, RunnerLogLevel::None).is_ok(),
+            "expected success exercise path -- option token"
+        );
 
         Ok(())
     }
@@ -513,7 +546,7 @@ mod options_tests {
         let available_target_asset = 1000; // available in input utxo
 
         let option_arguments = OptionsArguments {
-            start_time: 1760358546,
+            start_time: 1_760_358_546,
             expiry_time: 0,
             collateral_per_contract,
             settlement_per_contract,
@@ -591,9 +624,10 @@ mod options_tests {
             },
         );
 
-        if run_program(&program, witness_values, env, RunnerLogLevel::None).is_err() {
-            panic!("expected success settlement path -- grantor token");
-        }
+        assert!(
+            run_program(&program, witness_values, &env, RunnerLogLevel::None).is_ok(),
+            "expected success settlement path -- grantor token"
+        );
 
         Ok(())
     }
@@ -618,8 +652,8 @@ mod options_tests {
         let collateral_amount = grantor_token_amount_to_burn * collateral_per_contract; // 500
 
         let option_arguments = OptionsArguments {
-            start_time: 1760358546,
-            expiry_time: 1760358546,
+            start_time: 1_760_358_546,
+            expiry_time: 1_760_358_546,
             collateral_per_contract,
             settlement_per_contract: 0,
             collateral_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
@@ -695,9 +729,10 @@ mod options_tests {
             },
         );
 
-        if run_program(&program, witness_values, env, RunnerLogLevel::None).is_err() {
-            panic!("expected success expiry path -- grantor token");
-        }
+        assert!(
+            run_program(&program, witness_values, &env, RunnerLogLevel::None).is_ok(),
+            "expected success expiry path -- grantor token"
+        );
 
         Ok(())
     }

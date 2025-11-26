@@ -4,6 +4,7 @@ use simplicityhl::simplicity::bitcoin;
 use simplicityhl::value::ValueConstructible;
 use simplicityhl::{WitnessValues, str::WitnessName, value::UIntValue};
 
+#[must_use]
 pub fn build_storage_witness(
     new_value: u64,
     signature: &bitcoin::secp256k1::schnorr::Signature,

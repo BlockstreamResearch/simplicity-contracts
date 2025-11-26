@@ -33,6 +33,7 @@ impl Default for OptionsArguments {
 }
 
 impl OptionsArguments {
+    #[must_use]
     pub fn build_option_arguments(&self) -> Arguments {
         Arguments::from(HashMap::from([
             (

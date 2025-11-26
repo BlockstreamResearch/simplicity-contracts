@@ -24,6 +24,9 @@ pub struct TaprootPubkeyGen {
 
 impl TaprootPubkeyGen {
     /// Build from current process randomness and compute the address given `arguments`.
+    ///
+    /// # Errors
+    /// Returns error if address generation fails.
     pub fn from<A>(
         arguments: &A,
         params: &'static AddressParams,
@@ -45,6 +48,9 @@ impl TaprootPubkeyGen {
     }
 
     /// Parse from string and verify that pubkey and address match the provided arguments.
+    ///
+    /// # Errors
+    /// Returns error if parsing fails or verification doesn't match.
     pub fn build_from_str<A>(
         s: &str,
         arguments: &A,
@@ -59,6 +65,9 @@ impl TaprootPubkeyGen {
     }
 
     /// Verify that the stored pubkey and address are consistent with `arguments`.
+    ///
+    /// # Errors
+    /// Returns error if pubkey or address doesn't match the expected values.
     pub fn verify<A>(
         &self,
         arguments: &A,
@@ -134,6 +143,7 @@ fn try_generate_public_key_without_private() -> anyhow::Result<(PublicKey, Vec<u
 }
 
 /// Generate a valid ephemeral public key and its seed; repeats until valid.
+#[must_use]
 pub fn generate_public_key_without_private() -> (PublicKey, Vec<u8>) {
     let not_existent_public_key;
     loop {
@@ -147,6 +157,10 @@ pub fn generate_public_key_without_private() -> (PublicKey, Vec<u8>) {
 }
 
 /// System-random 32-byte seed.
+///
+/// # Panics
+/// Panics if the system random number generator fails.
+#[must_use]
 pub fn get_random_seed() -> [u8; 32] {
     ring::rand::generate(&ring::rand::SystemRandom::new())
         .unwrap()

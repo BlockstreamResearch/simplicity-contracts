@@ -1,3 +1,5 @@
+#![warn(clippy::all, clippy::pedantic)]
+
 //! Simplicity helper CLI for Liquid testnet.
 //!
 //! This binary exposes multiple subcommand groups to work with Liquid testnet:

@@ -16,6 +16,7 @@ use simplicityhl_core::{
     fetch_utxo, finalize_p2pk_transaction, finalize_transaction, get_p2pk_address,
 };
 
+#[expect(clippy::too_many_lines)]
 pub fn handle(
     common_context: &CommonContext,
     taker_funding_context: TakerFundingContext,
@@ -51,7 +52,7 @@ pub fn handle(
     let filler_asset_id = filler_tx_out
         .asset
         .explicit()
-        .ok_or_else(|| anyhow!("No AssetId in filler utxo, {}", filler_token_utxo))?;
+        .ok_or_else(|| anyhow!("No AssetId in filler utxo, {filler_token_utxo}"))?;
     let total_collateral = collateral_tx_out.value.explicit().unwrap();
     let total_filler = filler_tx_out.value.explicit().unwrap();
 
@@ -124,7 +125,7 @@ pub fn handle(
 
     let witness_values = build_dcd_witness(
         TokenBranch::default(),
-        DcdBranch::TakerFunding {
+        &DcdBranch::TakerFunding {
             collateral_amount_to_deposit,
             filler_token_amount_to_get: filler_to_get,
             is_change_needed: is_filler_change_needed,

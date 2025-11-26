@@ -18,6 +18,7 @@ use simplicityhl_core::{TaprootPubkeyGen, fetch_utxo, get_random_seed, obtain_ut
 use simplicityhl_core::{finalize_p2pk_transaction, get_new_asset_entropy, get_p2pk_address};
 
 #[tracing::instrument(level = "info", skip_all, err)]
+#[expect(clippy::too_many_lines)]
 pub fn handle(
     context: &CreationContext,
     maker_init_context: MakerInitContext,
@@ -103,6 +104,7 @@ pub fn handle(
         filler_token_asset_id_hex_le: first_asset.to_string(),
         grantor_collateral_token_asset_id_hex_le: second_asset.to_string(),
         grantor_settlement_token_asset_id_hex_le: third_asset.to_string(),
+        fee_script_hash_hex_le: dcd_init_params.fee_script_hash,
         ratio_args: ratio_args.clone(),
         oracle_public_key: dcd_init_params.oracle_public_key,
     };
@@ -224,7 +226,7 @@ pub fn handle(
 
     let utxos = [first_utxo_tx_out, second_utxo_tx_out, third_utxo_tx_out];
 
-    let tx = finalize_tx_inner(keypair, address_params, *genesis_block_hash, pst, &utxos)?;
+    let tx = finalize_tx_inner(keypair, address_params, *genesis_block_hash, &pst, &utxos)?;
     tx.verify_tx_amt_proofs(secp256k1::SECP256K1, &utxos)?;
 
     Ok(DcdInitResponse {
@@ -241,11 +243,11 @@ fn finalize_tx_inner(
     keypair: &secp256k1::Keypair,
     address_params: &'static AddressParams,
     genesis_block_hash: BlockHash,
-    pst: PartiallySignedTransaction,
+    pst: &PartiallySignedTransaction,
     utxos: &[TxOut; 3],
 ) -> anyhow::Result<Transaction> {
     let tx = finalize_p2pk_transaction(
-        pst.extract_tx()?,
+        pst.clone().extract_tx()?,
         utxos,
         keypair,
         0,

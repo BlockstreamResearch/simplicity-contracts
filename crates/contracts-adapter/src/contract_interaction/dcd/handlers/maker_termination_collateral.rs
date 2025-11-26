@@ -15,6 +15,7 @@ use contracts::{DcdBranch, MergeBranch, TokenBranch, build_dcd_witness, get_dcd_
 use simplicityhl::simplicity::elements::Script;
 use simplicityhl::simplicity::elements::pset::{Input, Output, PartiallySignedTransaction};
 
+#[expect(clippy::too_many_lines)]
 pub fn handle(
     common_context: &CommonContext,
     maker_termination_context: MakerTerminationCollateralContext,
@@ -147,7 +148,7 @@ pub fn handle(
 
     let witness_values = build_dcd_witness(
         TokenBranch::Maker,
-        DcdBranch::MakerTermination {
+        &DcdBranch::MakerTermination {
             is_change_needed,
             index_to_spend: 0,
             grantor_token_amount_to_burn: grantor_collateral_amount_to_burn,

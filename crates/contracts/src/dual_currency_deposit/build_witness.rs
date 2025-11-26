@@ -25,7 +25,7 @@ impl MergeBranch {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Copy)]
 pub enum TokenBranch {
     // Left(()) in SIMF
     #[default]
@@ -35,7 +35,7 @@ pub enum TokenBranch {
 }
 
 impl TokenBranch {
-    fn to_str(&self) -> &str {
+    fn to_str(self) -> &'static str {
         match self {
             TokenBranch::Maker => "Left(())",
             TokenBranch::Taker => "Right(())",
@@ -85,9 +85,14 @@ pub enum DcdBranch<'a> {
     Merge,
 }
 
+/// Build witness values for DCD program execution.
+///
+/// # Panics
+/// Panics if type parsing fails (should never happen with valid constants).
+#[must_use]
 pub fn build_dcd_witness(
     token_branch: TokenBranch,
-    branch: DcdBranch,
+    branch: &DcdBranch,
     merge_branch: MergeBranch,
 ) -> WitnessValues {
     // Types

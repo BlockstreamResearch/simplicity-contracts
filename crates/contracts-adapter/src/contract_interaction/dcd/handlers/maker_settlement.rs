@@ -16,6 +16,7 @@ use simplicityhl_core::{
 };
 use std::str::FromStr;
 
+#[expect(clippy::too_many_lines)]
 pub fn handle(
     common_context: &CommonContext,
     maker_settlement_context: MakerSettlementContext,
@@ -192,7 +193,7 @@ pub fn handle(
         let dcd_program = get_dcd_program(dcd_arguments)?;
         let witness_values = build_dcd_witness(
             TokenBranch::Maker,
-            DcdBranch::Settlement {
+            &DcdBranch::Settlement {
                 price_at_current_block_height: price,
                 oracle_sig: &oracle_sig,
                 index_to_spend: 0,
@@ -306,7 +307,7 @@ pub fn handle(
         let dcd_program = get_dcd_program(dcd_arguments)?;
         let witness_values = build_dcd_witness(
             TokenBranch::Maker,
-            DcdBranch::Settlement {
+            &DcdBranch::Settlement {
                 price_at_current_block_height: price,
                 oracle_sig: &oracle_sig,
                 index_to_spend: 0,

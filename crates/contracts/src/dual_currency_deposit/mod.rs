@@ -39,11 +39,20 @@ pub use build_witness::{DcdBranch, MergeBranch, TokenBranch, build_dcd_witness};
 
 pub const PRICE_ATTESTED_SDK_SOURCE: &str = include_str!("source_simf/dual_currency_deposit.simf");
 
+/// Get the DCD template program for instantiation with arguments.
+///
+/// # Panics
+/// Panics if the embedded source fails to compile (should never happen).
+#[must_use]
 pub fn get_dcd_template_program() -> TemplateProgram {
     TemplateProgram::new(PRICE_ATTESTED_SDK_SOURCE)
         .expect("INTERNAL: expected DCD Price Attested Program to compile successfully.")
 }
 
+/// Derive P2TR address for a DCD contract with given arguments.
+///
+/// # Errors
+/// Returns error if program compilation fails.
 pub fn get_dcd_address(
     x_only_public_key: &XOnlyPublicKey,
     arguments: &DCDArguments,
@@ -56,10 +65,19 @@ pub fn get_dcd_address(
     ))
 }
 
+/// Compile DCD program with the given arguments.
+///
+/// # Errors
+/// Returns error if compilation fails.
 pub fn get_dcd_program(arguments: &DCDArguments) -> anyhow::Result<CompiledProgram> {
     load_program(PRICE_ATTESTED_SDK_SOURCE, arguments.build_arguments())
 }
 
+/// Get compiled DCD program, panicking on failure.
+///
+/// # Panics
+/// Panics if program instantiation fails.
+#[must_use]
 pub fn get_compiled_dcd_program(arguments: &DCDArguments) -> CompiledProgram {
     let program = get_dcd_template_program();
 
@@ -68,11 +86,15 @@ pub fn get_compiled_dcd_program(arguments: &DCDArguments) -> CompiledProgram {
         .unwrap()
 }
 
+/// Execute DCD program with witness values for the specified branches.
+///
+/// # Errors
+/// Returns error if program execution fails.
 pub fn execute_dcd_program(
     compiled_program: &CompiledProgram,
-    env: ElementsEnv<Arc<Transaction>>,
+    env: &ElementsEnv<Arc<Transaction>>,
     token_branch: TokenBranch,
-    branch: DcdBranch,
+    branch: &DcdBranch,
     merge_branch: MergeBranch,
     runner_log_level: RunnerLogLevel,
 ) -> anyhow::Result<Arc<RedeemNode<Elements>>> {
@@ -80,6 +102,13 @@ pub fn execute_dcd_program(
     Ok(run_program(compiled_program, witness_values, env, runner_log_level)?.0)
 }
 
+/// Finalize DCD transaction by attaching Simplicity witness on Liquid testnet.
+///
+/// # Errors
+/// Returns error if program execution or environment verification fails.
+///
+/// # Panics
+/// Panics if UTXO index is out of bounds or script pubkey mismatch.
 #[allow(clippy::too_many_arguments)]
 pub fn finalize_dcd_transaction_on_liquid_testnet(
     mut tx: Transaction,
@@ -88,7 +117,7 @@ pub fn finalize_dcd_transaction_on_liquid_testnet(
     utxos: &[TxOut],
     input_index: u32,
     token_branch: TokenBranch,
-    branch: DcdBranch,
+    branch: &DcdBranch,
     merge_branch: MergeBranch,
 ) -> anyhow::Result<Transaction> {
     let cmr = dcd_program.commit().cmr();
@@ -126,7 +155,7 @@ pub fn finalize_dcd_transaction_on_liquid_testnet(
 
     let pruned = execute_dcd_program(
         dcd_program,
-        env,
+        &env,
         token_branch,
         branch,
         merge_branch,
@@ -151,6 +180,7 @@ pub fn finalize_dcd_transaction_on_liquid_testnet(
     Ok(tx)
 }
 
+#[must_use]
 pub fn oracle_msg(expiry_height: u32, price_at_current_block_height: u64) -> [u8; 32] {
     let mut b = [0u8; 12];
     b[..4].copy_from_slice(&expiry_height.to_be_bytes());
@@ -159,6 +189,7 @@ pub fn oracle_msg(expiry_height: u32, price_at_current_block_height: u64) -> [u8
 }
 
 #[cfg(test)]
+#[expect(clippy::too_many_lines)]
 mod dcd_merge_tests {
     use super::*;
 
@@ -181,6 +212,7 @@ mod dcd_merge_tests {
     use simplicityhl::simplicity::jet::elements::{ElementsEnv, ElementsUtxo};
     use simplicityhl_core::{
         LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_TEST_ASSET_ID_STR, get_new_asset_entropy,
+        get_p2pk_address, hash_script_pubkey,
     };
 
     #[test]
@@ -221,6 +253,7 @@ mod dcd_merge_tests {
             grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
             ratio_args: ratio_args.clone(),
             oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
+            fee_script_hash_hex_le: "00".repeat(32),
         };
 
         let keypair = Keypair::from_secret_key(
@@ -341,7 +374,7 @@ mod dcd_merge_tests {
 
         let witness_values = build_dcd_witness(
             TokenBranch::default(),
-            DcdBranch::MakerFunding {
+            &DcdBranch::MakerFunding {
                 principal_collateral_amount: ratio_args.principal_collateral_amount,
                 principal_asset_amount: ratio_args.principal_asset_amount,
                 interest_collateral_amount: ratio_args.interest_collateral_amount,
@@ -350,16 +383,17 @@ mod dcd_merge_tests {
             MergeBranch::default(),
         );
 
-        if run_program(&program, witness_values, env, RunnerLogLevel::Debug).is_err() {
-            panic!("expected success funding path -- dcd price attested");
-        }
+        assert!(
+            run_program(&program, witness_values, &env, RunnerLogLevel::Debug).is_ok(),
+            "expected success funding path -- dcd price attested"
+        );
 
         Ok(())
     }
 
     #[test]
     fn test_dcd_taker_funding_path_with_change_and_locktime() -> Result<()> {
-        let now: u32 = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as u32;
+        let now: u32 = u32::try_from(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs())?;
 
         let oracle_kp = Keypair::from_secret_key(
             &Secp256k1::new(),
@@ -397,6 +431,7 @@ mod dcd_merge_tests {
             grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
             ratio_args: ratio_args.clone(),
             oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
+            fee_script_hash_hex_le: "00".repeat(32),
         };
 
         let keypair = Keypair::from_secret_key(
@@ -466,7 +501,7 @@ mod dcd_merge_tests {
 
         let witness_values = build_dcd_witness(
             TokenBranch::default(),
-            DcdBranch::TakerFunding {
+            &DcdBranch::TakerFunding {
                 collateral_amount_to_deposit: collateral_deposit,
                 filler_token_amount_to_get: filler_to_get,
                 is_change_needed: true,
@@ -474,16 +509,17 @@ mod dcd_merge_tests {
             MergeBranch::default(),
         );
 
-        if run_program(&program, witness_values, env, RunnerLogLevel::Debug).is_err() {
-            panic!("expected success taker funding path -- dcd price attested");
-        }
+        assert!(
+            run_program(&program, witness_values, &env, RunnerLogLevel::Debug).is_ok(),
+            "expected success taker funding path -- dcd price attested"
+        );
 
         Ok(())
     }
 
     #[test]
     fn test_dcd_taker_early_termination_path_with_change_and_locktime() -> Result<()> {
-        let now: u32 = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as u32;
+        let now: u32 = u32::try_from(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs())?;
 
         let oracle_kp = Keypair::from_secret_key(
             &Secp256k1::new(),
@@ -521,6 +557,7 @@ mod dcd_merge_tests {
             grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
             ratio_args: ratio_args.clone(),
             oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
+            fee_script_hash_hex_le: "00".repeat(32),
         };
 
         let keypair = Keypair::from_secret_key(
@@ -596,7 +633,7 @@ mod dcd_merge_tests {
 
         let witness_values = build_dcd_witness(
             TokenBranch::default(),
-            DcdBranch::TakerEarlyTermination {
+            &DcdBranch::TakerEarlyTermination {
                 is_change_needed: true,
                 index_to_spend: 0,
                 filler_token_amount_to_return: filler_return,
@@ -605,16 +642,17 @@ mod dcd_merge_tests {
             MergeBranch::default(),
         );
 
-        if run_program(&program, witness_values, env, RunnerLogLevel::Debug).is_err() {
-            panic!("expected success taker early termination path -- dcd price attested");
-        }
+        assert!(
+            run_program(&program, witness_values, &env, RunnerLogLevel::Debug).is_ok(),
+            "expected success taker early termination path -- dcd price attested"
+        );
 
         Ok(())
     }
 
     #[test]
     fn test_dcd_maker_collateral_termination_path_with_change_and_locktime() -> Result<()> {
-        let now: u32 = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as u32;
+        let now: u32 = u32::try_from(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs())?;
 
         let oracle_kp = Keypair::from_secret_key(
             &Secp256k1::new(),
@@ -652,6 +690,7 @@ mod dcd_merge_tests {
             grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
             ratio_args: ratio_args.clone(),
             oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
+            fee_script_hash_hex_le: "00".repeat(32),
         };
 
         let keypair = Keypair::from_secret_key(
@@ -725,7 +764,7 @@ mod dcd_merge_tests {
 
         let witness_values = build_dcd_witness(
             TokenBranch::Maker,
-            DcdBranch::MakerTermination {
+            &DcdBranch::MakerTermination {
                 is_change_needed: true,
                 index_to_spend: 0,
                 grantor_token_amount_to_burn: grantor_burn,
@@ -734,16 +773,17 @@ mod dcd_merge_tests {
             MergeBranch::default(),
         );
 
-        if run_program(&program, witness_values, env, RunnerLogLevel::None).is_err() {
-            panic!("expected success maker collateral termination path -- dcd price attested");
-        }
+        assert!(
+            run_program(&program, witness_values, &env, RunnerLogLevel::None).is_ok(),
+            "expected success maker collateral termination path -- dcd price attested"
+        );
 
         Ok(())
     }
 
     #[test]
     fn test_dcd_maker_settlement_termination_path_with_change_and_locktime() -> Result<()> {
-        let now: u32 = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as u32;
+        let now: u32 = u32::try_from(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs())?;
 
         let oracle_kp = Keypair::from_secret_key(
             &Secp256k1::new(),
@@ -781,6 +821,7 @@ mod dcd_merge_tests {
             grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
             ratio_args: ratio_args.clone(),
             oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
+            fee_script_hash_hex_le: "00".repeat(32),
         };
 
         let keypair = Keypair::from_secret_key(
@@ -854,7 +895,7 @@ mod dcd_merge_tests {
 
         let witness_values = build_dcd_witness(
             TokenBranch::Taker,
-            DcdBranch::MakerTermination {
+            &DcdBranch::MakerTermination {
                 is_change_needed: true,
                 index_to_spend: 0,
                 grantor_token_amount_to_burn: grantor_burn,
@@ -863,16 +904,17 @@ mod dcd_merge_tests {
             MergeBranch::default(),
         );
 
-        if run_program(&program, witness_values, env, RunnerLogLevel::Debug).is_err() {
-            panic!("expected success maker settlement termination path -- dcd price attested");
-        }
+        assert!(
+            run_program(&program, witness_values, &env, RunnerLogLevel::Debug).is_ok(),
+            "expected success maker settlement termination path -- dcd price attested"
+        );
 
         Ok(())
     }
 
     #[test]
     fn test_dcd_maker_settlement_path_price_le_strike() -> Result<()> {
-        let now: u32 = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as u32;
+        let now: u32 = u32::try_from(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs())?;
 
         let secp = Secp256k1::new();
         let oracle_sk = secp256k1::SecretKey::from_slice(&[3u8; 32])?;
@@ -911,6 +953,7 @@ mod dcd_merge_tests {
             grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
             ratio_args: ratio_args.clone(),
             oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
+            fee_script_hash_hex_le: "00".repeat(32),
         };
 
         let keypair = Keypair::from_secret_key(
@@ -990,7 +1033,7 @@ mod dcd_merge_tests {
 
         let witness_values = build_dcd_witness(
             TokenBranch::Maker,
-            DcdBranch::Settlement {
+            &DcdBranch::Settlement {
                 price_at_current_block_height: price,
                 oracle_sig: &sig,
                 index_to_spend: 0,
@@ -1001,16 +1044,17 @@ mod dcd_merge_tests {
             MergeBranch::default(),
         );
 
-        if run_program(&program, witness_values, env, RunnerLogLevel::Debug).is_err() {
-            panic!("expected success maker settlement (price <= strike) -- dcd price attested");
-        }
+        assert!(
+            run_program(&program, witness_values, &env, RunnerLogLevel::Debug).is_ok(),
+            "expected success maker settlement (price <= strike) -- dcd price attested"
+        );
 
         Ok(())
     }
 
     #[test]
     fn test_dcd_maker_settlement_path_price_gt_strike() -> Result<()> {
-        let now: u32 = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as u32;
+        let now: u32 = u32::try_from(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs())?;
 
         let secp = Secp256k1::new();
         let oracle_sk = secp256k1::SecretKey::from_slice(&[3u8; 32])?;
@@ -1049,6 +1093,7 @@ mod dcd_merge_tests {
             grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
             ratio_args: ratio_args.clone(),
             oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
+            fee_script_hash_hex_le: "00".repeat(32),
         };
 
         let keypair = Keypair::from_secret_key(
@@ -1128,7 +1173,7 @@ mod dcd_merge_tests {
 
         let witness_values = build_dcd_witness(
             TokenBranch::Maker,
-            DcdBranch::Settlement {
+            &DcdBranch::Settlement {
                 price_at_current_block_height: price,
                 oracle_sig: &sig,
                 index_to_spend: 0,
@@ -1139,16 +1184,17 @@ mod dcd_merge_tests {
             MergeBranch::default(),
         );
 
-        if run_program(&program, witness_values, env, RunnerLogLevel::Debug).is_err() {
-            panic!("expected success maker settlement (price > strike) -- dcd price attested");
-        }
+        assert!(
+            run_program(&program, witness_values, &env, RunnerLogLevel::Debug).is_ok(),
+            "expected success maker settlement (price > strike) -- dcd price attested"
+        );
 
         Ok(())
     }
 
     #[test]
     fn test_dcd_taker_settlement_path_price_le_strike() -> Result<()> {
-        let now: u32 = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as u32;
+        let now: u32 = u32::try_from(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs())?;
 
         let secp = Secp256k1::new();
         let oracle_sk = secp256k1::SecretKey::from_slice(&[3u8; 32])?;
@@ -1187,6 +1233,7 @@ mod dcd_merge_tests {
             grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
             ratio_args: ratio_args.clone(),
             oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
+            fee_script_hash_hex_le: "00".repeat(32),
         };
 
         let keypair = Keypair::from_secret_key(
@@ -1258,7 +1305,7 @@ mod dcd_merge_tests {
 
         let witness_values = build_dcd_witness(
             TokenBranch::Taker,
-            DcdBranch::Settlement {
+            &DcdBranch::Settlement {
                 price_at_current_block_height: price,
                 oracle_sig: &sig,
                 index_to_spend: 0,
@@ -1269,16 +1316,17 @@ mod dcd_merge_tests {
             MergeBranch::default(),
         );
 
-        if run_program(&program, witness_values, env, RunnerLogLevel::Debug).is_err() {
-            panic!("expected success taker settlement (price <= strike) -- dcd price attested");
-        }
+        assert!(
+            run_program(&program, witness_values, &env, RunnerLogLevel::Debug).is_ok(),
+            "expected success taker settlement (price <= strike) -- dcd price attested"
+        );
 
         Ok(())
     }
 
     #[test]
     fn test_dcd_taker_settlement_path_with_fee_basis_points() -> Result<()> {
-        let now: u32 = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as u32;
+        let now: u32 = u32::try_from(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs())?;
 
         let secp = Secp256k1::new();
         let oracle_sk = secp256k1::SecretKey::from_slice(&[3u8; 32])?;
@@ -1301,6 +1349,14 @@ mod dcd_merge_tests {
         let ratio_args =
             DCDRatioArguments::build_from(1000, incentive_basis_points, strike_price, 10)?;
 
+        let fee_recipient = get_p2pk_address(
+            &oracle_kp.x_only_public_key().0,
+            &AddressParams::LIQUID_TESTNET,
+        )?;
+
+        let mut fee_script_hash: [u8; 32] = hash_script_pubkey(&fee_recipient);
+        fee_script_hash.reverse();
+
         let settlement_height = 100u32;
         let dcd_arguments = DCDArguments {
             taker_funding_start_time: now,
@@ -1318,6 +1374,7 @@ mod dcd_merge_tests {
             grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
             ratio_args: ratio_args.clone(),
             oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
+            fee_script_hash_hex_le: hex::encode(fee_script_hash),
         };
 
         let keypair = Keypair::from_secret_key(
@@ -1356,7 +1413,7 @@ mod dcd_merge_tests {
         ));
 
         pst.add_output(Output::new_explicit(
-            Script::new(),
+            fee_recipient.script_pubkey(),
             fee_amount,
             AssetId::LIQUID_BTC,
             None,
@@ -1387,7 +1444,7 @@ mod dcd_merge_tests {
 
         let witness_values = build_dcd_witness(
             TokenBranch::Taker,
-            DcdBranch::Settlement {
+            &DcdBranch::Settlement {
                 price_at_current_block_height: price,
                 oracle_sig: &sig,
                 index_to_spend: 0,
@@ -1398,16 +1455,17 @@ mod dcd_merge_tests {
             MergeBranch::default(),
         );
 
-        if run_program(&program, witness_values, env, RunnerLogLevel::Debug).is_err() {
-            panic!("expected success taker settlement with fees -- dcd price attested");
-        }
+        assert!(
+            run_program(&program, witness_values, &env, RunnerLogLevel::Debug).is_ok(),
+            "expected success taker settlement with fees -- dcd price attested"
+        );
 
         Ok(())
     }
 
     #[test]
     fn test_dcd_taker_settlement_path_price_gt_strike() -> Result<()> {
-        let now: u32 = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as u32;
+        let now: u32 = u32::try_from(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs())?;
 
         let secp = Secp256k1::new();
         let oracle_sk = secp256k1::SecretKey::from_slice(&[3u8; 32])?;
@@ -1446,6 +1504,7 @@ mod dcd_merge_tests {
             grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
             ratio_args: ratio_args.clone(),
             oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
+            fee_script_hash_hex_le: "00".repeat(32),
         };
 
         let keypair = Keypair::from_secret_key(
@@ -1517,7 +1576,7 @@ mod dcd_merge_tests {
 
         let witness_values = build_dcd_witness(
             TokenBranch::Taker,
-            DcdBranch::Settlement {
+            &DcdBranch::Settlement {
                 price_at_current_block_height: price,
                 oracle_sig: &sig,
                 index_to_spend: 0,
@@ -1528,16 +1587,17 @@ mod dcd_merge_tests {
             MergeBranch::default(),
         );
 
-        if run_program(&program, witness_values, env, RunnerLogLevel::Debug).is_err() {
-            panic!("expected success taker settlement (price > strike) -- dcd price attested");
-        }
+        assert!(
+            run_program(&program, witness_values, &env, RunnerLogLevel::Debug).is_ok(),
+            "expected success taker settlement (price > strike) -- dcd price attested"
+        );
 
         Ok(())
     }
 
     #[test]
     fn test_dcd_merge_2_tokens() -> Result<()> {
-        let now: u32 = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as u32;
+        let now: u32 = u32::try_from(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs())?;
 
         let oracle_kp = Keypair::from_secret_key(
             &Secp256k1::new(),
@@ -1575,6 +1635,7 @@ mod dcd_merge_tests {
             grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
             ratio_args: ratio_args.clone(),
             oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
+            fee_script_hash_hex_le: "00".repeat(32),
         };
 
         let keypair = Keypair::from_secret_key(
@@ -1642,18 +1703,19 @@ mod dcd_merge_tests {
         );
 
         let witness_values =
-            build_dcd_witness(TokenBranch::default(), DcdBranch::Merge, MergeBranch::Two);
+            build_dcd_witness(TokenBranch::default(), &DcdBranch::Merge, MergeBranch::Two);
 
-        if run_program(&program, witness_values, env, RunnerLogLevel::Debug).is_err() {
-            panic!("expected success merge 2 tokens -- dcd price attested");
-        }
+        assert!(
+            run_program(&program, witness_values, &env, RunnerLogLevel::Debug).is_ok(),
+            "expected success merge 2 tokens -- dcd price attested"
+        );
 
         Ok(())
     }
 
     #[test]
     fn test_dcd_merge_3_tokens() -> Result<()> {
-        let now: u32 = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as u32;
+        let now: u32 = u32::try_from(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs())?;
 
         let oracle_kp = Keypair::from_secret_key(
             &Secp256k1::new(),
@@ -1691,6 +1753,7 @@ mod dcd_merge_tests {
             grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
             ratio_args: ratio_args.clone(),
             oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
+            fee_script_hash_hex_le: "00".repeat(32),
         };
 
         let keypair = Keypair::from_secret_key(
@@ -1763,19 +1826,23 @@ mod dcd_merge_tests {
             elements::BlockHash::all_zeros(),
         );
 
-        let witness_values =
-            build_dcd_witness(TokenBranch::default(), DcdBranch::Merge, MergeBranch::Three);
+        let witness_values = build_dcd_witness(
+            TokenBranch::default(),
+            &DcdBranch::Merge,
+            MergeBranch::Three,
+        );
 
-        if run_program(&program, witness_values, env, RunnerLogLevel::Debug).is_err() {
-            panic!("expected success merge 3 tokens -- dcd price attested");
-        }
+        assert!(
+            run_program(&program, witness_values, &env, RunnerLogLevel::Debug).is_ok(),
+            "expected success merge 3 tokens -- dcd price attested"
+        );
 
         Ok(())
     }
 
     #[test]
     fn test_dcd_merge_4_tokens() -> Result<()> {
-        let now: u32 = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as u32;
+        let now: u32 = u32::try_from(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs())?;
 
         let oracle_kp = Keypair::from_secret_key(
             &Secp256k1::new(),
@@ -1813,6 +1880,7 @@ mod dcd_merge_tests {
             grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
             ratio_args: ratio_args.clone(),
             oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
+            fee_script_hash_hex_le: "00".repeat(32),
         };
 
         let keypair = Keypair::from_secret_key(
@@ -1892,11 +1960,12 @@ mod dcd_merge_tests {
         );
 
         let witness_values =
-            build_dcd_witness(TokenBranch::default(), DcdBranch::Merge, MergeBranch::Four);
+            build_dcd_witness(TokenBranch::default(), &DcdBranch::Merge, MergeBranch::Four);
 
-        if run_program(&program, witness_values, env, RunnerLogLevel::Debug).is_err() {
-            panic!("expected success merge 4 tokens -- dcd price attested");
-        }
+        assert!(
+            run_program(&program, witness_values, &env, RunnerLogLevel::Debug).is_ok(),
+            "expected success merge 4 tokens -- dcd price attested"
+        );
 
         Ok(())
     }

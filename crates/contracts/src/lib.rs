@@ -1,3 +1,5 @@
+#![warn(clippy::all, clippy::pedantic)]
+
 mod dual_currency_deposit;
 mod options;
 mod simple_storage;

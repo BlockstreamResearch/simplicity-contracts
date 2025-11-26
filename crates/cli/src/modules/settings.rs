@@ -7,10 +7,14 @@ pub struct Settings {
 }
 
 impl Settings {
+    /// Load settings from environment and .env file.
+    ///
+    /// # Errors
+    /// Returns error if .env loading fails or `SEED_HEX` is not set.
     pub fn load() -> Result<Self> {
         match dotenvy::dotenv() {
             Ok(_) => {}
-            Err(err) => anyhow::bail!("Could not load .env file: {:?}", err),
+            Err(err) => anyhow::bail!("Could not load .env file: {err:?}"),
         }
 
         let cfg = Config::builder()

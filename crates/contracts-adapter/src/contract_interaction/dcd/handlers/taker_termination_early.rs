@@ -14,6 +14,7 @@ use simplicityhl_core::{
     fetch_utxo, finalize_p2pk_transaction, finalize_transaction, get_p2pk_address,
 };
 
+#[expect(clippy::too_many_lines)]
 pub fn handle(
     common_context: &CommonContext,
     taker_termination_context: TakerTerminationEarlyContext,
@@ -147,7 +148,7 @@ pub fn handle(
     // Attach DCD witness to input 0 only
     let witness_values = build_dcd_witness(
         TokenBranch::default(),
-        DcdBranch::TakerEarlyTermination {
+        &DcdBranch::TakerEarlyTermination {
             is_change_needed,
             index_to_spend: 0,
             filler_token_amount_to_return,
