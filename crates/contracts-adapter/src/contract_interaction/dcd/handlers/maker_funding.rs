@@ -10,12 +10,13 @@ use simplicityhl::simplicity::elements::{AddressParams, Script};
 use simplicityhl::{CompiledProgram, WitnessValues, simplicity};
 use simplicityhl_core::{
     AssetEntropyBytes, TaprootPubkeyGen, fetch_utxo, finalize_p2pk_transaction,
-    finalize_transaction, get_p2pk_address, obtain_utxo_value,
+    finalize_transaction, get_p2pk_address, obtain_utxo_asset_id, obtain_utxo_value,
 };
 
 use crate::dcd::common::{AssetEntropyProcessed, raw_asset_entropy_bytes_to_midstate};
 use crate::dcd::context::{CreationContext, DcdContractContext};
 use crate::dcd::{BaseContractContext, COLLATERAL_ASSET_ID};
+use anyhow::ensure;
 use std::str::FromStr;
 use tracing::instrument;
 
@@ -147,6 +148,12 @@ pub fn handle(
     );
 
     let settlement_asset_id = AssetId::from_str(&dcd_arguments.settlement_asset_id_hex_le)?;
+
+    let settlement_utxo_asset = obtain_utxo_asset_id(&settlement_utxo_tx_out)?;
+    ensure!(
+        settlement_utxo_asset == settlement_asset_id,
+        "Unequal settlement assets for funding contract, got: {settlement_utxo_asset}, has to be: {settlement_asset_id}",
+    );
 
     let change_recipient = get_p2pk_address(
         &keypair.x_only_public_key().0,

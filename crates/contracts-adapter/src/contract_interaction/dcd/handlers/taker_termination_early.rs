@@ -63,7 +63,7 @@ pub fn handle(
 
     anyhow::ensure!(
         collateral_to_get <= available_collateral,
-        "required collateral exceeds available"
+        "required collateral exceeds available, has to be at least: {collateral_to_get}, got {available_collateral}",
     );
 
     let is_change_needed = available_collateral != collateral_to_get;
@@ -128,7 +128,10 @@ pub fn handle(
     }
 
     // fee change
-    anyhow::ensure!(fee_amount <= total_fee_input, "fee exceeds input value");
+    anyhow::ensure!(
+        fee_amount <= total_fee_input,
+        "fee exceeds input value, has to be at least: {fee_amount}, got: {total_fee_input}"
+    );
     pst.add_output(Output::new_explicit(
         change_recipient.script_pubkey(),
         total_fee_input - fee_amount,

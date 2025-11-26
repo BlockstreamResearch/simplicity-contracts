@@ -7,7 +7,7 @@ use simplicityhl::elements::hex::ToHex;
 use simplicityhl::elements::schnorr::Keypair;
 use simplicityhl::elements::secp256k1_zkp::Secp256k1;
 use simplicityhl::elements::secp256k1_zkp::rand::thread_rng;
-use simplicityhl::elements::{AssetId, Transaction, TxOutSecrets};
+use simplicityhl::elements::{AssetId, Script, Transaction, TxOutSecrets};
 use simplicityhl::simplicity::bitcoin::secp256k1;
 use simplicityhl::simplicity::elements::confidential::Asset;
 use simplicityhl::simplicity::elements::pset::{Input, Output, PartiallySignedTransaction};
@@ -16,6 +16,7 @@ use simplicityhl_core::{
     AssetEntropyHex, LIQUID_TESTNET_BITCOIN_ASSET, fetch_utxo, finalize_p2pk_transaction,
     get_new_asset_entropy, get_p2pk_address, get_random_seed, obtain_utxo_value,
 };
+use tracing::instrument;
 
 pub struct IssueAssetResponse {
     pub tx: Transaction,
@@ -48,7 +49,9 @@ pub fn reissue_asset(
 
     let total_input_fee = fee_utxo_tx_out.value.explicit().unwrap();
     if fee_amount > total_input_fee {
-        return Err(anyhow!("fee exceeds fee input value"));
+        return Err(anyhow!(
+            "fee exceeds fee input value, fee_input: {fee_amount}, total_input_fee: {total_input_fee}"
+        ));
     }
 
     let blinding_sk = blinding_key.secret_key();
@@ -152,7 +155,9 @@ pub fn issue_asset(
 
     let total_input_fee = obtain_utxo_value(&fee_utxo_tx_out)?;
     if fee_amount > total_input_fee {
-        return Err(anyhow!("fee exceeds fee input value"));
+        return Err(anyhow!(
+            "fee exceeds fee input value, fee_input: {fee_amount}, total_input_fee: {total_input_fee}"
+        ));
     }
 
     let asset_entropy = get_random_seed();
@@ -259,7 +264,9 @@ pub fn transfer_asset(
 
     let total_input_fee = obtain_utxo_value(&fee_utxo_tx_out)?;
     if fee_amount > total_input_fee {
-        return Err(anyhow!("fee exceeds fee input value"));
+        return Err(anyhow!(
+            "fee exceeds fee input value, fee_input: {fee_amount}, total_input_fee: {total_input_fee}"
+        ));
     }
 
     let explicit_asset_id = match asset_utxo_tx_out.asset {
@@ -426,6 +433,64 @@ pub fn split_native(
     )?;
 
     tx.verify_tx_amt_proofs(secp256k1::SECP256K1, &[utxo_tx_out])?;
+    Ok(tx)
+}
+
+#[instrument(skip_all, level = "debug", err)]
+pub fn split_native_any(
+    keypair: secp256k1::Keypair,
+    fee_utxo: OutPoint,
+    parts_to_split: u64,
+    mut fee_amount: u64,
+    address_params: &'static AddressParams,
+    change_asset: AssetId,
+    genesis_block_hash: elements::BlockHash,
+) -> anyhow::Result<Transaction> {
+    let (utxo_tx_out, utxo_outpoint) = (fetch_utxo(fee_utxo)?, fee_utxo);
+
+    let change_recipient = get_p2pk_address(&keypair.x_only_public_key().0, address_params)?;
+    let total_input_utxo_value: u64 = obtain_utxo_value(&utxo_tx_out)?;
+
+    let mut pst = PartiallySignedTransaction::new_v2();
+
+    let issuance_tx = Input::from_prevout(utxo_outpoint);
+    pst.add_input(issuance_tx);
+
+    let split_amount = (total_input_utxo_value - fee_amount) / parts_to_split;
+    tracing::debug!("Splitting utxo with amount: {total_input_utxo_value} on {split_amount}");
+    fee_amount += total_input_utxo_value - fee_amount - split_amount * parts_to_split;
+
+    for _ in 0..parts_to_split {
+        let output = Output::new_explicit(
+            change_recipient.script_pubkey(),
+            split_amount,
+            change_asset,
+            None,
+        );
+        pst.add_output(output);
+    }
+
+    // Add fee
+    let output = Output::new_explicit(Script::new(), fee_amount, change_asset, None);
+    pst.add_output(output);
+
+    let mut tx = pst.extract_tx()?;
+    tracing::debug!("Formed for sending tx_id: {}", tx.txid().to_hex());
+
+    let utxos = [utxo_tx_out];
+
+    tx = finalize_p2pk_transaction(
+        tx.clone(),
+        &utxos,
+        &keypair,
+        0,
+        address_params,
+        genesis_block_hash,
+    )?;
+
+    tx.verify_tx_amt_proofs(secp256k1::SECP256K1, &utxos)?;
+
+    tracing::info!("Successfully formed tx_id: {}", tx.txid().to_hex());
     Ok(tx)
 }
 

@@ -1,12 +1,12 @@
 use contracts::build_witness::TokenBranch;
 use contracts::{OptionsArguments, finalize_options_funding_path_transaction, get_options_program};
 
-use std::str::FromStr;
-
+use anyhow::anyhow;
 use simplicityhl_core::{
     AssetEntropyBytes, LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_GENESIS, TaprootPubkeyGen,
     fetch_utxo, finalize_p2pk_transaction, finalize_transaction, get_p2pk_address, get_random_seed,
 };
+use std::str::FromStr;
 
 use simplicityhl::simplicity::elements::confidential::{AssetBlindingFactor, ValueBlindingFactor};
 use simplicityhl::simplicity::elements::pset::{Input, Output, PartiallySignedTransaction};
@@ -426,10 +426,11 @@ pub fn settlement_option(
         asset_amount <= available_target_asset,
         "asset_amount exceeds available settlement asset"
     );
-    anyhow::ensure!(
-        *fee_amount <= total_input_fee,
-        "fee exceeds fee input value"
-    );
+    if *fee_amount > total_input_fee {
+        return Err(anyhow!(
+            "fee exceeds fee input value, fee_input: {fee_amount}, total_input_fee: {total_input_fee}"
+        ));
+    }
 
     let change_recipient = get_p2pk_address(
         &keypair.x_only_public_key().0,
