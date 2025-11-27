@@ -98,7 +98,7 @@ pub fn handle(
         settlement_height: dcd_init_params.settlement_height,
         strike_price: dcd_init_params.strike_price,
         incentive_basis_points: dcd_init_params.incentive_basis_points,
-        fee_basis_points: 0,
+        fee_basis_points: dcd_init_params.fee_basis_points,
         collateral_asset_id_hex_le: COLLATERAL_ASSET_ID.to_string(),
         settlement_asset_id_hex_le: dcd_init_params.settlement_asset_id,
         filler_token_asset_id_hex_le: first_asset.to_string(),

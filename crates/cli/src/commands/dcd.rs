@@ -182,6 +182,9 @@ pub enum Dcd {
         /// Fee script hash (hex LE)
         #[arg(long = "fee-script-hash")]
         fee_script_hash: String,
+        /// Fee basis points
+        #[arg(long = "fee-basis-points")]
+        fee_basis_points: u64,
         /// Fee amount
         #[arg(long = "fee-amount")]
         fee_amount: u64,
@@ -607,6 +610,7 @@ impl Dcd {
                 settlement_asset_id,
                 oracle_public_key,
                 fee_script_hash,
+                fee_basis_points,
                 fee_amount,
                 account_index,
                 broadcast,
@@ -645,6 +649,7 @@ impl Dcd {
                             settlement_asset_id: settlement_asset_id.clone(),
                             oracle_public_key: oracle_public_key.clone(),
                             fee_script_hash: fee_script_hash.clone(),
+                            fee_basis_points: *fee_basis_points,
                         },
                         fee_amount: *fee_amount,
                     },

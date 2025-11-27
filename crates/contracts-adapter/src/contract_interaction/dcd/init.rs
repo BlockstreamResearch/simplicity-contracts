@@ -31,6 +31,7 @@ pub struct DcdInitParams {
     pub settlement_asset_id: AssetIdHex,
     pub oracle_public_key: String,
     pub fee_script_hash: String,
+    pub fee_basis_points: u64,
 }
 
 #[derive(Debug, Clone)]
