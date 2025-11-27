@@ -11,7 +11,7 @@ use simplicityhl::simplicity::elements::{Address, AddressParams, OutPoint};
 use simplicityhl::simplicity::hex::DisplayHex;
 use simplicityhl_core::{
     LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_GENESIS, broadcast_tx, derive_public_blinder_key,
-    get_p2pk_address,
+    get_p2pk_address, hash_script_pubkey,
 };
 
 #[derive(Subcommand, Debug)]
@@ -189,8 +189,12 @@ impl Basic {
                 let public_key = keypair.x_only_public_key().0;
                 let address = get_p2pk_address(&public_key, &AddressParams::LIQUID_TESTNET)?;
 
+                let mut script_hash: [u8; 32] = hash_script_pubkey(&address);
+                script_hash.reverse();
+
                 println!("X Only Public Key: {public_key}");
                 println!("P2PK Address: {address}");
+                println!("Script hash: {}", hex::encode(script_hash));
 
                 Ok(())
             }
