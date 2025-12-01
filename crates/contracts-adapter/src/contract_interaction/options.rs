@@ -175,7 +175,6 @@ pub fn cancellation_option(
         TokenBranch::OptionToken,
         contracts::build_witness::OptionBranch::Cancellation {
             is_change_needed: is_collateral_change_needed,
-            index_to_spend: 0,
             amount_to_burn: *amount_to_burn,
             collateral_amount_to_withdraw,
         },
@@ -353,7 +352,6 @@ pub fn expiry_option(
         TokenBranch::GrantorToken,
         contracts::build_witness::OptionBranch::Expiry {
             is_change_needed: is_collateral_change_needed,
-            index_to_spend: 0,
             grantor_token_amount_to_burn: *grantor_token_amount_to_burn,
             collateral_amount_to_withdraw: collateral_amount,
         },
@@ -536,7 +534,6 @@ pub fn settlement_option(
         TokenBranch::GrantorToken,
         contracts::build_witness::OptionBranch::Exercise {
             is_change_needed: is_target_change_needed,
-            index_to_spend: 0,
             amount_to_burn: *grantor_token_amount_to_burn,
             collateral_amount_to_get: 0,
             asset_amount,
@@ -750,7 +747,6 @@ pub fn exercise_option(
         TokenBranch::OptionToken,
         contracts::build_witness::OptionBranch::Exercise {
             is_change_needed: is_collateral_change_needed,
-            index_to_spend: 0,
             amount_to_burn: *amount_to_burn,
             collateral_amount_to_get,
             asset_amount: asset_amount_to_pay,

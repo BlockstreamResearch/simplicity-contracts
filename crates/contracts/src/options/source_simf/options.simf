@@ -3,6 +3,7 @@
  * 
  * Room for optimization: 
  * - https://github.com/BlockstreamResearch/simplicity-contracts/issues/2
+ * - (batching) https://github.com/BlockstreamResearch/simplicity-contracts/issues/4
  */
 
 /// Assert: a == b * expected_q, via divmod
@@ -127,20 +128,20 @@ fn funding_path(expected_asset_amount: u64) {
 /*
  * Cancellation Path
  */
-fn cancellation_path(index: u32, amount_to_burn: u64, collateral_amount_to_withdraw: u64, is_change_needed: bool) {
-    let collateral_input_index: u32 = index;
-    let option_input_index: u32 = increment_by(index, 1);
-    let grantor_input_index: u32 = dbg!(increment_by(index, 2));
+fn cancellation_path(amount_to_burn: u64, collateral_amount_to_withdraw: u64, is_change_needed: bool) {
+    let collateral_input_index: u32 = 0;
+    let option_input_index: u32 = 1;
+    let grantor_input_index: u32 = 2;
 
     let (burn_option_output_index, burn_grantor_output_index): (u32, u32) = match is_change_needed {
-        true => (increment_by(index, 1), increment_by(index, 2)),
-        false => (index, increment_by(index, 1)),
+        true => (1, 2),
+        false => (0, 1),
     };
     
     let expected_current_script_hash: u256 = get_input_script_hash(collateral_input_index);
 
     // Check and ensure collateral change
-    ensure_correct_change_at_index(index, param::COLLATERAL_ASSET_ID, collateral_amount_to_withdraw, expected_current_script_hash, is_change_needed);
+    ensure_correct_change_at_index(0, param::COLLATERAL_ASSET_ID, collateral_amount_to_withdraw, expected_current_script_hash, is_change_needed);
 
     // Burn option and grantor tokens
     ensure_output_is_op_return(burn_option_output_index);
@@ -156,20 +157,20 @@ fn cancellation_path(index: u32, amount_to_burn: u64, collateral_amount_to_withd
 /*
  * Exercise Path
  */
-fn exercise_path(index: u32, option_amount_to_burn: u64, collateral_amount_to_get: u64, asset_amount_to_pay: u64, is_change_needed: bool) {
+fn exercise_path(option_amount_to_burn: u64, collateral_amount_to_get: u64, asset_amount_to_pay: u64, is_change_needed: bool) {
     jet::check_lock_time(param::START_TIME);
 
-    let collateral_input_index: u32 = index;
+    let collateral_input_index: u32 = 0;
 
     let (burn_option_output_index, asset_to_covenant_output_index): (u32, u32) = match is_change_needed {
-        true => (increment_by(index, 1), increment_by(index, 2)),
-        false => (index, increment_by(index, 1)),
+        true => (1, 2),
+        false => (0, 1),
     };
 
     let expected_current_script_hash: u256 = get_input_script_hash(collateral_input_index);
 
     // Check and ensure collateral change
-    ensure_correct_change_at_index(index, param::COLLATERAL_ASSET_ID, collateral_amount_to_get, expected_current_script_hash, is_change_needed);
+    ensure_correct_change_at_index(0, param::COLLATERAL_ASSET_ID, collateral_amount_to_get, expected_current_script_hash, is_change_needed);
 
     // Ensure collateral and asset amounts are correct
     divmod_eq(collateral_amount_to_get, param::COLLATERAL_PER_CONTRACT, option_amount_to_burn);
@@ -187,20 +188,20 @@ fn exercise_path(index: u32, option_amount_to_burn: u64, collateral_amount_to_ge
 /*
  * Settlement Path
  */
-fn settlement_path(index: u32, grantor_token_amount_to_burn: u64, asset_amount: u64, is_change_needed: bool) {
+fn settlement_path(grantor_token_amount_to_burn: u64, asset_amount: u64, is_change_needed: bool) {
     jet::check_lock_time(param::START_TIME);
 
-    let target_asset_input_index: u32 = index;
+    let target_asset_input_index: u32 = 0;
 
     let burn_grantor_output_index: u32 = match is_change_needed {
-        true => increment_by(index, 1),
-        false => index,
+        true => 1,
+        false => 0,
     };
 
     let expected_current_script_hash: u256 = get_input_script_hash(target_asset_input_index);
 
     // Check and ensure settlement asset change
-    ensure_correct_change_at_index(index, param::SETTLEMENT_ASSET_ID, asset_amount, expected_current_script_hash, is_change_needed);
+    ensure_correct_change_at_index(0, param::SETTLEMENT_ASSET_ID, asset_amount, expected_current_script_hash, is_change_needed);
     
     // Ensure settlement asset and grantor token amounts are correct
     divmod_eq(asset_amount, param::SETTLEMENT_PER_CONTRACT, grantor_token_amount_to_burn);
@@ -213,20 +214,20 @@ fn settlement_path(index: u32, grantor_token_amount_to_burn: u64, asset_amount: 
 /*
  * Expiry Path
  */
-fn expiry_path(index: u32, grantor_token_amount_to_burn: u64, collateral_amount: u64, is_change_needed: bool) {
+fn expiry_path(grantor_token_amount_to_burn: u64, collateral_amount: u64, is_change_needed: bool) {
     jet::check_lock_time(param::EXPIRY_TIME);
 
-    let collateral_input_index: u32 = index;
+    let collateral_input_index: u32 = 0;
 
     let burn_grantor_output_index: u32 = match is_change_needed {
-        true => increment_by(index, 1),
-        false => index,
+        true => 1,
+        false => 0,
     };
 
     let expected_current_script_hash: u256 = get_input_script_hash(collateral_input_index);
 
     // Check and ensure collateral change
-    ensure_correct_change_at_index(collateral_input_index, param::COLLATERAL_ASSET_ID, collateral_amount, expected_current_script_hash, is_change_needed);
+    ensure_correct_change_at_index(0, param::COLLATERAL_ASSET_ID, collateral_amount, expected_current_script_hash, is_change_needed);
 
     // Ensure collateral amount is correct
     divmod_eq(collateral_amount, param::COLLATERAL_PER_CONTRACT, grantor_token_amount_to_burn);
@@ -240,27 +241,27 @@ fn main() {
     let token_branch: Either<(), ()> = witness::TOKEN_BRANCH;
     
     match witness::PATH {
-        Left(left_or_right: Either<u64, (bool, u32, u64, u64, u64)>) => match left_or_right {
+        Left(left_or_right: Either<u64, (bool, u64, u64, u64)>) => match left_or_right {
             Left(expected_asset_amount: u64) => {
                 funding_path(expected_asset_amount)
             },
-            Right(params: (bool, u32, u64, u64, u64)) => {
-                let (is_change_needed, index_to_spend, amount_to_burn, collateral_amount, asset_amount): (bool, u32, u64, u64, u64) = dbg!(params);
+            Right(params: (bool, u64, u64, u64)) => {
+                let (is_change_needed, amount_to_burn, collateral_amount, asset_amount): (bool, u64, u64, u64) = dbg!(params);
                 
                 match token_branch {
-                    Left(u: ()) => exercise_path(index_to_spend, amount_to_burn, collateral_amount, asset_amount, is_change_needed),
-                    Right(u: ()) => settlement_path(index_to_spend, amount_to_burn, asset_amount, is_change_needed),
+                    Left(u: ()) => exercise_path(amount_to_burn, collateral_amount, asset_amount, is_change_needed),
+                    Right(u: ()) => settlement_path(amount_to_burn, asset_amount, is_change_needed),
                 }
             },
         },
-        Right(left_or_right: Either<(bool, u32, u64, u64), (bool, u32, u64, u64)>) => match left_or_right {
-            Left(params: (bool, u32, u64, u64)) => {
-                let (is_change_needed, index_to_spend, grantor_token_amount_to_burn, collateral_amount): (bool, u32, u64, u64) = params;
-                expiry_path(index_to_spend, grantor_token_amount_to_burn, collateral_amount, is_change_needed)
+        Right(left_or_right: Either<(bool, u64, u64), (bool, u64, u64)>) => match left_or_right {
+            Left(params: (bool, u64, u64)) => {
+                let (is_change_needed, grantor_token_amount_to_burn, collateral_amount): (bool, u64, u64) = params;
+                expiry_path(grantor_token_amount_to_burn, collateral_amount, is_change_needed)
             },
-            Right(params: (bool, u32, u64, u64)) => {
-                let (is_change_needed, index_to_spend, amount_to_burn, collateral_amount): (bool, u32, u64, u64) = params;
-                cancellation_path(index_to_spend, amount_to_burn, collateral_amount, is_change_needed)
+            Right(params: (bool, u64, u64)) => {
+                let (is_change_needed, amount_to_burn, collateral_amount): (bool, u64, u64) = params;
+                cancellation_path(amount_to_burn, collateral_amount, is_change_needed)
             },
         },
     }
