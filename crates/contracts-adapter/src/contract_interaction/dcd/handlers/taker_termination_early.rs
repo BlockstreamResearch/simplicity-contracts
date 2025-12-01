@@ -148,12 +148,10 @@ pub fn handle(
     let utxos = vec![collateral_tx_out, filler_tx_out, fee_tx_out];
     let dcd_program = get_dcd_program(dcd_arguments)?;
 
-    // Attach DCD witness to input 0 only
     let witness_values = build_dcd_witness(
         TokenBranch::default(),
         &DcdBranch::TakerEarlyTermination {
             is_change_needed,
-            index_to_spend: 0,
             filler_token_amount_to_return,
             collateral_amount_to_get: collateral_to_get,
         },

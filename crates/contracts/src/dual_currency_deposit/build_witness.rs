@@ -58,26 +58,23 @@ pub enum DcdBranch<'a> {
         filler_token_amount_to_get: u64,
         is_change_needed: bool,
     },
-    // Left(Right((u64, Signature, u32, u64, u64, bool)))
+    // Left(Right((u64, Signature, u64, u64, bool)))
     Settlement {
         price_at_current_block_height: u64,
         oracle_sig: &'a bitcoin::secp256k1::schnorr::Signature,
-        index_to_spend: u32,
         amount_to_burn: u64,
         amount_to_get: u64,
         is_change_needed: bool,
     },
-    // Right(Left((bool, u32, u64, u64)))
+    // Right(Left((bool, u64, u64)))
     TakerEarlyTermination {
         is_change_needed: bool,
-        index_to_spend: u32,
         filler_token_amount_to_return: u64,
         collateral_amount_to_get: u64,
     },
-    // Right(Right((bool, u32, u64, u64)))
+    // Right(Right((bool, u64, u64)))
     MakerTermination {
         is_change_needed: bool,
-        index_to_spend: u32,
         grantor_token_amount_to_burn: u64,
         amount_to_get: u64,
     },
@@ -98,9 +95,9 @@ pub fn build_dcd_witness(
     // Types
     let maker_funding = ResolvedType::parse_from_str("(u64, u64, u64, u64)").unwrap();
     let taker_funding = ResolvedType::parse_from_str("(u64, u64, bool)").unwrap();
-    let settlement = ResolvedType::parse_from_str("(u64, Signature, u32, u64, u64, bool)").unwrap();
-    let taker_termination = ResolvedType::parse_from_str("(bool, u32, u64, u64)").unwrap();
-    let maker_termination = ResolvedType::parse_from_str("(bool, u32, u64, u64)").unwrap();
+    let settlement = ResolvedType::parse_from_str("(u64, Signature, u64, u64, bool)").unwrap();
+    let taker_termination = ResolvedType::parse_from_str("(bool, u64, u64)").unwrap();
+    let maker_termination = ResolvedType::parse_from_str("(bool, u64, u64)").unwrap();
 
     let funding_either = ResolvedType::either(maker_funding, taker_funding);
     let left_type = ResolvedType::either(funding_either, settlement);
@@ -143,34 +140,31 @@ pub fn build_dcd_witness(
         DcdBranch::Settlement {
             price_at_current_block_height,
             oracle_sig,
-            index_to_spend,
             amount_to_burn,
             amount_to_get,
             is_change_needed,
         } => {
             let sig_hex = hex::encode(oracle_sig.serialize());
             format!(
-                "Left(Right(({price_at_current_block_height}, 0x{sig_hex}, {index_to_spend}, {amount_to_burn}, {amount_to_get}, {is_change_needed})))"
+                "Left(Right(({price_at_current_block_height}, 0x{sig_hex}, {amount_to_burn}, {amount_to_get}, {is_change_needed})))"
             )
         }
         DcdBranch::TakerEarlyTermination {
             is_change_needed,
-            index_to_spend,
             filler_token_amount_to_return,
             collateral_amount_to_get,
         } => {
             format!(
-                "Right(Left(Left(({is_change_needed}, {index_to_spend}, {filler_token_amount_to_return}, {collateral_amount_to_get}))))"
+                "Right(Left(Left(({is_change_needed}, {filler_token_amount_to_return}, {collateral_amount_to_get}))))"
             )
         }
         DcdBranch::MakerTermination {
             is_change_needed,
-            index_to_spend,
             grantor_token_amount_to_burn,
             amount_to_get,
         } => {
             format!(
-                "Right(Left(Right(({is_change_needed}, {index_to_spend}, {grantor_token_amount_to_burn}, {amount_to_get}))))"
+                "Right(Left(Right(({is_change_needed}, {grantor_token_amount_to_burn}, {amount_to_get}))))"
             )
         }
         DcdBranch::Merge => "Right(Right(()))".to_string(),

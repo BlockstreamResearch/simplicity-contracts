@@ -199,7 +199,6 @@ pub fn handle(
             &DcdBranch::Settlement {
                 price_at_current_block_height: price,
                 oracle_sig: &oracle_sig,
-                index_to_spend: 0,
                 amount_to_burn: grantor_amount_to_burn,
                 amount_to_get,
                 is_change_needed,
@@ -316,7 +315,6 @@ pub fn handle(
             &DcdBranch::Settlement {
                 price_at_current_block_height: price,
                 oracle_sig: &oracle_sig,
-                index_to_spend: 0,
                 amount_to_burn: grantor_amount_to_burn,
                 amount_to_get,
                 is_change_needed,
