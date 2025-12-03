@@ -19,7 +19,7 @@ use simplicityhl_core::{finalize_p2pk_transaction, get_new_asset_entropy, get_p2
 
 #[tracing::instrument(level = "info", skip_all, err)]
 #[expect(clippy::too_many_lines)]
-pub fn handle(
+pub async fn handle(
     context: &CreationContext,
     maker_init_context: MakerInitContext,
     base_contract_context: &BaseContractContext,
@@ -46,13 +46,13 @@ pub fn handle(
         "Executing maker init with params"
     );
 
-    let first_utxo_tx_out = fetch_utxo(input_utxos[0])?;
+    let first_utxo_tx_out = fetch_utxo(input_utxos[0]).await?;
     let first_utxo_value = obtain_utxo_value(&first_utxo_tx_out)?;
 
-    let second_utxo_tx_out = fetch_utxo(input_utxos[1])?;
+    let second_utxo_tx_out = fetch_utxo(input_utxos[1]).await?;
     let second_utxo_value = obtain_utxo_value(&second_utxo_tx_out)?;
 
-    let third_utxo_tx_out = fetch_utxo(input_utxos[2])?;
+    let third_utxo_tx_out = fetch_utxo(input_utxos[2]).await?;
     let third_utxo_value = obtain_utxo_value(&third_utxo_tx_out)?;
 
     let total_input_fee = first_utxo_value + second_utxo_value + third_utxo_value;

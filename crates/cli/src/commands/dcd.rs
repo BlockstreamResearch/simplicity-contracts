@@ -407,7 +407,7 @@ impl Dcd {
     /// # Errors
     /// Returns error if the subcommand operation fails.
     #[expect(clippy::too_many_lines)]
-    pub fn handle(&self) -> Result<()> {
+    pub async fn handle(&self) -> Result<()> {
         match self {
             Dcd::Import {
                 taproot_pubkey_gen,
@@ -479,10 +479,11 @@ impl Dcd {
                             genesis_block_hash: *LIQUID_TESTNET_GENESIS,
                         },
                     },
-                )?;
+                )
+                .await?;
 
                 match broadcast {
-                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx).await?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
                 }
 
@@ -529,10 +530,11 @@ impl Dcd {
                             genesis_block_hash: *LIQUID_TESTNET_GENESIS,
                         },
                     },
-                )?;
+                )
+                .await?;
 
                 match broadcast {
-                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx).await?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
                 }
 
@@ -585,10 +587,11 @@ impl Dcd {
                             genesis_block_hash: *LIQUID_TESTNET_GENESIS,
                         },
                     },
-                )?;
+                )
+                .await?;
 
                 match broadcast {
-                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx).await?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
                 }
 
@@ -658,7 +661,8 @@ impl Dcd {
                         lbtc_asset: LIQUID_TESTNET_BITCOIN_ASSET,
                         genesis_block_hash: *LIQUID_TESTNET_GENESIS,
                     },
-                )?;
+                )
+                .await?;
 
                 println!("dcd_taproot_pubkey_gen: {dcd_taproot_pubkey_gen}");
 
@@ -685,7 +689,7 @@ impl Dcd {
                 )?;
 
                 match broadcast {
-                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx).await?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
                 }
 
@@ -771,10 +775,11 @@ impl Dcd {
                             genesis_block_hash: *LIQUID_TESTNET_GENESIS,
                         },
                     },
-                )?;
+                )
+                .await?;
 
                 match broadcast {
-                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx).await?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
                 }
 
@@ -820,10 +825,11 @@ impl Dcd {
                             genesis_block_hash: *LIQUID_TESTNET_GENESIS,
                         },
                     },
-                )?;
+                )
+                .await?;
 
                 match broadcast {
-                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx).await?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
                 }
 
@@ -871,10 +877,11 @@ impl Dcd {
                             genesis_block_hash: *LIQUID_TESTNET_GENESIS,
                         },
                     },
-                )?;
+                )
+                .await?;
 
                 match broadcast {
-                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx).await?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
                 }
 
@@ -922,10 +929,11 @@ impl Dcd {
                             genesis_block_hash: *LIQUID_TESTNET_GENESIS,
                         },
                     },
-                )?;
+                )
+                .await?;
 
                 match broadcast {
-                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx).await?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
                 }
 
@@ -974,10 +982,11 @@ impl Dcd {
                             genesis_block_hash: *LIQUID_TESTNET_GENESIS,
                         },
                     },
-                )?;
+                )
+                .await?;
 
                 match broadcast {
-                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx).await?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
                 }
 
@@ -1031,10 +1040,11 @@ impl Dcd {
                             genesis_block_hash: *LIQUID_TESTNET_GENESIS,
                         },
                     },
-                )?;
+                )
+                .await?;
 
                 match broadcast {
-                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx).await?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
                 }
                 Ok(())
@@ -1085,10 +1095,11 @@ impl Dcd {
                             lbtc_asset: LIQUID_TESTNET_BITCOIN_ASSET,
                         },
                     },
-                )?;
+                )
+                .await?;
 
                 match broadcast {
-                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx).await?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
                 }
 

@@ -36,7 +36,7 @@ use simplicityhl_core::{
 /// # Panics
 /// Panics if entropy conversion fails.
 #[expect(clippy::too_many_arguments, clippy::too_many_lines)]
-pub fn update_storage(
+pub async fn update_storage(
     keypair: &Keypair,
     blinder_key: &Keypair,
     fee_utxo: OutPoint,
@@ -51,9 +51,9 @@ pub fn update_storage(
     lbtc_asset: AssetId,
     genesis_block_hash: BlockHash,
 ) -> Result<Transaction> {
-    let storage_utxo_tx_out = fetch_utxo(storage_utxo)?;
-    let reissuance_token_tx_out = fetch_utxo(reissuance_token_utxo)?;
-    let fee_utxo_tx_out = fetch_utxo(fee_utxo)?;
+    let storage_utxo_tx_out = fetch_utxo(storage_utxo).await?;
+    let reissuance_token_tx_out = fetch_utxo(reissuance_token_utxo).await?;
+    let fee_utxo_tx_out = fetch_utxo(fee_utxo).await?;
 
     let total_input_fee = obtain_utxo_value(&fee_utxo_tx_out)?;
 
@@ -245,7 +245,7 @@ pub fn update_storage(
 ///
 /// # Errors
 /// Returns error if UTXO fetch or transaction finalization fails.
-pub fn init_state(
+pub async fn init_state(
     keypair: &Keypair,
     blinder_key: &Keypair,
     fee_utxo: OutPoint,
@@ -261,7 +261,7 @@ pub fn init_state(
 )> {
     const INIT_TOKEN_SUPPLY: u64 = 1;
 
-    let utxo_tx_out = fetch_utxo(fee_utxo)?;
+    let utxo_tx_out = fetch_utxo(fee_utxo).await?;
     let utxo_total_input_fee = obtain_utxo_value(&utxo_tx_out)?;
 
     let asset_entropy = get_random_seed();

@@ -16,7 +16,7 @@ use simplicityhl_core::{
 use std::str::FromStr;
 
 #[expect(clippy::too_many_lines)]
-pub fn handle(
+pub async fn handle(
     common_context: &CommonContext,
     taker_settlement_context: TakerSettlementContext,
     dcd_contract_context: &DcdContractContext,
@@ -43,9 +43,9 @@ pub fn handle(
     } = dcd_contract_context;
 
     // Fetch UTXOs
-    let asset_txout = fetch_utxo(asset_utxo)?; // DCD input 0
-    let filler_txout = fetch_utxo(filler_token_utxo)?; // P2PK input 1
-    let fee_txout = fetch_utxo(fee_utxo)?; // P2PK input 2
+    let asset_txout = fetch_utxo(asset_utxo).await?; // DCD input 0
+    let filler_txout = fetch_utxo(filler_token_utxo).await?; // P2PK input 1
+    let fee_txout = fetch_utxo(fee_utxo).await?; // P2PK input 2
 
     anyhow::ensure!(
         dcd_taproot_pubkey_gen.address.script_pubkey() == asset_txout.script_pubkey,

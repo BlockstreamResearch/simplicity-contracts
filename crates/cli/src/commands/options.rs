@@ -212,7 +212,7 @@ impl Options {
     /// # Errors
     /// Returns error if the subcommand operation fails.
     #[expect(clippy::too_many_lines)]
-    pub fn handle(&self) -> Result<()> {
+    pub async fn handle(&self) -> Result<()> {
         match self {
             Options::Import {
                 option_taproot_pubkey_gen,
@@ -266,7 +266,8 @@ impl Options {
                     *settlement_per_contract,
                     settlement_asset_id_hex_be,
                     *fee_amount,
-                )?;
+                )
+                .await?;
 
                 store.import_arguments(
                     &options_taproot_pubkey_gen.to_string(),
@@ -289,7 +290,7 @@ impl Options {
                 )?;
 
                 match broadcast {
-                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx).await?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
                 }
 
@@ -338,10 +339,11 @@ impl Options {
                     first_entropy_hex,
                     second_entropy_hex,
                     &option_arguments,
-                )?;
+                )
+                .await?;
 
                 match broadcast {
-                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx).await?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
                 }
                 Ok(())
@@ -373,10 +375,11 @@ impl Options {
                     fee_amount,
                     &keypair,
                     &option_arguments,
-                )?;
+                )
+                .await?;
 
                 match broadcast {
-                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx).await?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
                 }
                 Ok(())
@@ -406,10 +409,11 @@ impl Options {
                     fee_amount,
                     &option_arguments,
                     &keypair,
-                )?;
+                )
+                .await?;
 
                 match broadcast {
-                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx).await?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
                 }
                 Ok(())
@@ -439,10 +443,11 @@ impl Options {
                     fee_amount,
                     &option_arguments,
                     &keypair,
-                )?;
+                )
+                .await?;
 
                 match broadcast {
-                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx).await?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
                 }
                 Ok(())
@@ -474,10 +479,11 @@ impl Options {
                     amount_to_burn,
                     fee_amount,
                     &option_arguments,
-                )?;
+                )
+                .await?;
 
                 match broadcast {
-                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx).await?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
                 }
                 Ok(())

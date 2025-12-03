@@ -15,7 +15,7 @@ use simplicityhl_core::{
 };
 
 #[expect(clippy::too_many_lines)]
-pub fn handle(
+pub async fn handle(
     common_context: &CommonContext,
     taker_termination_context: TakerTerminationEarlyContext,
     dcd_contract_context: &DcdContractContext,
@@ -39,9 +39,9 @@ pub fn handle(
             },
     } = dcd_contract_context;
 
-    let collateral_tx_out = fetch_utxo(collateral_token_utxo)?; // DCD input index 0
-    let filler_tx_out = fetch_utxo(filler_token_utxo)?; // P2PK input index 1
-    let fee_tx_out = fetch_utxo(fee_utxo)?; // P2PK input index 2
+    let collateral_tx_out = fetch_utxo(collateral_token_utxo).await?; // DCD input index 0
+    let filler_tx_out = fetch_utxo(filler_token_utxo).await?; // P2PK input index 1
+    let fee_tx_out = fetch_utxo(fee_utxo).await?; // P2PK input index 2
 
     anyhow::ensure!(
         dcd_taproot_pubkey_gen.address.script_pubkey() == collateral_tx_out.script_pubkey,

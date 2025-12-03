@@ -181,7 +181,7 @@ impl Basic {
     /// # Panics
     /// Panics if asset entropy conversion fails.
     #[expect(clippy::too_many_lines)]
-    pub fn handle(&self) -> anyhow::Result<()> {
+    pub async fn handle(&self) -> anyhow::Result<()> {
         match self {
             Basic::Address { index } => {
                 let keypair = derive_keypair(*index);
@@ -217,10 +217,11 @@ impl Basic {
                     &AddressParams::LIQUID_TESTNET,
                     LIQUID_TESTNET_BITCOIN_ASSET,
                     *LIQUID_TESTNET_GENESIS,
-                )?;
+                )
+                .await?;
 
                 match broadcast {
-                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx).await?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
                 }
 
@@ -245,10 +246,11 @@ impl Basic {
                     &AddressParams::LIQUID_TESTNET,
                     LIQUID_TESTNET_BITCOIN_ASSET,
                     *LIQUID_TESTNET_GENESIS,
-                )?;
+                )
+                .await?;
 
                 match broadcast {
-                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx).await?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
                 }
 
@@ -273,10 +275,11 @@ impl Basic {
                     &AddressParams::LIQUID_TESTNET,
                     LIQUID_TESTNET_BITCOIN_ASSET,
                     *LIQUID_TESTNET_GENESIS,
-                )?;
+                )
+                .await?;
 
                 match broadcast {
-                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx).await?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
                 }
 
@@ -299,10 +302,11 @@ impl Basic {
                     &AddressParams::LIQUID_TESTNET,
                     LIQUID_TESTNET_BITCOIN_ASSET,
                     *LIQUID_TESTNET_GENESIS,
-                )?;
+                )
+                .await?;
 
                 match broadcast {
-                    true => println!("Broadcasted txid: {}", broadcast_tx(&transaction)?),
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&transaction).await?),
                     false => println!("{}", transaction.serialize().to_lower_hex_string()),
                 }
 
@@ -329,10 +333,11 @@ impl Basic {
                     &AddressParams::LIQUID_TESTNET,
                     LIQUID_TESTNET_BITCOIN_ASSET,
                     *LIQUID_TESTNET_GENESIS,
-                )?;
+                )
+                .await?;
 
                 match broadcast {
-                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx).await?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
                 }
 
@@ -369,14 +374,15 @@ impl Basic {
                     &AddressParams::LIQUID_TESTNET,
                     LIQUID_TESTNET_BITCOIN_ASSET,
                     *LIQUID_TESTNET_GENESIS,
-                )?;
+                )
+                .await?;
 
                 println!(
                     "Asset id: {asset_id}, Reissuance asset: {reissuance_asset_id}, Asset entropy: {asset_entropy}"
                 );
 
                 match broadcast {
-                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx).await?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
                 }
 
@@ -422,12 +428,13 @@ impl Basic {
                     &AddressParams::LIQUID_TESTNET,
                     LIQUID_TESTNET_BITCOIN_ASSET,
                     *LIQUID_TESTNET_GENESIS,
-                )?;
+                )
+                .await?;
 
                 println!("Asset id: {asset_id}, Reissuance id: {reissuance_asset_id}");
 
                 match broadcast {
-                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx).await?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
                 }
 

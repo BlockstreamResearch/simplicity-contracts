@@ -17,7 +17,7 @@ use simplicityhl_core::{
 };
 
 #[expect(clippy::too_many_lines)]
-pub fn handle(
+pub async fn handle(
     common_context: &CommonContext,
     taker_funding_context: TakerFundingContext,
     dcd_contract_context: &DcdContractContext,
@@ -40,8 +40,8 @@ pub fn handle(
             },
     } = dcd_contract_context;
 
-    let filler_tx_out = fetch_utxo(filler_token_utxo)?;
-    let collateral_tx_out = fetch_utxo(collateral_token_utxo)?;
+    let filler_tx_out = fetch_utxo(filler_token_utxo).await?;
+    let collateral_tx_out = fetch_utxo(collateral_token_utxo).await?;
 
     assert_eq!(
         dcd_taproot_pubkey_gen.address.script_pubkey(),

@@ -16,7 +16,7 @@ use simplicityhl::simplicity::elements::Script;
 use simplicityhl::simplicity::elements::pset::{Input, Output, PartiallySignedTransaction};
 
 #[expect(clippy::too_many_lines)]
-pub fn handle(
+pub async fn handle(
     common_context: &CommonContext,
     maker_termination_context: MakerTerminationCollateralContext,
     dcd_contract_context: &DcdContractContext,
@@ -41,9 +41,9 @@ pub fn handle(
     } = dcd_contract_context;
 
     // Fetch UTXOs
-    let collateral_txout = fetch_utxo(collateral_token_utxo)?; // DCD input 0
-    let grantor_coll_txout = fetch_utxo(grantor_collateral_token_utxo)?; // P2PK input 1
-    let fee_txout = fetch_utxo(fee_utxo)?; // P2PK input 2
+    let collateral_txout = fetch_utxo(collateral_token_utxo).await?; // DCD input 0
+    let grantor_coll_txout = fetch_utxo(grantor_collateral_token_utxo).await?; // P2PK input 1
+    let fee_txout = fetch_utxo(fee_utxo).await?; // P2PK input 2
 
     anyhow::ensure!(
         dcd_taproot_pubkey_gen.address.script_pubkey() == collateral_txout.script_pubkey,

@@ -29,7 +29,7 @@ use simplicityhl::simplicity::ToXOnlyPubkey;
 /// # Panics
 /// Panics if UTXO script doesn't match expected address.
 #[expect(clippy::too_many_arguments, clippy::too_many_lines)]
-pub fn cancellation_option(
+pub async fn cancellation_option(
     keypair: &Keypair,
     collateral_utxo: &OutPoint,
     option_asset_utxo: &OutPoint,
@@ -47,10 +47,10 @@ pub fn cancellation_option(
         &contracts::get_options_address,
     )?;
 
-    let cov_utxo = fetch_utxo(*collateral_utxo)?;
-    let option_utxo = fetch_utxo(*option_asset_utxo)?;
-    let grantor_utxo = fetch_utxo(*grantor_asset_utxo)?;
-    let fee_utxo_out = fetch_utxo(*fee_utxo)?;
+    let cov_utxo = fetch_utxo(*collateral_utxo).await?;
+    let option_utxo = fetch_utxo(*option_asset_utxo).await?;
+    let grantor_utxo = fetch_utxo(*grantor_asset_utxo).await?;
+    let fee_utxo_out = fetch_utxo(*fee_utxo).await?;
     assert_eq!(
         taproot_pubkey_gen.address.script_pubkey(),
         cov_utxo.script_pubkey,
@@ -231,7 +231,7 @@ pub fn cancellation_option(
 /// # Panics
 /// Panics if UTXO script doesn't match expected address.
 #[expect(clippy::too_many_arguments, clippy::too_many_lines)]
-pub fn expiry_option(
+pub async fn expiry_option(
     collateral_utxo: &OutPoint,
     grantor_asset_utxo: &OutPoint,
     fee_utxo: &OutPoint,
@@ -248,9 +248,9 @@ pub fn expiry_option(
         &contracts::get_options_address,
     )?;
 
-    let cov_utxo = fetch_utxo(*collateral_utxo)?;
-    let grantor_utxo = fetch_utxo(*grantor_asset_utxo)?;
-    let fee_utxo_out = fetch_utxo(*fee_utxo)?;
+    let cov_utxo = fetch_utxo(*collateral_utxo).await?;
+    let grantor_utxo = fetch_utxo(*grantor_asset_utxo).await?;
+    let fee_utxo_out = fetch_utxo(*fee_utxo).await?;
     assert_eq!(
         taproot_pubkey_gen.address.script_pubkey(),
         cov_utxo.script_pubkey,
@@ -396,7 +396,7 @@ pub fn expiry_option(
 /// # Panics
 /// Panics if UTXO script doesn't match expected address.
 #[expect(clippy::too_many_arguments, clippy::too_many_lines)]
-pub fn settlement_option(
+pub async fn settlement_option(
     settlement_asset_utxo: &OutPoint,
     grantor_asset_utxo: &OutPoint,
     fee_utxo: &OutPoint,
@@ -413,9 +413,9 @@ pub fn settlement_option(
         &contracts::get_options_address,
     )?;
 
-    let target_utxo = fetch_utxo(*settlement_asset_utxo)?;
-    let grantor_utxo = fetch_utxo(*grantor_asset_utxo)?;
-    let fee_lbtc_utxo = fetch_utxo(*fee_utxo)?;
+    let target_utxo = fetch_utxo(*settlement_asset_utxo).await?;
+    let grantor_utxo = fetch_utxo(*grantor_asset_utxo).await?;
+    let fee_lbtc_utxo = fetch_utxo(*fee_utxo).await?;
 
     assert_eq!(
         taproot_pubkey_gen.address.script_pubkey(),
@@ -583,7 +583,7 @@ pub fn settlement_option(
 /// # Panics
 /// Panics if UTXO script doesn't match expected address.
 #[expect(clippy::too_many_arguments, clippy::too_many_lines)]
-pub fn exercise_option(
+pub async fn exercise_option(
     collateral_utxo: &OutPoint,
     option_asset_utxo: &OutPoint,
     asset_utxo: &OutPoint,
@@ -602,16 +602,16 @@ pub fn exercise_option(
     )?;
 
     // Fetch and validate covenant LBTC UTXO
-    let cov_utxo = fetch_utxo(*collateral_utxo)?;
+    let cov_utxo = fetch_utxo(*collateral_utxo).await?;
     assert_eq!(
         taproot_pubkey_gen.address.script_pubkey(),
         cov_utxo.script_pubkey,
         "Expected collateral UTXO script to match options address"
     );
 
-    let option_utxo = fetch_utxo(*option_asset_utxo)?;
-    let asset_utxo_out = fetch_utxo(*asset_utxo)?;
-    let fee_utxo_out = fetch_utxo(*fee_utxo)?;
+    let option_utxo = fetch_utxo(*option_asset_utxo).await?;
+    let asset_utxo_out = fetch_utxo(*asset_utxo).await?;
+    let fee_utxo_out = fetch_utxo(*fee_utxo).await?;
 
     let total_input_fee = fee_utxo_out.value.explicit().unwrap();
 
@@ -801,7 +801,7 @@ pub fn exercise_option(
 /// # Panics
 /// Panics if UTXO value is confidential or entropy conversion fails.
 #[expect(clippy::too_many_arguments, clippy::too_many_lines)]
-pub fn funding_option(
+pub async fn funding_option(
     option_asset_utxo: &OutPoint,
     grantor_asset_utxo: &OutPoint,
     collateral_and_fee_utxo: &OutPoint,
@@ -814,9 +814,9 @@ pub fn funding_option(
     second_entropy_hex: impl AsRef<[u8]>,
     option_arguments: &OptionsArguments,
 ) -> anyhow::Result<Transaction> {
-    let option_utxo = fetch_utxo(*option_asset_utxo)?;
-    let grantor_utxo = fetch_utxo(*grantor_asset_utxo)?;
-    let collateral_utxo = fetch_utxo(*collateral_and_fee_utxo)?;
+    let option_utxo = fetch_utxo(*option_asset_utxo).await?;
+    let grantor_utxo = fetch_utxo(*grantor_asset_utxo).await?;
+    let collateral_utxo = fetch_utxo(*collateral_and_fee_utxo).await?;
 
     let total_input_fee = collateral_utxo.value.explicit().unwrap();
 
@@ -1011,7 +1011,7 @@ pub fn funding_option(
 /// # Panics
 /// Panics if UTXO values are confidential.
 #[expect(clippy::too_many_arguments, clippy::too_many_lines)]
-pub fn creation_option(
+pub async fn creation_option(
     keypair: &Keypair,
     blinder_key: &Keypair,
     first_fee_utxo: OutPoint,
@@ -1029,8 +1029,8 @@ pub fn creation_option(
     TaprootPubkeyGen,
     Transaction,
 )> {
-    let first_utxo = fetch_utxo(first_fee_utxo)?;
-    let second_utxo = fetch_utxo(second_fee_utxo)?;
+    let first_utxo = fetch_utxo(first_fee_utxo).await?;
+    let second_utxo = fetch_utxo(second_fee_utxo).await?;
 
     let first_asset_entropy = get_random_seed();
     let second_asset_entropy = get_random_seed();

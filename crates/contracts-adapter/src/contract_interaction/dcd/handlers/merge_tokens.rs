@@ -8,7 +8,7 @@ use simplicityhl::simplicity::ToXOnlyPubkey;
 use simplicityhl_core::{fetch_utxo, finalize_p2pk_transaction};
 
 #[expect(clippy::too_many_lines)]
-pub fn handle(
+pub async fn handle(
     common_context: &CommonContext,
     merge_tokens_context: MergeTokensContext,
     dcd_contract_context: &DcdContractContext,
@@ -34,11 +34,11 @@ pub fn handle(
     // Fetch all token UTXOs
     let mut token_txouts = vec![];
     for utxo in &token_utxos {
-        token_txouts.push(fetch_utxo(*utxo)?);
+        token_txouts.push(fetch_utxo(*utxo).await?);
     }
 
     // Fetch fee UTXO
-    let fee_txout = fetch_utxo(fee_utxo)?;
+    let fee_txout = fetch_utxo(fee_utxo).await?;
 
     // Get token asset ID from first UTXO
     let token_asset_id = token_txouts[0]

@@ -39,7 +39,7 @@ pub struct ReissueAssetResponse {
 /// # Panics
 /// Panics if the fee UTXO value is confidential.
 #[expect(clippy::too_many_arguments)]
-pub fn reissue_asset(
+pub async fn reissue_asset(
     keypair: &Keypair,
     blinding_key: &Keypair,
     reissue_asset_outpoint: OutPoint,
@@ -51,8 +51,8 @@ pub fn reissue_asset(
     lbtc_asset: AssetId,
     genesis_block_hash: elements::BlockHash,
 ) -> anyhow::Result<ReissueAssetResponse> {
-    let reissue_utxo_tx_out = fetch_utxo(reissue_asset_outpoint)?;
-    let fee_utxo_tx_out = fetch_utxo(fee_utxo_outpoint)?;
+    let reissue_utxo_tx_out = fetch_utxo(reissue_asset_outpoint).await?;
+    let fee_utxo_tx_out = fetch_utxo(fee_utxo_outpoint).await?;
 
     let total_input_fee = fee_utxo_tx_out.value.explicit().unwrap();
     if fee_amount > total_input_fee {
@@ -156,7 +156,7 @@ pub fn reissue_asset(
 /// # Panics
 /// Panics if UTXO value is confidential.
 #[expect(clippy::too_many_arguments)]
-pub fn issue_asset(
+pub async fn issue_asset(
     keypair: &Keypair,
     blinding_key: &Keypair,
     fee_utxo_outpoint: OutPoint,
@@ -166,7 +166,7 @@ pub fn issue_asset(
     lbtc_asset: AssetId,
     genesis_block_hash: elements::BlockHash,
 ) -> anyhow::Result<IssueAssetResponse> {
-    let fee_utxo_tx_out = fetch_utxo(fee_utxo_outpoint)?;
+    let fee_utxo_tx_out = fetch_utxo(fee_utxo_outpoint).await?;
 
     let total_input_fee = obtain_utxo_value(&fee_utxo_tx_out)?;
     if fee_amount > total_input_fee {
@@ -262,7 +262,7 @@ pub fn issue_asset(
 /// # Errors
 /// Returns error if UTXO fetch fails, amount exceeds balance, or transaction finalization fails.
 #[expect(clippy::too_many_arguments)]
-pub fn transfer_asset(
+pub async fn transfer_asset(
     keypair: &Keypair,
     asset_utxo_outpoint: OutPoint,
     fee_utxo_outpoint: OutPoint,
@@ -273,8 +273,8 @@ pub fn transfer_asset(
     lbtc_asset: AssetId,
     genesis_block_hash: elements::BlockHash,
 ) -> anyhow::Result<Transaction> {
-    let asset_utxo_tx_out = fetch_utxo(asset_utxo_outpoint)?;
-    let fee_utxo_tx_out = fetch_utxo(fee_utxo_outpoint)?;
+    let asset_utxo_tx_out = fetch_utxo(asset_utxo_outpoint).await?;
+    let fee_utxo_tx_out = fetch_utxo(fee_utxo_outpoint).await?;
 
     let total_input_asset = obtain_utxo_value(&asset_utxo_tx_out)?;
     if send_amount > total_input_asset {
@@ -346,7 +346,7 @@ pub fn transfer_asset(
 /// # Errors
 /// Returns error if UTXO fetch fails or transaction finalization fails.
 #[expect(clippy::too_many_arguments)]
-pub fn split_native_three(
+pub async fn split_native_three(
     keypair: &Keypair,
     utxo_outpoint: OutPoint,
     recipient_address: &Address,
@@ -356,7 +356,7 @@ pub fn split_native_three(
     lbtc_asset: AssetId,
     genesis_block_hash: elements::BlockHash,
 ) -> anyhow::Result<Transaction> {
-    let utxo_tx_out = fetch_utxo(utxo_outpoint)?;
+    let utxo_tx_out = fetch_utxo(utxo_outpoint).await?;
     let total_input_amount = obtain_utxo_value(&utxo_tx_out)?;
 
     let first_amount = amount;
@@ -411,7 +411,7 @@ pub fn split_native_three(
 /// # Errors
 /// Returns error if UTXO fetch fails or transaction finalization fails.
 #[expect(clippy::too_many_arguments)]
-pub fn split_native(
+pub async fn split_native(
     keypair: &Keypair,
     utxo_outpoint: OutPoint,
     recipient_address: &Address,
@@ -421,7 +421,7 @@ pub fn split_native(
     lbtc_asset: AssetId,
     genesis_block_hash: elements::BlockHash,
 ) -> anyhow::Result<Transaction> {
-    let utxo_tx_out = fetch_utxo(utxo_outpoint)?;
+    let utxo_tx_out = fetch_utxo(utxo_outpoint).await?;
     let utxo_total_input_amount = obtain_utxo_value(&utxo_tx_out)?;
 
     let first_amount = amount;
@@ -467,7 +467,7 @@ pub fn split_native(
 /// # Errors
 /// Returns error if UTXO fetch fails or transaction finalization fails.
 #[instrument(skip_all, level = "debug", err)]
-pub fn split_native_any(
+pub async fn split_native_any(
     keypair: Keypair,
     fee_utxo: OutPoint,
     parts_to_split: u64,
@@ -476,7 +476,7 @@ pub fn split_native_any(
     change_asset: AssetId,
     genesis_block_hash: elements::BlockHash,
 ) -> anyhow::Result<Transaction> {
-    let (utxo_tx_out, utxo_outpoint) = (fetch_utxo(fee_utxo)?, fee_utxo);
+    let (utxo_tx_out, utxo_outpoint) = (fetch_utxo(fee_utxo).await?, fee_utxo);
 
     let change_recipient = get_p2pk_address(&keypair.x_only_public_key().0, address_params)?;
     let total_input_utxo_value: u64 = obtain_utxo_value(&utxo_tx_out)?;
@@ -529,7 +529,7 @@ pub fn split_native_any(
 /// # Errors
 /// Returns error if amount+fee exceeds balance or transaction finalization fails.
 #[expect(clippy::too_many_arguments)]
-pub fn transfer_native(
+pub async fn transfer_native(
     keypair: &Keypair,
     utxo_outpoint: OutPoint,
     to_address: &Address,
@@ -539,7 +539,7 @@ pub fn transfer_native(
     lbtc_asset: AssetId,
     genesis_block_hash: elements::BlockHash,
 ) -> anyhow::Result<Transaction> {
-    let utxo_tx_out = fetch_utxo(utxo_outpoint)?;
+    let utxo_tx_out = fetch_utxo(utxo_outpoint).await?;
     let utxo_total_amount = obtain_utxo_value(&utxo_tx_out)?;
 
     if amount_to_send + fee_amount > utxo_total_amount {

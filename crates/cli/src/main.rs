@@ -57,11 +57,12 @@ enum Commands {
     },
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     match Cli::parse().command {
-        Commands::Basic { basic } => basic.handle(),
-        Commands::Options { options } => options.handle(),
-        Commands::Storage { storage } => storage.handle(),
-        Commands::Dcd { dcd } => dcd.handle(),
+        Commands::Basic { basic } => basic.handle().await,
+        Commands::Options { options } => options.handle().await,
+        Commands::Storage { storage } => storage.handle().await,
+        Commands::Dcd { dcd } => dcd.handle().await,
     }
 }

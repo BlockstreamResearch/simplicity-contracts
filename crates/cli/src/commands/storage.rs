@@ -82,7 +82,8 @@ impl Storage {
     ///
     /// # Errors
     /// Returns error if the subcommand operation fails.
-    pub fn handle(&self) -> Result<()> {
+    #[expect(clippy::too_many_lines)]
+    pub async fn handle(&self) -> Result<()> {
         match self {
             Storage::Import {
                 storage_taproot_pubkey_gen,
@@ -123,7 +124,8 @@ impl Storage {
                         &AddressParams::LIQUID_TESTNET,
                         LIQUID_TESTNET_BITCOIN_ASSET,
                         *LIQUID_TESTNET_GENESIS,
-                    )?;
+                    )
+                    .await?;
 
                 store.import_arguments(
                     &storage_taproot_pubkey_gen.to_string(),
@@ -142,7 +144,7 @@ impl Storage {
                 println!("Taproot gen: {storage_taproot_pubkey_gen}");
 
                 match broadcast {
-                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx).await?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
                 }
             }
@@ -184,10 +186,11 @@ impl Storage {
                     &AddressParams::LIQUID_TESTNET,
                     LIQUID_TESTNET_BITCOIN_ASSET,
                     *LIQUID_TESTNET_GENESIS,
-                )?;
+                )
+                .await?;
 
                 match broadcast {
-                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx)?),
+                    true => println!("Broadcasted txid: {}", broadcast_tx(&tx).await?),
                     false => println!("{}", tx.serialize().to_lower_hex_string()),
                 }
             }

@@ -49,7 +49,7 @@ impl DcdManager {
     ///
     /// # Errors
     /// Returns error if contract initialization fails.
-    pub fn maker_init(
+    pub async fn maker_init(
         creation_context: &CreationContext,
         maker_init_context: MakerInitContext,
         base_contract_context: &BaseContractContext,
@@ -59,13 +59,14 @@ impl DcdManager {
             maker_init_context,
             base_contract_context,
         )
+        .await
     }
 
     /// Fund a DCD contract as maker with token issuance.
     ///
     /// # Errors
     /// Returns error if entropy conversion or funding transaction fails.
-    pub fn maker_funding<
+    pub async fn maker_funding<
         T1: AsRef<[u8]> + Debug,
         T2: AsRef<[u8]> + Debug,
         T3: AsRef<[u8]> + Debug,
@@ -110,13 +111,14 @@ impl DcdManager {
             &inner_context,
             dcd_contract_context,
         )
+        .await
     }
 
     /// Fund a DCD contract as taker.
     ///
     /// # Errors
     /// Returns error if funding transaction creation fails.
-    pub fn taker_funding(
+    pub async fn taker_funding(
         common_context: &CommonContext,
         taker_funding_context: TakerFundingContext,
         dcd_contract_context: &DcdContractContext,
@@ -126,13 +128,14 @@ impl DcdManager {
             taker_funding_context,
             dcd_contract_context,
         )
+        .await
     }
 
     /// Terminate DCD contract early as taker.
     ///
     /// # Errors
     /// Returns error if termination transaction creation fails.
-    pub fn taker_early_termination(
+    pub async fn taker_early_termination(
         common_context: &CommonContext,
         taker_termination_early_context: TakerTerminationEarlyContext,
         dcd_contract_context: &DcdContractContext,
@@ -142,13 +145,14 @@ impl DcdManager {
             taker_termination_early_context,
             dcd_contract_context,
         )
+        .await
     }
 
     /// Terminate DCD contract as maker, withdrawing collateral.
     ///
     /// # Errors
     /// Returns error if termination transaction creation fails.
-    pub fn maker_collateral_termination(
+    pub async fn maker_collateral_termination(
         common_context: &CommonContext,
         maker_termination_context: MakerTerminationCollateralContext,
         dcd_contract_context: &DcdContractContext,
@@ -158,13 +162,14 @@ impl DcdManager {
             maker_termination_context,
             dcd_contract_context,
         )
+        .await
     }
 
     /// Terminate DCD contract as maker at settlement.
     ///
     /// # Errors
     /// Returns error if termination transaction creation fails.
-    pub fn maker_settlement_termination(
+    pub async fn maker_settlement_termination(
         common_context: &CommonContext,
         maker_settlement_context: MakerTerminationSettlementContext,
         dcd_contract_context: &DcdContractContext,
@@ -174,13 +179,14 @@ impl DcdManager {
             maker_settlement_context,
             dcd_contract_context,
         )
+        .await
     }
 
     /// Settle DCD contract as maker.
     ///
     /// # Errors
     /// Returns error if settlement transaction creation fails.
-    pub fn maker_settlement(
+    pub async fn maker_settlement(
         common_context: &CommonContext,
         maker_settlement_context: MakerSettlementContext,
         dcd_contract_context: &DcdContractContext,
@@ -190,13 +196,14 @@ impl DcdManager {
             maker_settlement_context,
             dcd_contract_context,
         )
+        .await
     }
 
     /// Settle DCD contract as taker.
     ///
     /// # Errors
     /// Returns error if settlement transaction creation fails.
-    pub fn taker_settlement(
+    pub async fn taker_settlement(
         common_context: &CommonContext,
         taker_settlement_context: TakerSettlementContext,
         dcd_contract_context: &DcdContractContext,
@@ -206,13 +213,14 @@ impl DcdManager {
             taker_settlement_context,
             dcd_contract_context,
         )
+        .await
     }
 
     /// Merge multiple DCD tokens into one.
     ///
     /// # Errors
     /// Returns error if merge transaction creation fails.
-    pub fn merge_tokens(
+    pub async fn merge_tokens(
         common_context: &CommonContext,
         merge_tokens_context: MergeTokensContext,
         dcd_contract_context: &DcdContractContext,
@@ -222,5 +230,6 @@ impl DcdManager {
             merge_tokens_context,
             dcd_contract_context,
         )
+        .await
     }
 }

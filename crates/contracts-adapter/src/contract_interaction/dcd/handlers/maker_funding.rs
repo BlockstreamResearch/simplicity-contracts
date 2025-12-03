@@ -31,7 +31,7 @@ pub struct InnerMakerFundingContext {
 
 #[instrument(level = "debug", skip_all, err)]
 #[expect(clippy::too_many_lines)]
-pub fn handle(
+pub async fn handle(
     context: &CreationContext,
     funding_context: &InnerMakerFundingContext,
     contract_context: &DcdContractContext,
@@ -72,19 +72,21 @@ pub fn handle(
 
     let (filler_token_utxo, filler_token_utxo_tx_out) = (
         filler_reissue_token_info.0,
-        fetch_utxo(filler_reissue_token_info.0)?,
+        fetch_utxo(filler_reissue_token_info.0).await?,
     );
     let (grantor_collateral_token_utxo, grantor_collateral_token_utxo_tx_out) = (
         grantor_collateral_reissue_token_info.0,
-        fetch_utxo(grantor_collateral_reissue_token_info.0)?,
+        fetch_utxo(grantor_collateral_reissue_token_info.0).await?,
     );
     let (grantor_settlement_token_utxo, grantor_settlement_token_utxo_tx_out) = (
         grantor_settlement_reissue_token_info.0,
-        fetch_utxo(grantor_settlement_reissue_token_info.0)?,
+        fetch_utxo(grantor_settlement_reissue_token_info.0).await?,
     );
-    let (settlement_utxo, settlement_utxo_tx_out) =
-        (settlement_asset_utxo, fetch_utxo(*settlement_asset_utxo)?);
-    let fee_utxo_tx_out = fetch_utxo(*fee_utxo)?;
+    let (settlement_utxo, settlement_utxo_tx_out) = (
+        settlement_asset_utxo,
+        fetch_utxo(*settlement_asset_utxo).await?,
+    );
+    let fee_utxo_tx_out = fetch_utxo(*fee_utxo).await?;
 
     let total_input_fee = obtain_utxo_value(&fee_utxo_tx_out)?;
     let total_input_asset = obtain_utxo_value(&settlement_utxo_tx_out)?;
