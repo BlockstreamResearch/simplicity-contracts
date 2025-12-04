@@ -153,7 +153,6 @@ pub fn handle(
         TokenBranch::Maker,
         &DcdBranch::MakerTermination {
             is_change_needed,
-            index_to_spend: 0,
             grantor_token_amount_to_burn: grantor_collateral_amount_to_burn,
             amount_to_get,
         },

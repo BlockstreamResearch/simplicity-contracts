@@ -635,7 +635,6 @@ mod dcd_merge_tests {
             TokenBranch::default(),
             &DcdBranch::TakerEarlyTermination {
                 is_change_needed: true,
-                index_to_spend: 0,
                 filler_token_amount_to_return: filler_return,
                 collateral_amount_to_get: collateral_get,
             },
@@ -766,7 +765,6 @@ mod dcd_merge_tests {
             TokenBranch::Maker,
             &DcdBranch::MakerTermination {
                 is_change_needed: true,
-                index_to_spend: 0,
                 grantor_token_amount_to_burn: grantor_burn,
                 amount_to_get: collateral_get,
             },
@@ -897,7 +895,6 @@ mod dcd_merge_tests {
             TokenBranch::Taker,
             &DcdBranch::MakerTermination {
                 is_change_needed: true,
-                index_to_spend: 0,
                 grantor_token_amount_to_burn: grantor_burn,
                 amount_to_get: settlement_get,
             },
@@ -1036,7 +1033,6 @@ mod dcd_merge_tests {
             &DcdBranch::Settlement {
                 price_at_current_block_height: price,
                 oracle_sig: &sig,
-                index_to_spend: 0,
                 amount_to_burn: grantor_burn,
                 amount_to_get,
                 is_change_needed: true,
@@ -1176,7 +1172,6 @@ mod dcd_merge_tests {
             &DcdBranch::Settlement {
                 price_at_current_block_height: price,
                 oracle_sig: &sig,
-                index_to_spend: 0,
                 amount_to_burn: grantor_burn,
                 amount_to_get,
                 is_change_needed: true,
@@ -1308,7 +1303,6 @@ mod dcd_merge_tests {
             &DcdBranch::Settlement {
                 price_at_current_block_height: price,
                 oracle_sig: &sig,
-                index_to_spend: 0,
                 amount_to_burn: filler_burn,
                 amount_to_get,
                 is_change_needed: true,
@@ -1447,7 +1441,6 @@ mod dcd_merge_tests {
             &DcdBranch::Settlement {
                 price_at_current_block_height: price,
                 oracle_sig: &sig,
-                index_to_spend: 0,
                 amount_to_burn: filler_burn,
                 amount_to_get,
                 is_change_needed: false,
@@ -1579,7 +1572,6 @@ mod dcd_merge_tests {
             &DcdBranch::Settlement {
                 price_at_current_block_height: price,
                 oracle_sig: &sig,
-                index_to_spend: 0,
                 amount_to_burn: filler_burn,
                 amount_to_get,
                 is_change_needed: true,

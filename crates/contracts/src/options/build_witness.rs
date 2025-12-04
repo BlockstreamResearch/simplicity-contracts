@@ -27,20 +27,17 @@ pub enum OptionBranch {
     },
     Exercise {
         is_change_needed: bool,
-        index_to_spend: u32,
         amount_to_burn: u64,
         collateral_amount_to_get: u64,
         asset_amount: u64,
     },
     Expiry {
         is_change_needed: bool,
-        index_to_spend: u32,
         grantor_token_amount_to_burn: u64,
         collateral_amount_to_withdraw: u64,
     },
     Cancellation {
         is_change_needed: bool,
-        index_to_spend: u32,
         amount_to_burn: u64,
         collateral_amount_to_withdraw: u64,
     },
@@ -53,11 +50,11 @@ pub enum OptionBranch {
 #[must_use]
 pub fn build_option_witness(token_branch: TokenBranch, branch: OptionBranch) -> WitnessValues {
     let single = ResolvedType::parse_from_str("u64").unwrap();
-    let triple = ResolvedType::parse_from_str("(bool, u32, u64, u64, u64)").unwrap();
-    let pair = ResolvedType::parse_from_str("(bool, u32, u64, u64)").unwrap();
+    let quadruple = ResolvedType::parse_from_str("(bool, u64, u64, u64)").unwrap();
+    let triple = ResolvedType::parse_from_str("(bool, u64, u64)").unwrap();
 
-    let left_type = ResolvedType::either(single.clone(), triple.clone());
-    let right_type = ResolvedType::either(pair.clone(), pair.clone());
+    let left_type = ResolvedType::either(single.clone(), quadruple.clone());
+    let right_type = ResolvedType::either(triple.clone(), triple.clone());
     let path_type = ResolvedType::either(left_type, right_type);
 
     let branch_str = match branch {
@@ -68,34 +65,29 @@ pub fn build_option_witness(token_branch: TokenBranch, branch: OptionBranch) -> 
         }
         OptionBranch::Exercise {
             is_change_needed,
-            index_to_spend,
             amount_to_burn,
             collateral_amount_to_get: collateral_amount,
             asset_amount,
         } => {
             format!(
-                "Left(Right(({is_change_needed}, {index_to_spend}, {amount_to_burn}, {collateral_amount}, {asset_amount})))"
+                "Left(Right(({is_change_needed}, {amount_to_burn}, {collateral_amount}, {asset_amount})))"
             )
         }
         OptionBranch::Expiry {
             is_change_needed,
-            index_to_spend,
             grantor_token_amount_to_burn,
             collateral_amount_to_withdraw: collateral_amount,
         } => {
             format!(
-                "Right(Left(({is_change_needed}, {index_to_spend}, {grantor_token_amount_to_burn}, {collateral_amount})))"
+                "Right(Left(({is_change_needed}, {grantor_token_amount_to_burn}, {collateral_amount})))"
             )
         }
         OptionBranch::Cancellation {
             is_change_needed,
-            index_to_spend,
             amount_to_burn,
             collateral_amount_to_withdraw: collateral_amount,
         } => {
-            format!(
-                "Right(Right(({is_change_needed}, {index_to_spend}, {amount_to_burn}, {collateral_amount})))",
-            )
+            format!("Right(Right(({is_change_needed}, {amount_to_burn}, {collateral_amount})))",)
         }
     };
 

@@ -11,6 +11,8 @@
  *
  * All amounts and asset/script invariants are enforced on-chain; time guards use
  * fallback locktime and height checks.
+ *
+ * Batching discussion: https://github.com/BlockstreamResearch/simplicity-contracts/issues/4
  */
 
 // Verify Schnorr signature against SHA256 of (u32 || u64)
@@ -291,22 +293,22 @@ fn taker_funding_path(collateral_amount_to_deposit: u64, filler_token_amount_to_
     ensure_output_asset_with_amount_eq(filler_to_user_output_index, param::FILLER_TOKEN_ASSET, filler_token_amount_to_get);
 }
 
-fn taker_early_termination_path(index: u32, filler_token_amount_to_return: u64, collateral_amount_to_get: u64, is_change_needed: bool) {
+fn taker_early_termination_path(filler_token_amount_to_return: u64, collateral_amount_to_get: u64, is_change_needed: bool) {
     let current_time: u32 = <u32>::into(jet::lock_time());
     ensure_one_bit_or(jet::le_32(current_time, param::EARLY_TERMINATION_END_TIME), jet::le_32(param::CONTRACT_EXPIRY_TIME, current_time));
 
-    let collateral_input_index: u32 = index;
-    let filler_token_input_index: u32 = increment_by(index, 1);
+    let collateral_input_index: u32 = 0;
+    let filler_token_input_index: u32 = 1;
 
     let (return_filler_output_index, return_collateral_output_index): (u32, u32) = match is_change_needed {
-        true => (increment_by(index, 1), increment_by(index, 2)),
-        false => (index, increment_by(index, 1)),
+        true => (1, 2),
+        false => (0, 1),
     };
 
     let expected_current_script_hash: u256 = get_input_script_hash(collateral_input_index);
     
     // Check and ensure collateral change
-    ensure_correct_change_at_index(index, param::COLLATERAL_ASSET_ID, collateral_amount_to_get, expected_current_script_hash, is_change_needed);
+    ensure_correct_change_at_index(0, param::COLLATERAL_ASSET_ID, collateral_amount_to_get, expected_current_script_hash, is_change_needed);
 
     // Ensure collateral and asset amounts are correct
     divmod_eq(collateral_amount_to_get, param::FILLER_PER_PRINCIPAL_COLLATERAL, filler_token_amount_to_return);
@@ -319,22 +321,22 @@ fn taker_early_termination_path(index: u32, filler_token_amount_to_return: u64, 
     ensure_output_asset_with_amount_eq(return_collateral_output_index, param::COLLATERAL_ASSET_ID, collateral_amount_to_get);
 }
 
-fn maker_collateral_termination_path(index: u32, grantor_collateral_amount_to_burn: u64, collateral_amount_to_get: u64, is_change_needed: bool) {
+fn maker_collateral_termination_path(grantor_collateral_amount_to_burn: u64, collateral_amount_to_get: u64, is_change_needed: bool) {
     let current_time: u32 = <u32>::into(jet::lock_time());
     ensure_one_bit_or(jet::le_32(current_time, param::EARLY_TERMINATION_END_TIME), jet::le_32(param::CONTRACT_EXPIRY_TIME, current_time));
 
-    let collateral_input_index: u32 = index;
-    let grantor_collateral_token_input_index: u32 = increment_by(index, 1);
+    let collateral_input_index: u32 = 0;
+    let grantor_collateral_token_input_index: u32 = 1;
 
     let (burn_grantor_collateral_output_index, return_collateral_output_index): (u32, u32) = match is_change_needed {
-        true => (increment_by(index, 1), increment_by(index, 2)),
-        false => (index, increment_by(index, 1)),
+        true => (1, 2),
+        false => (0, 1),
     };
 
     let expected_current_script_hash: u256 = get_input_script_hash(collateral_input_index);
     
     // Check and ensure collateral change
-    ensure_correct_change_at_index(index, param::COLLATERAL_ASSET_ID, collateral_amount_to_get, expected_current_script_hash, is_change_needed);
+    ensure_correct_change_at_index(0, param::COLLATERAL_ASSET_ID, collateral_amount_to_get, expected_current_script_hash, is_change_needed);
 
     // Ensure collateral and asset amounts are correct
     divmod_eq(collateral_amount_to_get, param::GRANTOR_COLLATERAL_PER_DEPOSITED_COLLATERAL, grantor_collateral_amount_to_burn);
@@ -347,22 +349,22 @@ fn maker_collateral_termination_path(index: u32, grantor_collateral_amount_to_bu
     ensure_output_asset_with_amount_eq(return_collateral_output_index, param::COLLATERAL_ASSET_ID, collateral_amount_to_get);
 }
 
-fn maker_settlement_termination_path(index: u32, grantor_settlement_amount_to_burn: u64, settlement_amount_to_get: u64, is_change_needed: bool) {
+fn maker_settlement_termination_path(grantor_settlement_amount_to_burn: u64, settlement_amount_to_get: u64, is_change_needed: bool) {
     let current_time: u32 = <u32>::into(jet::lock_time());
     ensure_one_bit_or(jet::le_32(current_time, param::EARLY_TERMINATION_END_TIME), jet::le_32(param::CONTRACT_EXPIRY_TIME, current_time));
 
-    let settlement_asset_input_index: u32 = index;
-    let grantor_settlement_token_input_index: u32 = increment_by(index, 1);
+    let settlement_asset_input_index: u32 = 0;
+    let grantor_settlement_token_input_index: u32 = 1;
 
     let (burn_grantor_settlement_output_index, return_settlement_output_index): (u32, u32) = match is_change_needed {
-        true => (increment_by(index, 1), increment_by(index, 2)),
-        false => (index, increment_by(index, 1)),
+        true => (1, 2),
+        false => (0, 1),
     };
 
     let expected_current_script_hash: u256 = get_input_script_hash(settlement_asset_input_index);
     
     // Check and ensure settlement asset change
-    ensure_correct_change_at_index(index, param::SETTLEMENT_ASSET_ID, settlement_amount_to_get, expected_current_script_hash, is_change_needed);
+    ensure_correct_change_at_index(0, param::SETTLEMENT_ASSET_ID, settlement_amount_to_get, expected_current_script_hash, is_change_needed);
 
     // Ensure settlement asset amount is correct
     divmod_eq(settlement_amount_to_get, param::GRANTOR_SETTLEMENT_PER_DEPOSITED_ASSET, grantor_settlement_amount_to_burn);
@@ -397,24 +399,24 @@ fn ensure_correct_return_at(user_output_index: u32, asset_id: u256, amount_to_ge
     };
 }
 
-fn maker_settlement_path(price_at_current_block_height: u64, oracle_sig: Signature, index: u32, grantor_amount_to_burn: u64, amount_to_get: u64, is_change_needed: bool) {
+fn maker_settlement_path(price_at_current_block_height: u64, oracle_sig: Signature, grantor_amount_to_burn: u64, amount_to_get: u64, is_change_needed: bool) {
     jet::check_lock_height(param::SETTLEMENT_HEIGHT);
     checksig_priceblock(param::ORACLE_PK, param::SETTLEMENT_HEIGHT, price_at_current_block_height, oracle_sig);
 
     match jet::le_64(price_at_current_block_height, param::STRIKE_PRICE) {
         true => {
             // Maker gets ALT
-            let settlement_asset_input_index: u32 = index;
+            let settlement_asset_input_index: u32 = 0;
 
             let (burn_grantor_settlement_output_index, burn_grantor_collateral_output_index, settlement_output_index): (u32, u32, u32) = match is_change_needed {
-                true => (increment_by(index, 1), increment_by(index, 2), increment_by(index, 3)),
-                false => (index, increment_by(index, 1), increment_by(index, 2)),
+                true => (1, 2, 3),
+                false => (0, 1, 2),
             };
 
             let expected_current_script_hash: u256 = get_input_script_hash(settlement_asset_input_index);
             
             // Check and ensure settlement asset change
-            ensure_correct_change_at_index(index, param::SETTLEMENT_ASSET_ID, amount_to_get, expected_current_script_hash, is_change_needed);
+            ensure_correct_change_at_index(0, param::SETTLEMENT_ASSET_ID, amount_to_get, expected_current_script_hash, is_change_needed);
 
             // Ensure settlement asset amount is correct
             divmod_eq(amount_to_get, param::GRANTOR_PER_SETTLEMENT_ASSET, grantor_amount_to_burn);
@@ -430,17 +432,17 @@ fn maker_settlement_path(price_at_current_block_height: u64, oracle_sig: Signatu
         },
         false => {
             // Maker gets the LBTC
-            let collateral_input_index: u32 = index;
+            let collateral_input_index: u32 = 0;
 
             let (burn_grantor_collateral_output_index, burn_grantor_settlement_output_index, collateral_output_index): (u32, u32, u32) = match is_change_needed {
-                true => (increment_by(index, 1), increment_by(index, 2), increment_by(index, 3)),
-                false => (index, increment_by(index, 1), increment_by(index, 2)),
+                true => (1, 2, 3),
+                false => (0, 1, 2),
             };
 
             let expected_current_script_hash: u256 = get_input_script_hash(collateral_input_index);
             
             // Check and ensure collateral change
-            ensure_correct_change_at_index(index, param::COLLATERAL_ASSET_ID, amount_to_get, expected_current_script_hash, is_change_needed);
+            ensure_correct_change_at_index(0, param::COLLATERAL_ASSET_ID, amount_to_get, expected_current_script_hash, is_change_needed);
 
             // Ensure collateral and asset amounts are correct
             divmod_eq(amount_to_get, param::GRANTOR_PER_SETTLEMENT_COLLATERAL, grantor_amount_to_burn);
@@ -457,24 +459,24 @@ fn maker_settlement_path(price_at_current_block_height: u64, oracle_sig: Signatu
     }
 }
 
-fn taker_settlement_path(price_at_current_block_height: u64, oracle_sig: Signature, index: u32, filler_amount_to_burn: u64, amount_to_get: u64, is_change_needed: bool) {
+fn taker_settlement_path(price_at_current_block_height: u64, oracle_sig: Signature, filler_amount_to_burn: u64, amount_to_get: u64, is_change_needed: bool) {
     jet::check_lock_height(param::SETTLEMENT_HEIGHT);
     checksig_priceblock(param::ORACLE_PK, param::SETTLEMENT_HEIGHT, price_at_current_block_height, oracle_sig);
 
     match jet::le_64(price_at_current_block_height, param::STRIKE_PRICE) {
         true => {
             // Taker receives LBTC principal+interest
-            let collateral_input_index: u32 = index;
+            let collateral_input_index: u32 = 0;
 
             let (burn_filler_output_index, collateral_output_index): (u32, u32) = match is_change_needed {
-                true => (increment_by(index, 1), increment_by(index, 2)),
-                false => (index, increment_by(index, 1)),
+                true => (1, 2),
+                false => (0, 1),
             };
 
             let expected_current_script_hash: u256 = get_input_script_hash(collateral_input_index);
             
             // Check and ensure collateral change
-            ensure_correct_change_at_index(index, param::COLLATERAL_ASSET_ID, amount_to_get, expected_current_script_hash, is_change_needed);
+            ensure_correct_change_at_index(0, param::COLLATERAL_ASSET_ID, amount_to_get, expected_current_script_hash, is_change_needed);
 
             // Ensure collateral and asset amounts are correct
             divmod_eq(amount_to_get, param::FILLER_PER_SETTLEMENT_COLLATERAL, filler_amount_to_burn);
@@ -488,17 +490,17 @@ fn taker_settlement_path(price_at_current_block_height: u64, oracle_sig: Signatu
         },
         false => {
             // Taker receives ALT
-            let settlement_asset_input_index: u32 = index;
+            let settlement_asset_input_index: u32 = 0;
 
             let (burn_filler_output_index, settlement_output_index): (u32, u32) = match is_change_needed {
-                true => (increment_by(index, 1), increment_by(index, 2)),
-                false => (index, increment_by(index, 1)),
+                true => (1, 2),
+                false => (0, 1),
             };
 
             let expected_current_script_hash: u256 = get_input_script_hash(settlement_asset_input_index);
             
             // Check and ensure settlement asset change
-            ensure_correct_change_at_index(index, param::SETTLEMENT_ASSET_ID, amount_to_get, expected_current_script_hash, is_change_needed);
+            ensure_correct_change_at_index(0, param::SETTLEMENT_ASSET_ID, amount_to_get, expected_current_script_hash, is_change_needed);
 
             // Ensure settlement asset amount is correct
             divmod_eq(amount_to_get, param::FILLER_PER_SETTLEMENT_ASSET, filler_amount_to_burn);
@@ -518,7 +520,7 @@ fn main() {
     let merge_branch: Either<Either<(), ()>, ()> = witness::MERGE_BRANCH;
 
     match witness::PATH {
-        Left(funding_or_settlement: Either<Either<(u64, u64, u64, u64), (u64, u64, bool)>, (u64, Signature, u32, u64, u64, bool)>) => match funding_or_settlement {
+        Left(funding_or_settlement: Either<Either<(u64, u64, u64, u64), (u64, u64, bool)>, (u64, Signature, u64, u64, bool)>) => match funding_or_settlement {
             // Funding branches
             Left(funding_params: Either<(u64, u64, u64, u64), (u64, u64, bool)>) => match funding_params {
                 // Maker funding: (principal_collateral_amount, principal_asset_amount, interest_collateral_amount, interest_asset_amount)
@@ -533,34 +535,34 @@ fn main() {
                 },
             },
             // Settlement branches (oracle price attested)
-            Right(params: (u64, Signature, u32, u64, u64, bool)) => {
-                let (price_at_current_block_height, oracle_sig, index_to_spend, amount_to_burn, amount_to_get, is_change_needed): (u64, Signature, u32, u64, u64, bool) = params;
+            Right(params: (u64, Signature, u64, u64, bool)) => {
+                let (price_at_current_block_height, oracle_sig, amount_to_burn, amount_to_get, is_change_needed): (u64, Signature, u64, u64, bool) = params;
 
                 match token_branch {
                     // Maker settlement: burn grantor token
-                    Left(u: ()) => maker_settlement_path(price_at_current_block_height, oracle_sig, index_to_spend, amount_to_burn, amount_to_get, is_change_needed),
+                    Left(u: ()) => maker_settlement_path(price_at_current_block_height, oracle_sig, amount_to_burn, amount_to_get, is_change_needed),
                     // Taker settlement: burn filler token
-                    Right(u: ()) => taker_settlement_path(price_at_current_block_height, oracle_sig, index_to_spend, amount_to_burn, amount_to_get, is_change_needed),
+                    Right(u: ()) => taker_settlement_path(price_at_current_block_height, oracle_sig, amount_to_burn, amount_to_get, is_change_needed),
                 }
             },
         },
         // Termination flows (early termination or post-expiry) or Merge flows
-        Right(termination_or_maker_or_merge: Either<Either<(bool, u32, u64, u64), (bool, u32, u64, u64)>, ()>) => match termination_or_maker_or_merge {
-            Left(termination_or_maker: Either<(bool, u32, u64, u64), (bool, u32, u64, u64)>) => match termination_or_maker {
-                // Taker early termination: (is_change_needed, index_to_spend, filler_token_amount_to_return, collateral_amount_to_get)
-                Left(params: (bool, u32, u64, u64)) => {
-                    let (is_change_needed, index_to_spend, filler_token_amount_to_return, collateral_amount_to_get): (bool, u32, u64, u64) = params;
-                    taker_early_termination_path(index_to_spend, filler_token_amount_to_return, collateral_amount_to_get, is_change_needed)
+        Right(termination_or_maker_or_merge: Either<Either<(bool, u64, u64), (bool, u64, u64)>, ()>) => match termination_or_maker_or_merge {
+            Left(termination_or_maker: Either<(bool, u64, u64), (bool, u64, u64)>) => match termination_or_maker {
+                // Taker early termination: (is_change_needed, filler_token_amount_to_return, collateral_amount_to_get)
+                Left(params: (bool, u64, u64)) => {
+                    let (is_change_needed, filler_token_amount_to_return, collateral_amount_to_get): (bool, u64, u64) = params;
+                    taker_early_termination_path(filler_token_amount_to_return, collateral_amount_to_get, is_change_needed)
                 },
                 // Maker termination (burn grantor token): choose collateral vs settlement token via token_branch
-                Right(params: (bool, u32, u64, u64)) => {
-                    let (is_change_needed, index_to_spend, grantor_token_amount_to_burn, amount_to_get): (bool, u32, u64, u64) = params;
+                Right(params: (bool, u64, u64)) => {
+                    let (is_change_needed, grantor_token_amount_to_burn, amount_to_get): (bool, u64, u64) = params;
 
                     match token_branch {
                         // Burn grantor collateral token -> receive collateral
-                        Left(u: ()) => maker_collateral_termination_path(index_to_spend, grantor_token_amount_to_burn, amount_to_get, is_change_needed),
+                        Left(u: ()) => maker_collateral_termination_path(grantor_token_amount_to_burn, amount_to_get, is_change_needed),
                         // Burn grantor settlement token -> receive settlement asset
-                        Right(u: ()) => maker_settlement_termination_path(index_to_spend, grantor_token_amount_to_burn, amount_to_get, is_change_needed),
+                        Right(u: ()) => maker_settlement_termination_path(grantor_token_amount_to_burn, amount_to_get, is_change_needed),
                     }
                 },
             },
