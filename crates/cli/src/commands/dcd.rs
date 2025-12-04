@@ -5,7 +5,6 @@ use simplicityhl::elements::OutPoint;
 use simplicityhl::elements::bitcoin::secp256k1;
 use simplicityhl::elements::hex::ToHex;
 use simplicityhl::elements::pset::serialize::Serialize;
-use simplicityhl::elements::secp256k1_zkp::PublicKey;
 use simplicityhl::simplicity::hex::DisplayHex;
 
 use simplicityhl_core::{
@@ -183,6 +182,9 @@ pub enum Dcd {
         /// Fee script hash (hex LE)
         #[arg(long = "fee-script-hash")]
         fee_script_hash: String,
+        /// Fee basis points
+        #[arg(long = "fee-basis-points")]
+        fee_basis_points: u64,
         /// Fee amount
         #[arg(long = "fee-amount")]
         fee_amount: u64,
@@ -350,7 +352,7 @@ pub enum Dcd {
         price_at_current_block_height: u64,
         /// Oracle signature (hex)
         #[arg(long = "oracle-signature")]
-        oracle_signature: PublicKey,
+        oracle_signature: String,
         /// Grantor token amount to burn
         #[arg(long = "grantor-amount-to-burn")]
         grantor_amount_to_burn: u64,
@@ -608,6 +610,7 @@ impl Dcd {
                 settlement_asset_id,
                 oracle_public_key,
                 fee_script_hash,
+                fee_basis_points,
                 fee_amount,
                 account_index,
                 broadcast,
@@ -646,6 +649,7 @@ impl Dcd {
                             settlement_asset_id: settlement_asset_id.clone(),
                             oracle_public_key: oracle_public_key.clone(),
                             fee_script_hash: fee_script_hash.clone(),
+                            fee_basis_points: *fee_basis_points,
                         },
                         fee_amount: *fee_amount,
                     },
@@ -804,8 +808,8 @@ impl Dcd {
                     TakerFundingContext {
                         filler_token_utxo: *filler_token_utxo,
                         collateral_token_utxo: *collateral_utxo,
-                        fee_amount: *collateral_amount_to_deposit,
-                        collateral_amount_to_deposit: *fee_amount,
+                        fee_amount: *fee_amount,
+                        collateral_amount_to_deposit: *collateral_amount_to_deposit,
                     },
                     &DcdContractContext {
                         dcd_taproot_pubkey_gen: taproot_pubkey_gen,
@@ -852,11 +856,11 @@ impl Dcd {
                 let tx = contracts_adapter::dcd::DcdManager::taker_early_termination(
                     &CommonContext { keypair },
                     TakerTerminationEarlyContext {
-                        filler_token_utxo: *collateral_utxo,
-                        collateral_token_utxo: *filler_token_utxo,
+                        filler_token_utxo: *filler_token_utxo,
+                        collateral_token_utxo: *collateral_utxo,
                         fee_utxo: *fee_utxo,
-                        fee_amount: *filler_token_amount_to_return,
-                        filler_token_amount_to_return: *fee_amount,
+                        fee_amount: *fee_amount,
+                        filler_token_amount_to_return: *filler_token_amount_to_return,
                     },
                     &DcdContractContext {
                         dcd_taproot_pubkey_gen: taproot_pubkey_gen,
@@ -906,8 +910,8 @@ impl Dcd {
                         collateral_token_utxo: *collateral_utxo,
                         grantor_collateral_token_utxo: *grantor_collateral_token_utxo,
                         fee_utxo: *fee_utxo,
-                        fee_amount: *grantor_collateral_amount_to_burn,
-                        grantor_collateral_amount_to_burn: *fee_amount,
+                        fee_amount: *fee_amount,
+                        grantor_collateral_amount_to_burn: *grantor_collateral_amount_to_burn,
                     },
                     &DcdContractContext {
                         dcd_taproot_pubkey_gen: taproot_pubkey_gen,
@@ -958,8 +962,8 @@ impl Dcd {
                         settlement_asset_utxo: *settlement_asset_utxo,
                         grantor_settlement_token_utxo: *grantor_settlement_token_utxo,
                         fee_utxo: *fee_utxo,
-                        fee_amount: *grantor_settlement_amount_to_burn,
-                        grantor_settlement_amount_to_burn: *fee_amount,
+                        fee_amount: *fee_amount,
+                        grantor_settlement_amount_to_burn: *grantor_settlement_amount_to_burn,
                     },
                     &DcdContractContext {
                         dcd_taproot_pubkey_gen: taproot_pubkey_gen,
@@ -1013,10 +1017,10 @@ impl Dcd {
                         grantor_collateral_token_utxo: *grantor_collateral_token_utxo,
                         grantor_settlement_token_utxo: *grantor_settlement_token_utxo,
                         fee_utxo: *fee_utxo,
-                        fee_amount: *price_at_current_block_height,
-                        price_at_current_block_height: *grantor_amount_to_burn,
-                        oracle_signature: oracle_signature.to_hex(),
-                        grantor_amount_to_burn: *fee_amount,
+                        fee_amount: *fee_amount,
+                        price_at_current_block_height: *price_at_current_block_height,
+                        oracle_signature: oracle_signature.clone(),
+                        grantor_amount_to_burn: *grantor_amount_to_burn,
                     },
                     &DcdContractContext {
                         dcd_taproot_pubkey_gen: taproot_pubkey_gen,
@@ -1067,9 +1071,9 @@ impl Dcd {
                         asset_utxo: *asset_utxo,
                         filler_token_utxo: *filler_token_utxo,
                         fee_utxo: *fee_utxo,
-                        fee_amount: *price_at_current_block_height,
-                        price_at_current_block_height: *filler_amount_to_burn,
-                        filler_amount_to_burn: *fee_amount,
+                        fee_amount: *fee_amount,
+                        price_at_current_block_height: *price_at_current_block_height,
+                        filler_amount_to_burn: *filler_amount_to_burn,
                         oracle_signature: oracle_signature.clone(),
                     },
                     &DcdContractContext {
