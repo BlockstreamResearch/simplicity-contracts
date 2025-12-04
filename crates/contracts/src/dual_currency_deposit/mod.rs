@@ -246,7 +246,7 @@ mod dcd_merge_tests {
             strike_price,
             incentive_basis_points,
             fee_basis_points: 0,
-            collateral_asset_id_hex_le: AssetId::LIQUID_BTC.to_string(),
+            collateral_asset_id_hex_le: LIQUID_TESTNET_BITCOIN_ASSET.to_string(),
             settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
             filler_token_asset_id_hex_le: first_asset_id.to_string(),
             grantor_collateral_token_asset_id_hex_le: second_asset_id.to_string(),
@@ -287,6 +287,7 @@ mod dcd_merge_tests {
         pst.add_input(second_reissuance_tx);
         pst.add_input(third_reissuance_tx);
         pst.add_input(Input::from_prevout(outpoint));
+        pst.add_input(Input::from_prevout(outpoint));
 
         pst.add_output(Output::new_explicit(
             dcd_address.script_pubkey(),
@@ -312,7 +313,7 @@ mod dcd_merge_tests {
         pst.add_output(Output::new_explicit(
             dcd_address.script_pubkey(),
             ratio_args.interest_collateral_amount,
-            AssetId::LIQUID_BTC,
+            LIQUID_TESTNET_BITCOIN_ASSET,
             None,
         ));
 
@@ -344,6 +345,30 @@ mod dcd_merge_tests {
             None,
         ));
 
+        // Output 8: collateral change
+        pst.add_output(Output::new_explicit(
+            Script::new(),
+            1,
+            LIQUID_TESTNET_BITCOIN_ASSET,
+            None,
+        ));
+
+        // Output 9: settlement change
+        pst.add_output(Output::new_explicit(
+            Script::new(),
+            1,
+            AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?,
+            None,
+        ));
+
+        // Output 10: fee output (collateral)
+        pst.add_output(Output::new_explicit(
+            Script::new(),
+            1,
+            LIQUID_TESTNET_BITCOIN_ASSET,
+            None,
+        ));
+
         let program = get_compiled_dcd_program(&dcd_arguments);
 
         let env = ElementsEnv::new(
@@ -363,6 +388,20 @@ mod dcd_merge_tests {
                     script_pubkey: dcd_address.script_pubkey(),
                     asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(1000),
+                },
+                // Input 3: settlement asset
+                ElementsUtxo {
+                    script_pubkey: dcd_address.script_pubkey(),
+                    asset: Asset::Explicit(
+                        AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR).unwrap(),
+                    ),
+                    value: Value::Explicit(ratio_args.total_asset_amount),
+                },
+                // Input 4: collateral asset
+                ElementsUtxo {
+                    script_pubkey: dcd_address.script_pubkey(),
+                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    value: Value::Explicit(ratio_args.interest_collateral_amount),
                 },
             ],
             0,

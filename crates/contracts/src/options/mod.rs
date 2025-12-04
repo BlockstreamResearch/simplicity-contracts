@@ -206,7 +206,7 @@ mod options_tests {
             expiry_time: 0,
             collateral_per_contract,
             settlement_per_contract,
-            collateral_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
+            collateral_asset_id_hex_le: LIQUID_TESTNET_BITCOIN_ASSET.to_string(),
             settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
             option_token_asset_id_hex_le: first_asset_id.to_string(),
             grantor_token_asset_id_hex_le: second_asset_id.to_string(),
@@ -255,7 +255,7 @@ mod options_tests {
         pst.add_output(Output::new_explicit(
             options_address.script_pubkey(),
             collateral_amount,
-            elements::AssetId::LIQUID_BTC,
+            LIQUID_TESTNET_BITCOIN_ASSET,
             None,
         ));
 
@@ -273,6 +273,22 @@ mod options_tests {
             None,
         ));
 
+        // Output 5: collateral change
+        pst.add_output(Output::new_explicit(
+            Script::new(),
+            1,
+            LIQUID_TESTNET_BITCOIN_ASSET,
+            None,
+        ));
+
+        // Output 6: fee output (collateral)
+        pst.add_output(Output::new_explicit(
+            Script::new(),
+            1,
+            LIQUID_TESTNET_BITCOIN_ASSET,
+            None,
+        ));
+
         let program = get_compiled_options_program(&option_arguments);
 
         let env = ElementsEnv::new(
@@ -287,6 +303,12 @@ mod options_tests {
                     script_pubkey: options_address.script_pubkey(),
                     asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(1000),
+                },
+                // Input 2: collateral asset
+                ElementsUtxo {
+                    script_pubkey: options_address.script_pubkey(),
+                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    value: Value::Explicit(collateral_amount),
                 },
             ],
             0,
