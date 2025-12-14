@@ -1,4 +1,4 @@
-use simplicityhl_core::{RunnerLogLevel, create_p2tr_address, load_program, run_program};
+use simplicityhl_core::{create_p2tr_address, load_program, run_program};
 use std::sync::Arc;
 
 use simplicityhl::simplicity::RedeemNode;
@@ -9,6 +9,7 @@ use simplicityhl::simplicity::elements::{Address, AddressParams, Transaction};
 use simplicityhl::simplicity::hashes::Hash;
 use simplicityhl::simplicity::jet::Elements;
 use simplicityhl::simplicity::jet::elements::ElementsEnv;
+use simplicityhl::tracker::TrackerLogLevel;
 use simplicityhl::{CompiledProgram, TemplateProgram};
 
 mod build_arguments;
@@ -76,7 +77,7 @@ pub fn execute_storage_program(
 
     let signature = keypair.sign_schnorr(sighash_all);
     let witness_values = build_storage_witness(new_value, &signature);
-    Ok(run_program(compiled_program, witness_values, env, RunnerLogLevel::None)?.0)
+    Ok(run_program(compiled_program, witness_values, env, TrackerLogLevel::None)?.0)
 }
 
 #[cfg(test)]
@@ -206,7 +207,7 @@ mod simple_storage_tests {
 
         // Output 1: burn OP_RETURN of the storage asset with the difference
         pst.add_output(Output::new_explicit(
-            Script::new_op_return("burn".as_bytes()),
+            Script::new_op_return(b"burn"),
             old_value - new_value,
             LIQUID_TESTNET_BITCOIN_ASSET,
             None,

@@ -8,11 +8,12 @@
 use std::{fmt::Display, str::FromStr};
 
 use sha2::{Digest, Sha256};
-use simplicityhl::elements::{Address, schnorr::XOnlyPublicKey};
+
+use simplicityhl::elements::{Address, AddressParams, schnorr::XOnlyPublicKey};
+
 use simplicityhl::simplicity::ToXOnlyPubkey;
 use simplicityhl::simplicity::bitcoin::PublicKey;
 use simplicityhl::simplicity::bitcoin::key::Parity;
-use simplicityhl::simplicity::elements::AddressParams;
 
 /// Container for the seed, public key and derived address.
 #[derive(Debug, Clone)]
@@ -94,6 +95,12 @@ impl TaprootPubkeyGen {
         }
 
         Ok(())
+    }
+
+    /// Get the X-only public key.
+    #[must_use]
+    pub fn get_x_only_pubkey(&self) -> XOnlyPublicKey {
+        self.pubkey.to_x_only_pubkey()
     }
 
     /// Parse `<seed_hex>:<pubkey>:<address>` representation.

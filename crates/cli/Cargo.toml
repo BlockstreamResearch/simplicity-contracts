@@ -11,12 +11,17 @@ publish = false
 name = "simplicity-cli"
 path = "src/main.rs"
 
+[lints]
+workspace = true
+
 [dependencies]
 sled = "0.34.7"
 
 dotenvy = "0.15"
 clap = { version = "4.5", features = ["derive"] }
 config = { version = "0.15.16", default-features = true }
+
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 
 hex = { workspace = true }
 anyhow = { workspace = true }
@@ -25,6 +30,4 @@ contracts = { path = "../contracts" }
 
 simplicityhl = { workspace = true }
 
-simplicityhl-core = { path = "../simplicityhl-core" }
-
-contracts-adapter = { path = "../contracts-adapter" }
+simplicityhl-core = { path = "../simplicityhl-core", features = ["explorer", "encoding"] }

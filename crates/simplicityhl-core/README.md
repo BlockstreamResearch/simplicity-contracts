@@ -1,14 +1,6 @@
-# simplicityhl-core
+# Simplicity HL Core
 
-High-level helpers for compiling and executing Simplicity programs on Liquid.
-
-- Crate: `simplicityhl-core`
-- Docs: https://docs.rs/simplicityhl-core
-- Repository: https://github.com/BlockstreamResearch/simplicity-contracts
-
-## Features
-
-- Optional `encoding` feature enables `bincode`-based encoding helpers.
+<TBD>
 
 ## License
 

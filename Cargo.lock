@@ -304,12 +304,12 @@ dependencies = [
  "clap",
  "config",
  "contracts",
- "contracts-adapter",
  "dotenvy",
  "hex",
  "simplicityhl",
  "simplicityhl-core",
  "sled",
+ "tokio",
 ]
 
 [[package]]
@@ -365,20 +365,10 @@ dependencies = [
  "anyhow",
  "bincode",
  "hex",
+ "ring",
+ "sha2",
  "simplicityhl",
  "simplicityhl-core",
-]
-
-[[package]]
-name = "contracts-adapter"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "contracts",
- "hex",
- "simplicityhl",
- "simplicityhl-core",
- "tracing",
 ]
 
 [[package]]
@@ -609,7 +599,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2dff15bf788c671c1934e366d07e30c1814a8ef514e1af724a602e8a2fbe1b10"
 dependencies = [
  "futures-core",
- "futures-sink",
 ]
 
 [[package]]
@@ -617,12 +606,6 @@ name = "futures-core"
 version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05f29059c0c2090612e8d742178b0580d2dc940c837851ad723096f87af6663e"
-
-[[package]]
-name = "futures-io"
-version = "0.3.31"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e5c1b78ca4aae1ac06c48a526a655760685149f0d465d21f37abfe57ce075c6"
 
 [[package]]
 name = "futures-sink"
@@ -643,13 +626,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9fa08315bb612088cc391249efdc3bc77536f16c91f6cf495e6fbe85b20a4a81"
 dependencies = [
  "futures-core",
- "futures-io",
- "futures-sink",
  "futures-task",
- "memchr",
  "pin-project-lite",
  "pin-utils",
- "slab",
 ]
 
 [[package]]
@@ -695,6 +674,12 @@ dependencies = [
  "r-efi",
  "wasip2",
 ]
+
+[[package]]
+name = "ghost-cell"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d8449d342b1c67f49169e92e71deb7b9b27f30062301a16dbc27a4cc8d2351b7"
 
 [[package]]
 name = "h2"
@@ -1437,9 +1422,7 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "encoding_rs",
- "futures-channel",
  "futures-core",
- "futures-util",
  "h2",
  "http",
  "http-body",
@@ -1750,15 +1733,16 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
 name = "simplicity-lang"
-version = "0.5.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "525879699aba1f7f75c0d97355475072adeb0ed0530df4e18f23235252475e68"
+checksum = "70e57bd4d84853974a212eab24ed89da54f49fbccf5e33e93bcd29f0a6591cd5"
 dependencies = [
  "bitcoin",
  "bitcoin_hashes",
  "byteorder",
  "elements",
  "getrandom 0.2.16",
+ "ghost-cell",
  "hex-conservative",
  "miniscript",
  "santiago",
@@ -1767,9 +1751,9 @@ dependencies = [
 
 [[package]]
 name = "simplicity-sys"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3abf9c7d64c5bf45bb2fb966f3b0637d8c13c8d5cdfbd7587900421cb7584c49"
+checksum = "875630d128f19818161cefe0a3d910b6aae921d8246711db574a689cb2c11747"
 dependencies = [
  "bitcoin_hashes",
  "cc",
@@ -1777,9 +1761,8 @@ dependencies = [
 
 [[package]]
 name = "simplicityhl"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1268a95f9a5fe41e94ba0ff9c81ca5ec2794be38049cc609b9085544ea5bd46c"
+version = "0.3.0"
+source = "git+https://github.com/BlockstreamResearch/SimplicityHL?rev=a07ee03#a07ee031db4c2f62e679cdd30ca2bdff6899d273"
 dependencies = [
  "base64 0.21.7",
  "clap",
@@ -1802,9 +1785,9 @@ dependencies = [
  "bincode",
  "hex",
  "reqwest",
- "ring",
  "sha2",
  "simplicityhl",
+ "tokio",
 ]
 
 [[package]]
@@ -1958,7 +1941,19 @@ dependencies = [
  "mio",
  "pin-project-lite",
  "socket2",
+ "tokio-macros",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "tokio-macros"
+version = "2.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af407857209536a95c8e56f8231ef2c2e2aff839b22e07a1ffcbc617e9db9fa5"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -2077,19 +2072,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "784e0ac535deb450455cbfa28a6f0df145ea1bb7ae51b821cf5e7927fdcfbdd0"
 dependencies = [
  "pin-project-lite",
- "tracing-attributes",
  "tracing-core",
-]
-
-[[package]]
-name = "tracing-attributes"
-version = "0.1.30"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81383ab64e72a7a8b8e13130c49e3dab29def6d0c7d76a03087b3cf71c5c6903"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]

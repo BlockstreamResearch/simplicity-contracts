@@ -10,7 +10,7 @@ use simplicityhl::{
     Arguments, simplicity::bitcoin::XOnlyPublicKey, str::WitnessName, value::UIntValue,
 };
 
-#[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq)]
+#[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq)]
 pub struct DCDArguments {
     // Time parameters
     pub taker_funding_start_time: u32,
@@ -41,7 +41,7 @@ pub struct DCDArguments {
     pub oracle_public_key: String,
 }
 
-#[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Default)]
+#[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq, Default)]
 pub struct DCDRatioArguments {
     pub principal_collateral_amount: u64,
     pub interest_collateral_amount: u64,

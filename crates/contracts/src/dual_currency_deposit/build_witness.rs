@@ -16,11 +16,11 @@ pub enum MergeBranch {
 }
 
 impl MergeBranch {
-    fn to_str(self) -> &'static str {
+    const fn to_str(self) -> &'static str {
         match self {
-            MergeBranch::Two => "Left(Left(()))",
-            MergeBranch::Three => "Left(Right(()))",
-            MergeBranch::Four => "Right(())",
+            Self::Two => "Left(Left(()))",
+            Self::Three => "Left(Right(()))",
+            Self::Four => "Right(())",
         }
     }
 }
@@ -35,10 +35,10 @@ pub enum TokenBranch {
 }
 
 impl TokenBranch {
-    fn to_str(self) -> &'static str {
+    const fn to_str(self) -> &'static str {
         match self {
-            TokenBranch::Maker => "Left(())",
-            TokenBranch::Taker => "Right(())",
+            Self::Maker => "Left(())",
+            Self::Taker => "Right(())",
         }
     }
 }

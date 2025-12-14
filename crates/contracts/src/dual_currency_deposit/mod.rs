@@ -24,11 +24,10 @@ use simplicityhl::simplicity::elements::{Address, AddressParams, Transaction, Tx
 use simplicityhl::simplicity::hashes::{Hash, sha256};
 use simplicityhl::simplicity::jet::Elements;
 use simplicityhl::simplicity::jet::elements::{ElementsEnv, ElementsUtxo};
+use simplicityhl::tracker::TrackerLogLevel;
 use simplicityhl::{CompiledProgram, TemplateProgram};
-
 use simplicityhl_core::{
-    LIQUID_TESTNET_GENESIS, RunnerLogLevel, control_block, create_p2tr_address, load_program,
-    run_program,
+    LIQUID_TESTNET_GENESIS, control_block, create_p2tr_address, load_program, run_program,
 };
 
 mod build_arguments;
@@ -96,7 +95,7 @@ pub fn execute_dcd_program(
     token_branch: TokenBranch,
     branch: &DcdBranch,
     merge_branch: MergeBranch,
-    runner_log_level: RunnerLogLevel,
+    runner_log_level: TrackerLogLevel,
 ) -> anyhow::Result<Arc<RedeemNode<Elements>>> {
     let witness_values = build_dcd_witness(token_branch, branch, merge_branch);
     Ok(run_program(compiled_program, witness_values, env, runner_log_level)?.0)
@@ -159,7 +158,7 @@ pub fn finalize_dcd_transaction_on_liquid_testnet(
         token_branch,
         branch,
         merge_branch,
-        RunnerLogLevel::None,
+        TrackerLogLevel::None,
     )?;
 
     let (simplicity_program_bytes, simplicity_witness_bytes) = pruned.to_vec_with_witness();
@@ -423,7 +422,7 @@ mod dcd_merge_tests {
         );
 
         assert!(
-            run_program(&program, witness_values, &env, RunnerLogLevel::Debug).is_ok(),
+            run_program(&program, witness_values, &env, TrackerLogLevel::Debug).is_ok(),
             "expected success funding path -- dcd price attested"
         );
 
@@ -549,7 +548,7 @@ mod dcd_merge_tests {
         );
 
         assert!(
-            run_program(&program, witness_values, &env, RunnerLogLevel::Debug).is_ok(),
+            run_program(&program, witness_values, &env, TrackerLogLevel::Debug).is_ok(),
             "expected success taker funding path -- dcd price attested"
         );
 
@@ -681,7 +680,7 @@ mod dcd_merge_tests {
         );
 
         assert!(
-            run_program(&program, witness_values, &env, RunnerLogLevel::Debug).is_ok(),
+            run_program(&program, witness_values, &env, TrackerLogLevel::Debug).is_ok(),
             "expected success taker early termination path -- dcd price attested"
         );
 
@@ -764,7 +763,7 @@ mod dcd_merge_tests {
         ));
         // 1: burn grantor collateral token (OP_RETURN)
         pst.add_output(Output::new_explicit(
-            Script::new_op_return("burn".as_bytes()),
+            Script::new_op_return(b"burn"),
             grantor_burn,
             second_asset_id,
             None,
@@ -811,7 +810,7 @@ mod dcd_merge_tests {
         );
 
         assert!(
-            run_program(&program, witness_values, &env, RunnerLogLevel::None).is_ok(),
+            run_program(&program, witness_values, &env, TrackerLogLevel::None).is_ok(),
             "expected success maker collateral termination path -- dcd price attested"
         );
 
@@ -894,7 +893,7 @@ mod dcd_merge_tests {
         ));
         // 1: burn grantor settlement token (OP_RETURN)
         pst.add_output(Output::new_explicit(
-            Script::new_op_return("burn".as_bytes()),
+            Script::new_op_return(b"burn"),
             grantor_burn,
             third_asset_id,
             None,
@@ -941,7 +940,7 @@ mod dcd_merge_tests {
         );
 
         assert!(
-            run_program(&program, witness_values, &env, RunnerLogLevel::Debug).is_ok(),
+            run_program(&program, witness_values, &env, TrackerLogLevel::Debug).is_ok(),
             "expected success maker settlement termination path -- dcd price attested"
         );
 
@@ -1023,14 +1022,14 @@ mod dcd_merge_tests {
         ));
         // 1: burn grantor settlement token (OP_RETURN)
         pst.add_output(Output::new_explicit(
-            Script::new_op_return("burn".as_bytes()),
+            Script::new_op_return(b"burn"),
             grantor_burn,
             third_asset_id,
             None,
         ));
         // 2: burn grantor collateral token (OP_RETURN)
         pst.add_output(Output::new_explicit(
-            Script::new_op_return("burn".as_bytes()),
+            Script::new_op_return(b"burn"),
             grantor_burn,
             second_asset_id,
             None,
@@ -1080,7 +1079,7 @@ mod dcd_merge_tests {
         );
 
         assert!(
-            run_program(&program, witness_values, &env, RunnerLogLevel::Debug).is_ok(),
+            run_program(&program, witness_values, &env, TrackerLogLevel::Debug).is_ok(),
             "expected success maker settlement (price <= strike) -- dcd price attested"
         );
 
@@ -1162,14 +1161,14 @@ mod dcd_merge_tests {
         ));
         // 1: burn grantor collateral token (OP_RETURN)
         pst.add_output(Output::new_explicit(
-            Script::new_op_return("burn".as_bytes()),
+            Script::new_op_return(b"burn"),
             grantor_burn,
             second_asset_id,
             None,
         ));
         // 2: burn grantor settlement token (OP_RETURN)
         pst.add_output(Output::new_explicit(
-            Script::new_op_return("burn".as_bytes()),
+            Script::new_op_return(b"burn"),
             grantor_burn,
             third_asset_id,
             None,
@@ -1219,7 +1218,7 @@ mod dcd_merge_tests {
         );
 
         assert!(
-            run_program(&program, witness_values, &env, RunnerLogLevel::Debug).is_ok(),
+            run_program(&program, witness_values, &env, TrackerLogLevel::Debug).is_ok(),
             "expected success maker settlement (price > strike) -- dcd price attested"
         );
 
@@ -1300,7 +1299,7 @@ mod dcd_merge_tests {
         ));
         // 1: burn filler token (OP_RETURN)
         pst.add_output(Output::new_explicit(
-            Script::new_op_return("burn".as_bytes()),
+            Script::new_op_return(b"burn"),
             filler_burn,
             first_asset_id,
             None,
@@ -1350,7 +1349,7 @@ mod dcd_merge_tests {
         );
 
         assert!(
-            run_program(&program, witness_values, &env, RunnerLogLevel::Debug).is_ok(),
+            run_program(&program, witness_values, &env, TrackerLogLevel::Debug).is_ok(),
             "expected success taker settlement (price <= strike) -- dcd price attested"
         );
 
@@ -1432,7 +1431,7 @@ mod dcd_merge_tests {
         pst.inputs_mut()[0].sequence = Some(elements::Sequence::ENABLE_LOCKTIME_NO_RBF);
 
         pst.add_output(Output::new_explicit(
-            Script::new_op_return("burn".as_bytes()),
+            Script::new_op_return(b"burn"),
             filler_burn,
             first_asset_id,
             None,
@@ -1488,7 +1487,7 @@ mod dcd_merge_tests {
         );
 
         assert!(
-            run_program(&program, witness_values, &env, RunnerLogLevel::Debug).is_ok(),
+            run_program(&program, witness_values, &env, TrackerLogLevel::Debug).is_ok(),
             "expected success taker settlement with fees -- dcd price attested"
         );
 
@@ -1569,7 +1568,7 @@ mod dcd_merge_tests {
         ));
         // 1: burn filler token (OP_RETURN)
         pst.add_output(Output::new_explicit(
-            Script::new_op_return("burn".as_bytes()),
+            Script::new_op_return(b"burn"),
             filler_burn,
             first_asset_id,
             None,
@@ -1619,7 +1618,7 @@ mod dcd_merge_tests {
         );
 
         assert!(
-            run_program(&program, witness_values, &env, RunnerLogLevel::Debug).is_ok(),
+            run_program(&program, witness_values, &env, TrackerLogLevel::Debug).is_ok(),
             "expected success taker settlement (price > strike) -- dcd price attested"
         );
 
@@ -1664,7 +1663,7 @@ mod dcd_merge_tests {
             filler_token_asset_id_hex_le: first_asset_id.to_string(),
             grantor_collateral_token_asset_id_hex_le: second_asset_id.to_string(),
             grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
-            ratio_args: ratio_args.clone(),
+            ratio_args,
             oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
             fee_script_hash_hex_le: "00".repeat(32),
         };
@@ -1737,7 +1736,7 @@ mod dcd_merge_tests {
             build_dcd_witness(TokenBranch::default(), &DcdBranch::Merge, MergeBranch::Two);
 
         assert!(
-            run_program(&program, witness_values, &env, RunnerLogLevel::Debug).is_ok(),
+            run_program(&program, witness_values, &env, TrackerLogLevel::Debug).is_ok(),
             "expected success merge 2 tokens -- dcd price attested"
         );
 
@@ -1782,7 +1781,7 @@ mod dcd_merge_tests {
             filler_token_asset_id_hex_le: first_asset_id.to_string(),
             grantor_collateral_token_asset_id_hex_le: second_asset_id.to_string(),
             grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
-            ratio_args: ratio_args.clone(),
+            ratio_args,
             oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
             fee_script_hash_hex_le: "00".repeat(32),
         };
@@ -1864,7 +1863,7 @@ mod dcd_merge_tests {
         );
 
         assert!(
-            run_program(&program, witness_values, &env, RunnerLogLevel::Debug).is_ok(),
+            run_program(&program, witness_values, &env, TrackerLogLevel::Debug).is_ok(),
             "expected success merge 3 tokens -- dcd price attested"
         );
 
@@ -1909,7 +1908,7 @@ mod dcd_merge_tests {
             filler_token_asset_id_hex_le: first_asset_id.to_string(),
             grantor_collateral_token_asset_id_hex_le: second_asset_id.to_string(),
             grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
-            ratio_args: ratio_args.clone(),
+            ratio_args,
             oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
             fee_script_hash_hex_le: "00".repeat(32),
         };
@@ -1994,7 +1993,7 @@ mod dcd_merge_tests {
             build_dcd_witness(TokenBranch::default(), &DcdBranch::Merge, MergeBranch::Four);
 
         assert!(
-            run_program(&program, witness_values, &env, RunnerLogLevel::Debug).is_ok(),
+            run_program(&program, witness_values, &env, TrackerLogLevel::Debug).is_ok(),
             "expected success merge 4 tokens -- dcd price attested"
         );
 

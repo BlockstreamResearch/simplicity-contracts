@@ -4,22 +4,6 @@ use simplicityhl::{
     ResolvedType, WitnessValues, parse::ParseFromStr, str::WitnessName, types::TypeConstructible,
 };
 
-#[derive(Debug, Default, Clone, Copy)]
-pub enum TokenBranch {
-    #[default]
-    OptionToken,
-    GrantorToken,
-}
-
-impl TokenBranch {
-    fn to_str(self) -> &'static str {
-        match self {
-            TokenBranch::OptionToken => "Left(())",
-            TokenBranch::GrantorToken => "Right(())",
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 pub enum OptionBranch {
     Funding {
@@ -29,6 +13,11 @@ pub enum OptionBranch {
         is_change_needed: bool,
         amount_to_burn: u64,
         collateral_amount_to_get: u64,
+        asset_amount: u64,
+    },
+    Settlement {
+        is_change_needed: bool,
+        grantor_token_amount_to_burn: u64,
         asset_amount: u64,
     },
     Expiry {
@@ -48,13 +37,14 @@ pub enum OptionBranch {
 /// # Panics
 /// Panics if type parsing fails (should never happen with valid constants).
 #[must_use]
-pub fn build_option_witness(token_branch: TokenBranch, branch: OptionBranch) -> WitnessValues {
+pub fn build_option_witness(branch: OptionBranch) -> WitnessValues {
     let single = ResolvedType::parse_from_str("u64").unwrap();
     let quadruple = ResolvedType::parse_from_str("(bool, u64, u64, u64)").unwrap();
     let triple = ResolvedType::parse_from_str("(bool, u64, u64)").unwrap();
 
-    let left_type = ResolvedType::either(single.clone(), quadruple.clone());
-    let right_type = ResolvedType::either(triple.clone(), triple.clone());
+    let exercise_or_settlement_type = ResolvedType::either(quadruple, triple.clone());
+    let left_type = ResolvedType::either(single, exercise_or_settlement_type);
+    let right_type = ResolvedType::either(triple.clone(), triple);
     let path_type = ResolvedType::either(left_type, right_type);
 
     let branch_str = match branch {
@@ -70,7 +60,16 @@ pub fn build_option_witness(token_branch: TokenBranch, branch: OptionBranch) -> 
             asset_amount,
         } => {
             format!(
-                "Left(Right(({is_change_needed}, {amount_to_burn}, {collateral_amount}, {asset_amount})))"
+                "Left(Right(Left(({is_change_needed}, {amount_to_burn}, {collateral_amount}, {asset_amount}))))"
+            )
+        }
+        OptionBranch::Settlement {
+            is_change_needed,
+            grantor_token_amount_to_burn,
+            asset_amount,
+        } => {
+            format!(
+                "Left(Right(Right(({is_change_needed}, {grantor_token_amount_to_burn}, {asset_amount}))))"
             )
         }
         OptionBranch::Expiry {
@@ -91,21 +90,8 @@ pub fn build_option_witness(token_branch: TokenBranch, branch: OptionBranch) -> 
         }
     };
 
-    simplicityhl::WitnessValues::from(HashMap::from([
-        (
-            WitnessName::from_str_unchecked("TOKEN_BRANCH"),
-            simplicityhl::Value::parse_from_str(
-                token_branch.to_str(),
-                &ResolvedType::either(
-                    ResolvedType::parse_from_str("()").unwrap(),
-                    ResolvedType::parse_from_str("()").unwrap(),
-                ),
-            )
-            .unwrap(),
-        ),
-        (
-            WitnessName::from_str_unchecked("PATH"),
-            simplicityhl::Value::parse_from_str(&branch_str, &path_type).unwrap(),
-        ),
-    ]))
+    simplicityhl::WitnessValues::from(HashMap::from([(
+        WitnessName::from_str_unchecked("PATH"),
+        simplicityhl::Value::parse_from_str(&branch_str, &path_type).unwrap(),
+    )]))
 }

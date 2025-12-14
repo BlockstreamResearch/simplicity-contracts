@@ -1,112 +1,188 @@
-use anyhow::Result;
-use reqwest::blocking::Client;
-use simplicityhl::elements::AssetId;
+//! Esplora API client for interacting with Liquid testnet.
+
+use std::path::PathBuf;
+use std::time::Duration;
+
+use anyhow::{Context, Result};
+
+use reqwest::Client;
+use tokio::fs;
+
 use simplicityhl::simplicity::elements::{OutPoint, Transaction, TxOut, encode};
-use std::{fs, path::PathBuf, time::Duration};
 
-/// Broadcast a transaction to Liquid testnet Esplora.
-/// Returns the txid string on success.
-///
-/// # Errors
-/// Returns error if the HTTP request fails or the server rejects the transaction.
-pub fn broadcast_tx(tx: &Transaction) -> Result<String> {
-    let client = reqwest::blocking::Client::new();
-    let tx_hex = encode::serialize_hex(tx);
-    let response = client
-        .post("https://blockstream.info/liquidtestnet/api/tx")
-        .body(tx_hex)
-        .send()?;
+/// Default Esplora API base URL for Liquid testnet.
+pub const DEFAULT_BASE_URL: &str = "https://blockstream.info/liquidtestnet/api";
 
-    let status = response.status();
-    let url = response.url().to_string();
-    let text = response.text()?;
+/// Default request timeout in seconds.
+pub const DEFAULT_TIMEOUT_SECS: u64 = 10;
 
-    if !status.is_success() {
-        return Err(anyhow::anyhow!(
-            "HTTP error {} for url ({}): {}",
-            status,
-            url,
-            text.trim()
-        ));
+/// Client for interacting with the Esplora API.
+#[derive(Debug, Clone)]
+pub struct EsploraClient {
+    client: Client,
+    base_url: String,
+}
+
+impl Default for EsploraClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl EsploraClient {
+    /// Creates a new client with default configuration.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::with_base_url(DEFAULT_BASE_URL)
     }
 
-    Ok(text.trim().to_string())
-}
+    /// Creates a new client with a custom base URL.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the HTTP client cannot be built (invalid TLS backend).
+    #[must_use]
+    pub fn with_base_url(base_url: &str) -> Self {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECS))
+            .build()
+            .expect("Failed to build HTTP client");
 
-/// Fetch UTXO given the txid and vout from Esplora with local caching.
-///
-/// # Errors
-/// Returns error if the network request fails or the transaction cannot be decoded.
-pub fn fetch_utxo(outpoint: OutPoint) -> anyhow::Result<TxOut> {
-    // Check file cache first
-    let txid_str = outpoint.txid.to_string();
-    let cache_path = cache_path_for_txid(&txid_str)?;
-    if cache_path.exists() {
-        let cached_hex = fs::read_to_string(&cache_path)?;
-        return extract_utxo(&cached_hex, outpoint.vout as usize);
+        Self {
+            client,
+            base_url: base_url.trim_end_matches('/').to_owned(),
+        }
     }
 
-    let url = format!(
-        "https://blockstream.info/liquidtestnet/api/tx/{}/hex",
-        outpoint.txid
-    );
+    /// Broadcasts a transaction to the network.
+    ///
+    /// # Returns
+    ///
+    /// The transaction ID (txid) as a hex string on success.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The HTTP request fails
+    /// - The server rejects the transaction
+    pub async fn broadcast_transaction(&self, tx: &Transaction) -> Result<String> {
+        let tx_hex = encode::serialize_hex(tx);
+        let url = format!("{}/tx", self.base_url);
 
-    let client = Client::builder().timeout(Duration::from_secs(10)).build()?;
+        let response = self
+            .client
+            .post(&url)
+            .body(tx_hex)
+            .send()
+            .await
+            .context("Failed to send broadcast request")?;
 
-    let tx_hex = client.get(&url).send()?.error_for_status()?.text()?;
-    // Persist to cache best-effort
-    if let Err(_e) = fs::write(&cache_path, &tx_hex) {
-        // Ignore cache write errors
+        let status = response.status();
+        let response_url = response.url().to_string();
+        let body = response
+            .text()
+            .await
+            .context("Failed to read response body")?;
+
+        if !status.is_success() {
+            anyhow::bail!(
+                "Broadcast failed with HTTP {status} for {response_url}: {}",
+                body.trim()
+            );
+        }
+
+        Ok(body.trim().to_owned())
     }
-    extract_utxo(&tx_hex, outpoint.vout as usize)
-}
 
-/// Extract UTXO from a raw transaction given its index
-fn extract_utxo(tx_hex: &str, vout: usize) -> anyhow::Result<TxOut> {
-    let tx_bytes = hex::decode(tx_hex.trim())?;
-    let transaction: Transaction = encode::deserialize(&tx_bytes)?;
+    /// Fetches a UTXO from the network with local file caching.
+    ///
+    /// The transaction hex is cached locally to avoid redundant network requests.
+    /// Cache is stored in `.cache/explorer/tx/{txid}.hex` relative to the current directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The network request fails
+    /// - The transaction cannot be decoded
+    /// - The output index is out of bounds
+    pub async fn fetch_utxo(&self, outpoint: OutPoint) -> Result<TxOut> {
+        let tx_hex = self.fetch_transaction_hex(outpoint.txid).await?;
 
-    if vout >= transaction.output.len() {
-        return Err(anyhow::anyhow!("Invalid vout index: {vout}"));
+        extract_output(&tx_hex, outpoint.vout as usize)
     }
 
-    Ok(transaction.output[vout].clone())
+    /// Fetches raw transaction hex, using cache when available.
+    async fn fetch_transaction_hex(
+        &self,
+        tx_id: simplicityhl::simplicity::elements::Txid,
+    ) -> Result<String> {
+        let cache_path = transaction_cache_path(&tx_id.to_string())?;
+
+        if cache_path.exists() {
+            return fs::read_to_string(&cache_path)
+                .await
+                .context("Failed to read cached transaction");
+        }
+
+        let url = format!("{}/tx/{tx_id}/hex", self.base_url);
+        let tx_hex = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .context("Failed to fetch transaction")?
+            .error_for_status()
+            .context("Server returned error status")?
+            .text()
+            .await
+            .context("Failed to read transaction hex")?;
+
+        // (best-effort, ignore errors)
+        let _ = fs::write(&cache_path, &tx_hex).await;
+
+        Ok(tx_hex)
+    }
 }
 
-/// Extracts inner utxo value if it has an explicit value.
-///
-/// # Errors
-/// Returns error if the UTXO value is confidential (blinded).
-#[inline]
-pub fn obtain_utxo_value(tx_out: &TxOut) -> anyhow::Result<u64> {
-    tx_out
-        .value
-        .explicit()
-        .ok_or_else(|| anyhow::anyhow!("No value in utxo, check it, tx_out: {tx_out:?}"))
+/// Extracts a specific output from a serialized transaction.
+fn extract_output(tx_hex: &str, index: usize) -> Result<TxOut> {
+    let tx_bytes = hex::decode(tx_hex.trim()).context("Invalid transaction hex")?;
+
+    let tx: Transaction = encode::deserialize(&tx_bytes).context("Failed to decode transaction")?;
+
+    tx.output
+        .get(index)
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("Output index {index} out of bounds for tx {}", tx.txid()))
 }
 
-/// Extracts inner utxo value, if it has value inside
-///
-/// # Errors
-/// Returns error if the UTXO asset is confidential (blinded).
-#[inline]
-pub fn obtain_utxo_asset_id(tx_out: &TxOut) -> anyhow::Result<AssetId> {
-    tx_out.asset.explicit().ok_or_else(|| {
-        anyhow::anyhow!(
-            "No asset in utxo, check it, tx_out: {tx_out:?}, committed asset: {:?}",
-            tx_out.asset
-        )
-    })
-}
+/// Returns the cache file path for a transaction.
+fn transaction_cache_path(txid: &str) -> Result<PathBuf> {
+    let mut path = std::env::current_dir().context("Failed to get current directory")?;
 
-/// Resolve cache path for a given txid, ensuring directory exists
-fn cache_path_for_txid(txid: &str) -> Result<PathBuf> {
-    let mut dir = std::env::current_dir()?;
-    dir.push(".cache");
-    dir.push("explorer");
-    dir.push("tx");
-    fs::create_dir_all(&dir)?;
-    let mut path = dir;
+    path.extend([".cache", "explorer", "tx"]);
+
+    std::fs::create_dir_all(&path).context("Failed to create cache directory")?;
+
     path.push(format!("{txid}.hex"));
+
     Ok(path)
+}
+
+/// Broadcasts a transaction using the default Esplora client.
+///
+/// # Errors
+///
+/// See [`EsploraClient::broadcast_transaction`].
+pub async fn broadcast_tx(tx: &Transaction) -> Result<String> {
+    EsploraClient::new().broadcast_transaction(tx).await
+}
+
+/// Fetches a UTXO using the default Esplora client.
+///
+/// # Errors
+///
+/// See [`EsploraClient::fetch_utxo`].
+pub async fn fetch_utxo(outpoint: OutPoint) -> Result<TxOut> {
+    EsploraClient::new().fetch_utxo(outpoint).await
 }
