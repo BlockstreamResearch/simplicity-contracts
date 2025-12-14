@@ -1,11 +1,18 @@
 /*
- * POC: Options – Collateral Covenant (Exercise, Cancellation, Expiry)
+ * Options
  * 
  * Important: Currently only the LBTC collateral is supported.
- * 
- * Room for optimization: 
- * - https://github.com/BlockstreamResearch/simplicity-contracts/issues/2
- * - (batching) https://github.com/BlockstreamResearch/simplicity-contracts/issues/4
+ *
+ * Based on the https://blockstream.com/assets/downloads/pdf/options-whitepaper.pdf
+ *
+ * This contract implements cash-settled European-style options using covenant-locked collateral.
+ *
+ * Room for optimization:
+ * - https://github.com/BlockstreamResearch/simplicity-contracts/issues/2 (Use input asset to determine option covenent type)
+ * - https://github.com/BlockstreamResearch/simplicity-contracts/issues/3 (Simplify match token_branch in funding_path.)
+ * - https://github.com/BlockstreamResearch/simplicity-contracts/issues/4 (why batching is hard to implement)
+ * - https://github.com/BlockstreamResearch/simplicity-contracts/issues/5 (Reduce Contract Parameters)
+ * - https://github.com/BlockstreamResearch/simplicity-contracts/issues/21 (explains why funding is limited)
  */
 
 /// Assert: a == b * expected_q, via divmod
