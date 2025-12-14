@@ -1,21 +1,13 @@
 #![warn(clippy::all, clippy::pedantic)]
 
 //! High-level helpers for building and executing Simplicity programs on Liquid.
-//!
-//! This crate provides:
-//! - Address derivation for P2TR Simplicity programs
-//! - Utilities to compile and run programs with optional logging
-//! - Helpers to finalize transactions with Simplicity script witnesses
-//! - Esplora integration and small conveniences around Elements types
 
 mod blinder;
 mod constants;
+#[cfg(feature = "explorer")]
 mod explorer;
 mod runner;
 mod scripts;
-mod taproot_pubkey_gen;
-mod trackers;
-mod types;
 
 #[cfg(feature = "encoding")]
 pub mod encoding {
@@ -40,8 +32,7 @@ pub mod encoding {
         /// Returns error if decoding fails.
         fn decode(buf: &[u8]) -> anyhow::Result<Self>
         where
-            Self: Sized,
-            Self: Decode<()>,
+            Self: Sized + Decode<()>,
         {
             Ok(bincode::decode_from_slice(buf, bincode::config::standard())?.0)
         }
@@ -72,28 +63,28 @@ pub mod encoding {
 
 pub use blinder::*;
 pub use constants::*;
-pub use explorer::*;
+
 pub use runner::*;
 pub use scripts::*;
-pub use taproot_pubkey_gen::*;
-pub use trackers::*;
-pub use types::*;
 
 #[cfg(feature = "encoding")]
 pub use encoding::Encodable;
+
+#[cfg(feature = "explorer")]
+pub use explorer::*;
+use simplicityhl::elements::secp256k1_zkp::schnorr::Signature;
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use simplicityhl::num::U256;
 use simplicityhl::simplicity::RedeemNode;
-use simplicityhl::simplicity::bitcoin::key::Keypair;
-use simplicityhl::simplicity::bitcoin::{XOnlyPublicKey, secp256k1};
+use simplicityhl::simplicity::bitcoin::XOnlyPublicKey;
 use simplicityhl::simplicity::elements::{Address, AddressParams, Transaction, TxInWitness, TxOut};
-use simplicityhl::simplicity::hashes::Hash;
 use simplicityhl::simplicity::jet::Elements;
 use simplicityhl::simplicity::jet::elements::{ElementsEnv, ElementsUtxo};
 use simplicityhl::str::WitnessName;
+use simplicityhl::tracker::TrackerLogLevel;
 use simplicityhl::value::ValueConstructible;
 use simplicityhl::{CompiledProgram, Value, WitnessValues, elements};
 
@@ -130,52 +121,103 @@ pub fn get_p2pk_program(account_public_key: &XOnlyPublicKey) -> anyhow::Result<C
 
 /// Execute the compiled P2PK program against the provided env, producing a pruned redeem node.
 ///
+/// The `schnorr_signature` should be created by signing the `sighash_all` from the environment:
+/// ```ignore
+/// let sighash_all = secp256k1::Message::from_digest(env.c_tx_env().sighash_all().to_byte_array());
+/// let schnorr_signature = keypair.sign_schnorr(sighash_all);
+/// ```
+///
 /// # Errors
 /// Returns error if program execution fails.
 pub fn execute_p2pk_program(
     compiled_program: &CompiledProgram,
-    keypair: &Keypair,
+    schnorr_signature: &Signature,
     env: &ElementsEnv<Arc<Transaction>>,
-    runner_log_level: RunnerLogLevel,
+    runner_log_level: TrackerLogLevel,
 ) -> anyhow::Result<Arc<RedeemNode<Elements>>> {
-    let sighash_all = secp256k1::Message::from_digest(env.c_tx_env().sighash_all().to_byte_array());
-
-    let witness_values = simplicityhl::WitnessValues::from(HashMap::from([(
+    let witness_values = WitnessValues::from(HashMap::from([(
         WitnessName::from_str_unchecked("SIGNATURE"),
-        Value::byte_array(keypair.sign_schnorr(sighash_all).serialize()),
+        Value::byte_array(schnorr_signature.serialize()),
     )]));
 
     Ok(run_program(compiled_program, witness_values, env, runner_log_level)?.0)
 }
 
-/// Finalize the given transaction by attaching a Simplicity witness for the specified P2PK input.
+/// Create a Schnorr signature for the P2PK program by signing the `sighash_all` of the transaction.
 ///
-/// Preconditions:
-/// - `utxos[input_index]` must match the P2PK address derived from `keypair` and program CMR.
+/// This is a convenience function that builds the environment and signs the transaction hash.
 ///
 /// # Errors
-/// Returns error if program compilation, execution, or environment verification fails.
-pub fn finalize_p2pk_transaction(
-    mut tx: Transaction,
+/// Returns error if program compilation or environment verification fails.
+pub fn create_p2pk_signature(
+    tx: &Transaction,
     utxos: &[TxOut],
-    keypair: &Keypair,
+    keypair: &elements::schnorr::Keypair,
     input_index: usize,
     params: &'static AddressParams,
     genesis_hash: elements::BlockHash,
-) -> anyhow::Result<Transaction> {
-    let p2pk_program = get_p2pk_program(&keypair.x_only_public_key().0)?;
+) -> anyhow::Result<Signature> {
+    use simplicityhl::simplicity::hashes::Hash as _;
+
+    let x_only_public_key = keypair.x_only_public_key().0;
+    let p2pk_program = get_p2pk_program(&x_only_public_key)?;
 
     let env = get_and_verify_env(
-        &tx,
+        tx,
         &p2pk_program,
-        &keypair.x_only_public_key().0,
+        &x_only_public_key,
         utxos,
         params,
         genesis_hash,
         input_index,
     )?;
 
-    let pruned = execute_p2pk_program(&p2pk_program, keypair, &env, RunnerLogLevel::None)?;
+    let sighash_all =
+        elements::secp256k1_zkp::Message::from_digest(env.c_tx_env().sighash_all().to_byte_array());
+    Ok(keypair.sign_schnorr(sighash_all))
+}
+
+/// Finalize the given transaction by attaching a Simplicity witness for the specified P2PK input.
+///
+/// The `schnorr_signature` should be created by signing the `sighash_all` from the environment.
+/// Use [`create_p2pk_signature`] to create the signature if you have access to the secret key:
+/// ```ignore
+/// let signature = create_p2pk_signature(&tx, &utxos, &keypair, input_index, params, genesis_hash)?;
+/// let tx = finalize_p2pk_transaction(tx, &utxos, &public_key, &signature, input_index, params, genesis_hash)?;
+/// ```
+///
+/// Preconditions:
+/// - `utxos[input_index]` must match the P2PK address derived from `x_only_public_key` and program CMR.
+///
+/// # Errors
+/// Returns error if program compilation, execution, or environment verification fails.
+pub fn finalize_p2pk_transaction(
+    mut tx: Transaction,
+    utxos: &[TxOut],
+    x_only_public_key: &XOnlyPublicKey,
+    schnorr_signature: &Signature,
+    input_index: usize,
+    params: &'static AddressParams,
+    genesis_hash: elements::BlockHash,
+) -> anyhow::Result<Transaction> {
+    let p2pk_program = get_p2pk_program(x_only_public_key)?;
+
+    let env = get_and_verify_env(
+        &tx,
+        &p2pk_program,
+        x_only_public_key,
+        utxos,
+        params,
+        genesis_hash,
+        input_index,
+    )?;
+
+    let pruned = execute_p2pk_program(
+        &p2pk_program,
+        schnorr_signature,
+        &env,
+        TrackerLogLevel::None,
+    )?;
 
     let (simplicity_program_bytes, simplicity_witness_bytes) = pruned.to_vec_with_witness();
     let cmr = pruned.cmr();
@@ -187,7 +229,7 @@ pub fn finalize_p2pk_transaction(
             simplicity_witness_bytes,
             simplicity_program_bytes,
             cmr.as_ref().to_vec(),
-            control_block(cmr, keypair.x_only_public_key().0).serialize(),
+            control_block(cmr, *x_only_public_key).serialize(),
         ],
         pegin_witness: vec![],
     };
@@ -220,7 +262,7 @@ pub fn finalize_transaction(
         input_index,
     )?;
 
-    let pruned = run_program(program, witness_values, &env, RunnerLogLevel::None)?.0;
+    let pruned = run_program(program, witness_values, &env, TrackerLogLevel::None)?.0;
 
     let (simplicity_program_bytes, simplicity_witness_bytes) = pruned.to_vec_with_witness();
     let cmr = pruned.cmr();

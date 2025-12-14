@@ -3,8 +3,10 @@
 use anyhow::anyhow;
 
 use sha2::{Digest, Sha256};
-use simplicityhl::simplicity::elements;
-use simplicityhl::simplicity::elements::{Address, AddressParams, AssetId, ContractHash, OutPoint};
+
+use simplicityhl::elements::{
+    Address, AddressParams, AssetId, ContractHash, OutPoint, Script, script, taproot,
+};
 
 use simplicityhl::simplicity::bitcoin::{XOnlyPublicKey, secp256k1};
 use simplicityhl::simplicity::hashes::{Hash, sha256};
@@ -38,18 +40,16 @@ pub fn create_p2tr_address(
     )
 }
 
-fn script_version(
-    cmr: simplicityhl::simplicity::Cmr,
-) -> (elements::Script, elements::taproot::LeafVersion) {
-    let script = elements::script::Script::from(cmr.as_ref().to_vec());
+fn script_version(cmr: simplicityhl::simplicity::Cmr) -> (Script, taproot::LeafVersion) {
+    let script = script::Script::from(cmr.as_ref().to_vec());
     (script, simplicityhl::simplicity::leaf_version())
 }
 
 fn taproot_spending_info(
     cmr: simplicityhl::simplicity::Cmr,
     internal_key: XOnlyPublicKey,
-) -> elements::taproot::TaprootSpendInfo {
-    let builder = elements::taproot::TaprootBuilder::new();
+) -> taproot::TaprootSpendInfo {
+    let builder = taproot::TaprootBuilder::new();
     let (script, version) = script_version(cmr);
     let builder = builder
         .add_leaf_with_ver(0, script, version)
@@ -67,7 +67,7 @@ fn taproot_spending_info(
 pub fn control_block(
     cmr: simplicityhl::simplicity::Cmr,
     internal_key: XOnlyPublicKey,
-) -> elements::taproot::ControlBlock {
+) -> taproot::ControlBlock {
     let info = taproot_spending_info(cmr, internal_key);
     let script_ver = script_version(cmr);
     info.control_block(&script_ver)

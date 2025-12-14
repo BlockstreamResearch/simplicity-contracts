@@ -1,16 +1,19 @@
+use crate::build_witness::{OptionBranch, build_option_witness};
+
 use std::sync::Arc;
 
-use crate::build_witness::{TokenBranch, build_option_witness};
 use simplicityhl_core::{
-    LIQUID_TESTNET_GENESIS, RunnerLogLevel, control_block, create_p2tr_address, load_program,
-    run_program,
+    LIQUID_TESTNET_GENESIS, control_block, create_p2tr_address, load_program, run_program,
 };
 
+use simplicityhl::elements::{Address, AddressParams, Transaction, TxInWitness, TxOut};
+
 use simplicityhl::simplicity::RedeemNode;
-use simplicityhl::simplicity::elements::{Address, AddressParams, Transaction, TxInWitness, TxOut};
 use simplicityhl::simplicity::jet::Elements;
 use simplicityhl::simplicity::jet::elements::ElementsUtxo;
 use simplicityhl::simplicity::{bitcoin::XOnlyPublicKey, jet::elements::ElementsEnv};
+
+use simplicityhl::tracker::TrackerLogLevel;
 use simplicityhl::{CompiledProgram, TemplateProgram};
 
 pub mod build_arguments;
@@ -23,7 +26,7 @@ pub const OPTION_SOURCE: &str = include_str!("source_simf/options.simf");
 /// Get the options template program for instantiation.
 ///
 /// # Panics
-/// Panics if the embedded source fails to compile (should never happen).
+/// - if the embedded source fails to compile (should never happen).
 #[must_use]
 pub fn get_options_template_program() -> TemplateProgram {
     TemplateProgram::new(OPTION_SOURCE)
@@ -57,7 +60,7 @@ pub fn get_options_program(arguments: &OptionsArguments) -> anyhow::Result<Compi
 /// Get compiled options program, panicking on failure.
 ///
 /// # Panics
-/// Panics if program instantiation fails.
+/// - if program instantiation fails.
 #[must_use]
 pub fn get_compiled_options_program(arguments: &OptionsArguments) -> CompiledProgram {
     let program = get_options_template_program();
@@ -74,16 +77,10 @@ pub fn get_compiled_options_program(arguments: &OptionsArguments) -> CompiledPro
 pub fn execute_options_program(
     compiled_program: &CompiledProgram,
     env: &ElementsEnv<Arc<Transaction>>,
-    expected_asset_amount: u64,
-    token_branch: TokenBranch,
-    runner_log_level: RunnerLogLevel,
+    option_branch: OptionBranch,
+    runner_log_level: TrackerLogLevel,
 ) -> anyhow::Result<Arc<RedeemNode<Elements>>> {
-    let witness_values = build_option_witness(
-        token_branch,
-        build_witness::OptionBranch::Funding {
-            expected_asset_amount,
-        },
-    );
+    let witness_values = build_option_witness(option_branch);
 
     Ok(run_program(compiled_program, witness_values, env, runner_log_level)?.0)
 }
@@ -94,15 +91,14 @@ pub fn execute_options_program(
 /// Returns error if program execution fails.
 ///
 /// # Panics
-/// Panics if UTXO script pubkey doesn't match expected options address.
-pub fn finalize_options_funding_path_transaction(
+/// - if UTXO script pubkey doesn't match expected options address.
+pub fn finalize_options_transaction(
     mut tx: Transaction,
     options_public_key: &XOnlyPublicKey,
     options_program: &CompiledProgram,
     utxos: &[TxOut],
     input_index: usize,
-    expected_asset_amount: u64,
-    token_branch: TokenBranch,
+    option_branch: OptionBranch,
 ) -> anyhow::Result<Transaction> {
     let cmr = options_program.commit().cmr();
 
@@ -133,13 +129,8 @@ pub fn finalize_options_funding_path_transaction(
         *LIQUID_TESTNET_GENESIS,
     );
 
-    let pruned = execute_options_program(
-        options_program,
-        &env,
-        expected_asset_amount,
-        token_branch,
-        RunnerLogLevel::None,
-    )?;
+    let pruned =
+        execute_options_program(options_program, &env, option_branch, TrackerLogLevel::None)?;
 
     let (simplicity_program_bytes, simplicity_witness_bytes) = pruned.to_vec_with_witness();
     let cmr = pruned.cmr();
@@ -160,134 +151,155 @@ pub fn finalize_options_funding_path_transaction(
 }
 
 #[cfg(test)]
-#[expect(clippy::too_many_lines)]
 mod options_tests {
     use super::*;
-    use std::vec;
 
     use anyhow::Result;
     use simplicityhl::elements::confidential::{Asset, Value};
-    use simplicityhl::elements::pset::{Input, Output};
-    use simplicityhl::elements::{LockTime, Script};
     use simplicityhl::simplicity::bitcoin::key::Keypair;
     use simplicityhl::simplicity::bitcoin::secp256k1;
     use simplicityhl::simplicity::bitcoin::secp256k1::Secp256k1;
-    use simplicityhl::simplicity::elements::pset::PartiallySignedTransaction;
-    use simplicityhl::simplicity::elements::taproot::ControlBlock;
     use simplicityhl::simplicity::elements::{self, AssetId, OutPoint, Txid};
     use simplicityhl::simplicity::hashes::Hash;
-    use simplicityhl::simplicity::jet::elements::ElementsEnv;
     use std::str::FromStr;
-    use std::sync::Arc;
 
-    use simplicityhl_core::{
-        LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_TEST_ASSET_ID_STR, get_new_asset_entropy,
+    use crate::sdk::taproot_pubkey_gen::{TaprootPubkeyGen, get_random_seed};
+    use crate::sdk::{
+        build_option_cancellation, build_option_creation, build_option_exercise,
+        build_option_expiry, build_option_funding, build_option_settlement,
     };
+    use simplicityhl::elements::pset::PartiallySignedTransaction;
+    use simplicityhl::elements::secp256k1_zkp::SECP256K1;
+    use simplicityhl::elements::taproot::ControlBlock;
+    use simplicityhl::elements::{ContractHash, Script};
+    use simplicityhl_core::{LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_TEST_ASSET_ID_STR};
 
-    #[test]
-    fn test_options_funding_path() -> Result<()> {
-        let outpoint = OutPoint::new(Txid::from_slice(&[2; 32])?, 33);
+    fn get_creation_pst(
+        keypair: &Keypair,
+        start_time: u32,
+        expiry_time: u32,
+        collateral_per_contract: u64,
+        settlement_per_contract: u64,
+    ) -> Result<(
+        (PartiallySignedTransaction, TaprootPubkeyGen),
+        OptionsArguments,
+    )> {
+        let option_outpoint = OutPoint::new(Txid::from_slice(&[1; 32])?, 0);
+        let grantor_outpoint = OutPoint::new(Txid::from_slice(&[2; 32])?, 0);
 
-        let first_asset_entropy = get_new_asset_entropy(&outpoint, [1; 32]);
-        let second_asset_entropy = get_new_asset_entropy(&outpoint, [2; 32]);
-
-        let first_asset_id = AssetId::from_entropy(first_asset_entropy);
-
-        let second_asset_id = AssetId::from_entropy(second_asset_entropy);
-
-        let collateral_per_contract = 20;
-        let collateral_amount = 1000;
-        let settlement_per_contract = 25; // arbitrary for test
-        let option_token_amount = collateral_amount / collateral_per_contract;
-        let expected_asset_amount = option_token_amount * settlement_per_contract;
+        let issuance_asset_entropy = get_random_seed();
 
         let option_arguments = OptionsArguments {
-            start_time: 0,
-            expiry_time: 0,
+            start_time,
+            expiry_time,
             collateral_per_contract,
             settlement_per_contract,
-            collateral_asset_id_hex_le: LIQUID_TESTNET_BITCOIN_ASSET.to_string(),
-            settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
-            option_token_asset_id_hex_le: first_asset_id.to_string(),
-            grantor_token_asset_id_hex_le: second_asset_id.to_string(),
+            collateral_asset_id: LIQUID_TESTNET_BITCOIN_ASSET.into_inner().0,
+            settlement_asset_id: AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?
+                .into_inner()
+                .0,
+            option_token_entropy: AssetId::generate_asset_entropy(
+                option_outpoint,
+                ContractHash::from_byte_array(issuance_asset_entropy),
+            )
+            .0,
+            grantor_token_entropy: AssetId::generate_asset_entropy(
+                grantor_outpoint,
+                ContractHash::from_byte_array(issuance_asset_entropy),
+            )
+            .0,
         };
 
+        Ok((
+            build_option_creation(
+                &keypair.public_key(),
+                (
+                    option_outpoint,
+                    TxOut {
+                        asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                        value: Value::Explicit(500),
+                        nonce: elements::confidential::Nonce::Null,
+                        script_pubkey: Script::new(),
+                        witness: elements::TxOutWitness::default(),
+                    },
+                ),
+                (
+                    grantor_outpoint,
+                    TxOut {
+                        asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                        value: Value::Explicit(1000),
+                        nonce: elements::confidential::Nonce::Null,
+                        script_pubkey: Script::new(),
+                        witness: elements::TxOutWitness::default(),
+                    },
+                ),
+                &option_arguments,
+                issuance_asset_entropy,
+                100,
+                &AddressParams::LIQUID_TESTNET,
+            )?,
+            option_arguments,
+        ))
+    }
+
+    #[test]
+    fn test_options_creation() -> Result<()> {
         let keypair = Keypair::from_secret_key(
             &Secp256k1::new(),
             &secp256k1::SecretKey::from_slice(&[1u8; 32])?,
         );
-        let options_address = get_options_address(
-            &keypair.x_only_public_key().0,
-            &option_arguments,
-            &AddressParams::LIQUID_TESTNET,
+
+        let _ = get_creation_pst(&keypair, 0, 0, 20, 25)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_options_funding_path() -> Result<()> {
+        let keypair = Keypair::from_secret_key(
+            &Secp256k1::new(),
+            &secp256k1::SecretKey::from_slice(&[1u8; 32])?,
+        );
+
+        let collateral_per_contract = 20;
+        let settlement_per_contract = 25;
+
+        let ((pst, option_pubkey_gen), option_arguments) = get_creation_pst(
+            &keypair,
+            0,
+            0,
+            collateral_per_contract,
+            settlement_per_contract,
         )?;
+        let pst = pst.extract_tx()?;
 
-        let mut pst = PartiallySignedTransaction::new_v2();
+        let collateral_amount = 1000;
 
-        let mut first_reissuance_tx = Input::from_prevout(outpoint);
-        first_reissuance_tx.issuance_value_amount = Some(option_token_amount);
-        first_reissuance_tx.issuance_inflation_keys = None;
-        first_reissuance_tx.issuance_asset_entropy = Some(first_asset_entropy.to_byte_array());
+        let option_tx_out = pst.output[0].clone();
+        let option_tx_out_secrets = pst.output[0].unblind(SECP256K1, keypair.secret_key())?;
 
-        let mut second_reissuance_tx = Input::from_prevout(outpoint);
-        second_reissuance_tx.issuance_value_amount = Some(option_token_amount);
-        second_reissuance_tx.issuance_inflation_keys = None;
-        second_reissuance_tx.issuance_asset_entropy = Some(second_asset_entropy.to_byte_array());
+        let grantor_tx_out = pst.output[1].clone();
+        let grantor_tx_out_secrets = pst.output[1].unblind(SECP256K1, keypair.secret_key())?;
 
-        pst.add_input(first_reissuance_tx);
-        pst.add_input(second_reissuance_tx);
-        pst.add_input(Input::from_prevout(outpoint));
-
-        pst.add_output(Output::new_explicit(
-            options_address.script_pubkey(),
-            1,
-            AssetId::default(),
+        let (pst, option_branch) = build_option_funding(
+            &keypair.public_key(),
+            (OutPoint::default(), option_tx_out, option_tx_out_secrets),
+            (OutPoint::default(), grantor_tx_out, grantor_tx_out_secrets),
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    value: Value::Explicit(collateral_amount + 1000),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: Script::new(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
             None,
-        ));
-
-        pst.add_output(Output::new_explicit(
-            options_address.script_pubkey(),
-            1,
-            AssetId::default(),
-            None,
-        ));
-
-        pst.add_output(Output::new_explicit(
-            options_address.script_pubkey(),
+            &option_arguments,
             collateral_amount,
-            LIQUID_TESTNET_BITCOIN_ASSET,
-            None,
-        ));
-
-        pst.add_output(Output::new_explicit(
-            Script::new(),
-            option_token_amount,
-            first_asset_id,
-            None,
-        ));
-
-        pst.add_output(Output::new_explicit(
-            Script::new(),
-            option_token_amount,
-            second_asset_id,
-            None,
-        ));
-
-        // Output 5: collateral change
-        pst.add_output(Output::new_explicit(
-            Script::new(),
-            1,
-            LIQUID_TESTNET_BITCOIN_ASSET,
-            None,
-        ));
-
-        // Output 6: fee output (collateral)
-        pst.add_output(Output::new_explicit(
-            Script::new(),
-            1,
-            LIQUID_TESTNET_BITCOIN_ASSET,
-            None,
-        ));
+            50,
+        )?;
 
         let program = get_compiled_options_program(&option_arguments);
 
@@ -295,18 +307,17 @@ mod options_tests {
             Arc::new(pst.extract_tx()?),
             vec![
                 ElementsUtxo {
-                    script_pubkey: options_address.script_pubkey(),
+                    script_pubkey: option_pubkey_gen.address.script_pubkey(),
                     asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(1000),
                 },
                 ElementsUtxo {
-                    script_pubkey: options_address.script_pubkey(),
+                    script_pubkey: option_pubkey_gen.address.script_pubkey(),
                     asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(1000),
                 },
-                // Input 2: collateral asset
                 ElementsUtxo {
-                    script_pubkey: options_address.script_pubkey(),
+                    script_pubkey: option_pubkey_gen.address.script_pubkey(),
                     asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(collateral_amount),
                 },
@@ -318,16 +329,11 @@ mod options_tests {
             elements::BlockHash::all_zeros(),
         );
 
-        let witness_values = build_option_witness(
-            TokenBranch::OptionToken,
-            build_witness::OptionBranch::Funding {
-                expected_asset_amount,
-            },
-        );
+        let witness_values = build_option_witness(option_branch);
 
         assert!(
-            run_program(&program, witness_values, &env, RunnerLogLevel::None).is_ok(),
-            "expected success funding path -- option token"
+            run_program(&program, witness_values, &env, TrackerLogLevel::Trace).is_ok(),
+            "expected success funding path"
         );
 
         Ok(())
@@ -335,82 +341,81 @@ mod options_tests {
 
     #[test]
     fn test_options_cancellation_path() -> Result<()> {
-        let outpoint = OutPoint::new(Txid::from_slice(&[2; 32])?, 33);
-
-        let first_asset_entropy = get_new_asset_entropy(&outpoint, [1; 32]);
-        let second_asset_entropy = get_new_asset_entropy(&outpoint, [2; 32]);
-
-        let first_asset_id = AssetId::from_entropy(first_asset_entropy);
-
-        let second_asset_id = AssetId::from_entropy(second_asset_entropy);
-
-        let collateral_per_contract = 20;
-        let collateral_amount = 1000;
-        let settlement_per_contract = 50; // arbitrary for test
-        let option_token_amount = collateral_amount / collateral_per_contract;
-
-        let amount_to_burn = option_token_amount / 2;
-        let collateral_amount_to_withdraw = collateral_amount / 2;
-
-        let option_arguments = OptionsArguments {
-            start_time: 0,
-            expiry_time: 0,
-            collateral_per_contract,
-            settlement_per_contract,
-            collateral_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
-            settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
-            option_token_asset_id_hex_le: first_asset_id.to_string(),
-            grantor_token_asset_id_hex_le: second_asset_id.to_string(),
-        };
-
         let keypair = Keypair::from_secret_key(
             &Secp256k1::new(),
             &secp256k1::SecretKey::from_slice(&[1u8; 32])?,
         );
-        let options_address = get_options_address(
-            &keypair.x_only_public_key().0,
-            &option_arguments,
-            &AddressParams::LIQUID_TESTNET,
+
+        let collateral_per_contract = 20;
+        let settlement_per_contract = 25;
+
+        let ((_, option_pubkey_gen), option_arguments) = get_creation_pst(
+            &keypair,
+            0,
+            0,
+            collateral_per_contract,
+            settlement_per_contract,
         )?;
 
-        let mut pst = PartiallySignedTransaction::new_v2();
+        let collateral_amount = 1000;
+        let option_token_amount = collateral_amount / collateral_per_contract;
+        let amount_to_burn = option_token_amount / 2;
 
-        pst.add_input(Input::from_prevout(outpoint));
+        let (option_asset_id, _) = option_arguments.get_option_token_ids();
+        let (grantor_asset_id, _) = option_arguments.get_grantor_token_ids();
 
-        pst.add_output(Output::new_explicit(
-            options_address.script_pubkey(),
-            collateral_amount - collateral_amount_to_withdraw,
-            elements::AssetId::LIQUID_BTC,
-            None,
-        ));
-
-        pst.add_output(Output::new_explicit(
-            Script::new_op_return("burn".as_bytes()),
+        let (pst, option_branch) = build_option_cancellation(
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    value: Value::Explicit(collateral_amount),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: option_pubkey_gen.address.script_pubkey(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(option_asset_id),
+                    value: Value::Explicit(option_token_amount),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: Script::new(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(grantor_asset_id),
+                    value: Value::Explicit(option_token_amount),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: Script::new(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    value: Value::Explicit(100),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: Script::new(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            &option_arguments,
             amount_to_burn,
-            first_asset_id,
-            None,
-        ));
-
-        pst.add_output(Output::new_explicit(
-            Script::new_op_return("burn".as_bytes()),
-            amount_to_burn,
-            second_asset_id,
-            None,
-        ));
-
-        pst.add_output(Output::new_explicit(
-            Script::new(),
-            collateral_amount_to_withdraw,
-            elements::AssetId::LIQUID_BTC,
-            None,
-        ));
+            50,
+        )?;
 
         let program = get_compiled_options_program(&option_arguments);
 
         let env = ElementsEnv::new(
             Arc::new(pst.extract_tx()?),
             vec![ElementsUtxo {
-                script_pubkey: options_address.script_pubkey(),
+                script_pubkey: option_pubkey_gen.address.script_pubkey(),
                 asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
                 value: Value::Explicit(collateral_amount),
             }],
@@ -421,18 +426,11 @@ mod options_tests {
             elements::BlockHash::all_zeros(),
         );
 
-        let witness_values = build_option_witness(
-            TokenBranch::OptionToken,
-            build_witness::OptionBranch::Cancellation {
-                is_change_needed: true,
-                amount_to_burn,
-                collateral_amount_to_withdraw,
-            },
-        );
+        let witness_values = build_option_witness(option_branch);
 
         assert!(
-            run_program(&program, witness_values, &env, RunnerLogLevel::None).is_ok(),
-            "expected success funding path -- option token"
+            run_program(&program, witness_values, &env, TrackerLogLevel::None).is_ok(),
+            "expected success cancellation path"
         );
 
         Ok(())
@@ -440,84 +438,82 @@ mod options_tests {
 
     #[test]
     fn test_options_exercise_path() -> Result<()> {
-        let outpoint = OutPoint::new(Txid::from_slice(&[2; 32])?, 33);
-
-        let first_asset_entropy = get_new_asset_entropy(&outpoint, [1; 32]);
-        let second_asset_entropy = get_new_asset_entropy(&outpoint, [2; 32]);
-
-        let first_asset_id = AssetId::from_entropy(first_asset_entropy);
-
-        let second_asset_id = AssetId::from_entropy(second_asset_entropy);
-
-        let collateral_per_contract = 20;
-        let collateral_amount_total = 1000;
-        let settlement_per_contract = 10;
-        let option_token_amount_total = collateral_amount_total / collateral_per_contract; // 50
-
-        let option_amount_to_burn = option_token_amount_total - 5; // 45
-        let collateral_amount_to_get = option_amount_to_burn * collateral_per_contract; // 900
-        let asset_amount_to_pay = option_amount_to_burn * settlement_per_contract; // 450
-
-        let option_arguments = OptionsArguments {
-            start_time: 1_760_358_546,
-            expiry_time: 0,
-            collateral_per_contract,
-            settlement_per_contract,
-            collateral_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
-            settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
-            option_token_asset_id_hex_le: first_asset_id.to_string(),
-            grantor_token_asset_id_hex_le: second_asset_id.to_string(),
-        };
-
         let keypair = Keypair::from_secret_key(
             &Secp256k1::new(),
             &secp256k1::SecretKey::from_slice(&[1u8; 32])?,
         );
-        let options_address = get_options_address(
-            &keypair.x_only_public_key().0,
-            &option_arguments,
-            &AddressParams::LIQUID_TESTNET,
+
+        let collateral_per_contract = 20;
+        let settlement_per_contract = 10;
+
+        let ((_, option_pubkey_gen), option_arguments) = get_creation_pst(
+            &keypair,
+            500_000_000,
+            500_000_000,
+            collateral_per_contract,
+            settlement_per_contract,
         )?;
 
-        let mut pst = PartiallySignedTransaction::new_v2();
+        let collateral_amount_total = 1000;
+        let option_token_amount_total = collateral_amount_total / collateral_per_contract; // 50
+        let option_amount_to_burn = option_token_amount_total - 5; // 45
+        let asset_amount_to_pay = option_amount_to_burn * settlement_per_contract; // 450
 
-        // Spend collateral from the covenant
-        pst.add_input(Input::from_prevout(outpoint));
-        pst.inputs_mut()[0].sequence = Some(elements::Sequence::ENABLE_LOCKTIME_NO_RBF);
+        let (option_asset_id, _) = option_arguments.get_option_token_ids();
+        let settlement_asset_id = AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?;
 
-        // Output 0: change (collateral asset) back to covenant
-        pst.add_output(Output::new_explicit(
-            options_address.script_pubkey(),
-            collateral_amount_total - collateral_amount_to_get,
-            elements::AssetId::LIQUID_BTC,
-            None,
-        ));
-
-        // Output 1: burn option tokens
-        pst.add_output(Output::new_explicit(
-            Script::new_op_return("burn".as_bytes()),
+        let (pst, option_branch) = build_option_exercise(
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    value: Value::Explicit(collateral_amount_total),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: option_pubkey_gen.address.script_pubkey(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(option_asset_id),
+                    value: Value::Explicit(option_token_amount_total),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: Script::new(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(settlement_asset_id),
+                    value: Value::Explicit(asset_amount_to_pay + 100), // extra for change
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: Script::new(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    value: Value::Explicit(100),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: Script::new(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
             option_amount_to_burn,
-            first_asset_id,
-            None,
-        ));
-
-        // Output 2: settlement payment in settlement asset to covenant script (same script hash as output 0)
-        pst.add_output(Output::new_explicit(
-            options_address.script_pubkey(),
-            asset_amount_to_pay,
-            elements::AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?,
-            None,
-        ));
-
-        pst.global.tx_data.fallback_locktime =
-            Some(LockTime::from_time(option_arguments.start_time)?);
+            50,
+            &option_arguments,
+        )?;
 
         let program = get_compiled_options_program(&option_arguments);
 
         let env = ElementsEnv::new(
             Arc::new(pst.extract_tx()?),
             vec![ElementsUtxo {
-                script_pubkey: options_address.script_pubkey(),
+                script_pubkey: option_pubkey_gen.address.script_pubkey(),
                 asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
                 value: Value::Explicit(collateral_amount_total),
             }],
@@ -528,19 +524,11 @@ mod options_tests {
             elements::BlockHash::all_zeros(),
         );
 
-        let witness_values = build_option_witness(
-            TokenBranch::OptionToken,
-            build_witness::OptionBranch::Exercise {
-                is_change_needed: true,
-                amount_to_burn: option_amount_to_burn,
-                collateral_amount_to_get,
-                asset_amount: asset_amount_to_pay,
-            },
-        );
+        let witness_values = build_option_witness(option_branch);
 
         assert!(
-            run_program(&program, witness_values, &env, RunnerLogLevel::None).is_ok(),
-            "expected success exercise path -- option token"
+            run_program(&program, witness_values, &env, TrackerLogLevel::None).is_ok(),
+            "expected success exercise path"
         );
 
         Ok(())
@@ -548,82 +536,71 @@ mod options_tests {
 
     #[test]
     fn test_options_settlement_path() -> Result<()> {
-        let outpoint = OutPoint::new(Txid::from_slice(&[2; 32])?, 33);
-
-        let first_asset_entropy = get_new_asset_entropy(&outpoint, [1; 32]);
-        let second_asset_entropy = get_new_asset_entropy(&outpoint, [2; 32]);
-
-        let first_asset_id = AssetId::from_entropy(first_asset_entropy);
-
-        let second_asset_id = AssetId::from_entropy(second_asset_entropy);
-
-        let collateral_per_contract = 20;
-        let settlement_per_contract = 40;
-
-        // Settlement burns grantor tokens against settlement asset held by covenant
-        let grantor_token_amount_to_burn = 10;
-        let asset_amount = grantor_token_amount_to_burn * settlement_per_contract; // 400
-        let available_target_asset = 1000; // available in input utxo
-
-        let option_arguments = OptionsArguments {
-            start_time: 1_760_358_546,
-            expiry_time: 0,
-            collateral_per_contract,
-            settlement_per_contract,
-            collateral_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
-            settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
-            option_token_asset_id_hex_le: first_asset_id.to_string(),
-            grantor_token_asset_id_hex_le: second_asset_id.to_string(),
-        };
-
         let keypair = Keypair::from_secret_key(
             &Secp256k1::new(),
             &secp256k1::SecretKey::from_slice(&[1u8; 32])?,
         );
-        let options_address = get_options_address(
-            &keypair.x_only_public_key().0,
-            &option_arguments,
-            &AddressParams::LIQUID_TESTNET,
+
+        let collateral_per_contract = 20;
+        let settlement_per_contract = 40;
+
+        let ((_, option_pubkey_gen), option_arguments) = get_creation_pst(
+            &keypair,
+            500_000_000,
+            500_000_000,
+            collateral_per_contract,
+            settlement_per_contract,
         )?;
 
-        let mut pst = PartiallySignedTransaction::new_v2();
-        pst.global.tx_data.fallback_locktime =
-            Some(LockTime::from_time(option_arguments.start_time)?);
+        let grantor_token_amount_to_burn = 10;
+        let available_target_asset = 1000; // available in input utxo
 
-        pst.add_input(Input::from_prevout(outpoint));
-        pst.inputs_mut()[0].sequence = Some(elements::Sequence::ENABLE_LOCKTIME_NO_RBF);
+        let (grantor_asset_id, _) = option_arguments.get_grantor_token_ids();
+        let settlement_asset_id = AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?;
 
-        // Output 0: change (settlement asset) back to covenant
-        pst.add_output(Output::new_explicit(
-            options_address.script_pubkey(),
-            available_target_asset - asset_amount,
-            AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?,
-            None,
-        ));
-
-        // Output 1: burn grantor tokens
-        pst.add_output(Output::new_explicit(
-            Script::new_op_return("burn".as_bytes()),
+        let (pst, option_branch) = build_option_settlement(
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(settlement_asset_id),
+                    value: Value::Explicit(available_target_asset),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: option_pubkey_gen.address.script_pubkey(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(grantor_asset_id),
+                    value: Value::Explicit(grantor_token_amount_to_burn + 5), // extra for change
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: Script::new(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    value: Value::Explicit(100),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: Script::new(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
             grantor_token_amount_to_burn,
-            second_asset_id,
-            None,
-        ));
-
-        // Output 2: settlement asset forwarded
-        pst.add_output(Output::new_explicit(
-            options_address.script_pubkey(),
-            asset_amount,
-            AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?,
-            None,
-        ));
+            50,
+            &option_arguments,
+        )?;
 
         let program = get_compiled_options_program(&option_arguments);
 
         let env = ElementsEnv::new(
             Arc::new(pst.extract_tx()?),
             vec![ElementsUtxo {
-                script_pubkey: options_address.script_pubkey(),
-                asset: Asset::Explicit(AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?),
+                script_pubkey: option_pubkey_gen.address.script_pubkey(),
+                asset: Asset::Explicit(settlement_asset_id),
                 value: Value::Explicit(available_target_asset),
             }],
             0,
@@ -633,19 +610,11 @@ mod options_tests {
             elements::BlockHash::all_zeros(),
         );
 
-        let witness_values = build_option_witness(
-            TokenBranch::GrantorToken,
-            build_witness::OptionBranch::Exercise {
-                is_change_needed: true,
-                amount_to_burn: grantor_token_amount_to_burn,
-                collateral_amount_to_get: 0,
-                asset_amount,
-            },
-        );
+        let witness_values = build_option_witness(option_branch);
 
         assert!(
-            run_program(&program, witness_values, &env, RunnerLogLevel::None).is_ok(),
-            "expected success settlement path -- grantor token"
+            run_program(&program, witness_values, &env, TrackerLogLevel::None).is_ok(),
+            "expected success settlement path"
         );
 
         Ok(())
@@ -653,81 +622,72 @@ mod options_tests {
 
     #[test]
     fn test_options_expiry_path() -> Result<()> {
-        let outpoint = OutPoint::new(Txid::from_slice(&[2; 32])?, 33);
-
-        let first_asset_entropy = get_new_asset_entropy(&outpoint, [1; 32]);
-        let second_asset_entropy = get_new_asset_entropy(&outpoint, [2; 32]);
-
-        let first_asset_id = AssetId::from_entropy(first_asset_entropy);
-
-        let second_asset_id = AssetId::from_entropy(second_asset_entropy);
+        let keypair = Keypair::from_secret_key(
+            &Secp256k1::new(),
+            &secp256k1::SecretKey::from_slice(&[1u8; 32])?,
+        );
 
         let collateral_per_contract = 20;
+        let settlement_per_contract = 25;
+
+        let ((_, option_pubkey_gen), option_arguments) = get_creation_pst(
+            &keypair,
+            500_000_000,
+            500_000_000,
+            collateral_per_contract,
+            settlement_per_contract,
+        )?;
+
         let collateral_amount_total = 1000;
         let option_token_amount_total = collateral_amount_total / collateral_per_contract; // 50
 
         // At expiry, burn grantor tokens to withdraw collateral
         let grantor_token_amount_to_burn = option_token_amount_total / 2; // 25
-        let collateral_amount = grantor_token_amount_to_burn * collateral_per_contract; // 500
 
-        let option_arguments = OptionsArguments {
-            start_time: 1_760_358_546,
-            expiry_time: 1_760_358_546,
-            collateral_per_contract,
-            settlement_per_contract: 0,
-            collateral_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
-            settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
-            option_token_asset_id_hex_le: first_asset_id.to_string(),
-            grantor_token_asset_id_hex_le: second_asset_id.to_string(),
-        };
+        let (grantor_asset_id, _) = option_arguments.get_grantor_token_ids();
 
-        let keypair = Keypair::from_secret_key(
-            &Secp256k1::new(),
-            &secp256k1::SecretKey::from_slice(&[1u8; 32])?,
-        );
-        let options_address = get_options_address(
-            &keypair.x_only_public_key().0,
-            &option_arguments,
-            &AddressParams::LIQUID_TESTNET,
-        )?;
-
-        let mut pst = PartiallySignedTransaction::new_v2();
-        pst.global.tx_data.fallback_locktime =
-            Some(LockTime::from_time(option_arguments.start_time)?);
-
-        pst.add_input(Input::from_prevout(outpoint));
-        pst.inputs_mut()[0].sequence = Some(elements::Sequence::ENABLE_LOCKTIME_NO_RBF);
-
-        // Output 0: change (collateral) back to covenant
-        pst.add_output(Output::new_explicit(
-            options_address.script_pubkey(),
-            collateral_amount_total - collateral_amount,
-            elements::AssetId::LIQUID_BTC,
-            None,
-        ));
-
-        // Output 1: burn grantor tokens
-        pst.add_output(Output::new_explicit(
-            Script::new_op_return("burn".as_bytes()),
+        let (pst, option_branch) = build_option_expiry(
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    value: Value::Explicit(collateral_amount_total),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: option_pubkey_gen.address.script_pubkey(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(grantor_asset_id),
+                    value: Value::Explicit(grantor_token_amount_to_burn + 5), // extra for change
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: Script::new(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    value: Value::Explicit(100),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: Script::new(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
             grantor_token_amount_to_burn,
-            second_asset_id,
-            None,
-        ));
-
-        // Output 2: withdraw collateral
-        pst.add_output(Output::new_explicit(
-            Script::new(),
-            collateral_amount,
-            elements::AssetId::LIQUID_BTC,
-            None,
-        ));
+            50,
+            &option_arguments,
+        )?;
 
         let program = get_compiled_options_program(&option_arguments);
 
         let env = ElementsEnv::new(
             Arc::new(pst.extract_tx()?),
             vec![ElementsUtxo {
-                script_pubkey: options_address.script_pubkey(),
+                script_pubkey: option_pubkey_gen.address.script_pubkey(),
                 asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
                 value: Value::Explicit(collateral_amount_total),
             }],
@@ -738,18 +698,11 @@ mod options_tests {
             elements::BlockHash::all_zeros(),
         );
 
-        let witness_values = build_option_witness(
-            TokenBranch::GrantorToken,
-            build_witness::OptionBranch::Expiry {
-                is_change_needed: true,
-                grantor_token_amount_to_burn,
-                collateral_amount_to_withdraw: collateral_amount,
-            },
-        );
+        let witness_values = build_option_witness(option_branch);
 
         assert!(
-            run_program(&program, witness_values, &env, RunnerLogLevel::None).is_ok(),
-            "expected success expiry path -- grantor token"
+            run_program(&program, witness_values, &env, TrackerLogLevel::None).is_ok(),
+            "expected success expiry path"
         );
 
         Ok(())

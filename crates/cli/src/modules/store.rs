@@ -1,6 +1,9 @@
+use contracts::sdk::taproot_pubkey_gen::TaprootPubkeyGen;
+
+use simplicityhl_core::Encodable;
+
 use simplicityhl::simplicity::bitcoin::XOnlyPublicKey;
 use simplicityhl::simplicity::elements::{Address, AddressParams};
-use simplicityhl_core::{Encodable, TaprootPubkeyGen};
 
 #[derive(Clone, Debug)]
 pub struct Store {
@@ -74,8 +77,11 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use contracts::OptionsArguments;
-    use simplicityhl::simplicity::elements;
-    use simplicityhl_core::{Encodable, LIQUID_TESTNET_TEST_ASSET_ID_STR};
+    use contracts::sdk::taproot_pubkey_gen::get_random_seed;
+    use simplicityhl::elements::AssetId;
+    use simplicityhl_core::{
+        Encodable, LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_TEST_ASSET_ID_STR,
+    };
 
     use super::*;
 
@@ -89,15 +95,18 @@ mod tests {
     }
 
     fn get_mocked_data() -> anyhow::Result<(OptionsArguments, TaprootPubkeyGen)> {
+        let settlement_asset_id =
+            AssetId::from_slice(&hex::decode(LIQUID_TESTNET_TEST_ASSET_ID_STR)?)?;
+
         let args = OptionsArguments {
             start_time: 10,
             expiry_time: 50,
             collateral_per_contract: 100,
             settlement_per_contract: 1000,
-            collateral_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
-            settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
-            option_token_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
-            grantor_token_asset_id_hex_le: elements::AssetId::LIQUID_BTC.to_string(),
+            collateral_asset_id: LIQUID_TESTNET_BITCOIN_ASSET.into_inner().0,
+            settlement_asset_id: settlement_asset_id.into_inner().0,
+            option_token_entropy: get_random_seed(),
+            grantor_token_entropy: get_random_seed(),
         };
 
         let options_taproot_pubkey_gen = TaprootPubkeyGen::from(

@@ -5,7 +5,7 @@ use hex::FromHex;
 use simplicityhl::num::U256;
 use simplicityhl::{Arguments, str::WitnessName, value::UIntValue};
 
-#[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq)]
+#[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq)]
 pub struct StorageArguments {
     pub public_key: [u8; 32],
     pub slot_asset: String,

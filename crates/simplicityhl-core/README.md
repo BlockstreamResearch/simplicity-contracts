@@ -1,14 +1,15 @@
-# simplicityhl-core
+# Simplicity HL Core
 
-High-level helpers for compiling and executing Simplicity programs on Liquid.
+This crate provides useful utilities for working with Simplicity on Elements.
 
-- Crate: `simplicityhl-core`
-- Docs: https://docs.rs/simplicityhl-core
-- Repository: https://github.com/BlockstreamResearch/simplicity-contracts
+- `blinder.rs` — derives deterministic blinder keypair from a "public secret"
+- `constants.rs` — Liquid network constants (policy asset IDs, genesis hashes)
+- `explorer.rs` — explorer API utilities (behind `explorer` feature)
+- `runner.rs` — program execution helpers with logging
+- `scripts.rs` — P2TR address creation, Taproot control block, and asset entropy utilities
+- `lib.rs` — P2PK program helpers and transaction finalization
 
-## Features
-
-- Optional `encoding` feature enables `bincode`-based encoding helpers.
+Consider this more like a test helper tool rather than a production-ready version.
 
 ## License
 

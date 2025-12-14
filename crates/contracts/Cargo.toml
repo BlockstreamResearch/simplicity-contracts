@@ -4,9 +4,26 @@ version = "0.1.0"
 edition = "2024"
 description = "Simplicity contract templates and helpers"
 license = "MIT OR Apache-2.0"
+repository = "https://github.com/BlockstreamResearch/simplicity-contracts"
+readme = "README.md"
+keywords = ["simplicity", "liquid", "bitcoin", "elements", "contracts"]
+categories = ["cryptography::cryptocurrencies"]
+
+[features]
+default = ["sdk-basic", "sdk-options", "dcd", "simple-storage"]
+sdk-basic = []
+sdk-options = []
+dcd = []
+simple-storage = []
+
+[lints]
+workspace = true
 
 [dependencies]
 bincode = "2.0.1"
+
+ring = { workspace = true }
+sha2 = { workspace = true }
 
 hex = { workspace = true }
 anyhow = { workspace = true }
