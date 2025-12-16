@@ -1,30 +1,29 @@
 use std::sync::Arc;
 
 use simplicityhl::simplicity::bitcoin::secp256k1;
+use simplicityhl::simplicity::elements::hashes::HashEngine as _;
+use simplicityhl::simplicity::elements::taproot::{LeafVersion, TaprootBuilder, TaprootSpendInfo};
+use simplicityhl::simplicity::elements::{Script, Transaction};
 use simplicityhl::simplicity::hashes::{Hash, sha256};
 use simplicityhl::simplicity::jet::Elements;
 use simplicityhl::simplicity::jet::elements::ElementsEnv;
-use simplicityhl::simplicity::elements::{Script, Transaction};
-use simplicityhl::simplicity::elements::taproot::{LeafVersion, TaprootBuilder, TaprootSpendInfo};
 use simplicityhl::simplicity::{Cmr, RedeemNode, leaf_version};
-use simplicityhl::simplicity::elements::hashes::HashEngine as _;
+use simplicityhl::tracker::TrackerLogLevel;
 use simplicityhl::{CompiledProgram, TemplateProgram};
-use simplicityhl_core::{RunnerLogLevel, run_program};
+use simplicityhl_core::run_program;
 
 mod build_witness;
 pub use build_witness::build_cmr_storage_witness;
 
-
-pub const SIMPLE_STORAGE_SOURCE: &str = include_str!("source_simf/cmr_storage.simf");
+pub const CMR_STORAGE_SOURCE: &str = include_str!("source_simf/cmr_storage.simf");
 
 /// Get the storage template program for instantiation.
 ///
 /// # Panics
 /// Panics if the embedded source fails to compile (should never happen).
 #[must_use]
-pub fn get_storage_template_program() -> TemplateProgram {
-    TemplateProgram::new(SIMPLE_STORAGE_SOURCE)
-        .expect("INTERNAL: expected to compile successfully.")
+pub fn get_cmr_storage_template_program() -> TemplateProgram {
+    TemplateProgram::new(CMR_STORAGE_SOURCE).expect("INTERNAL: expected to compile successfully.")
 }
 
 /// Get compiled storage program, panicking on failure.
@@ -33,7 +32,7 @@ pub fn get_storage_template_program() -> TemplateProgram {
 /// Panics if program instantiation fails.
 #[must_use]
 pub fn get_cmr_storage_compiled_program() -> CompiledProgram {
-    let program = get_storage_template_program();
+    let program = get_cmr_storage_template_program();
 
     program
         .instantiate(simplicityhl::Arguments::default(), true)
@@ -50,11 +49,19 @@ pub fn execute_cmr_storage_program(
     env: &ElementsEnv<Arc<Transaction>>,
 ) -> anyhow::Result<Arc<RedeemNode<Elements>>> {
     let witness_values = build_cmr_storage_witness(state);
-    Ok(run_program(compiled_program, witness_values, env, RunnerLogLevel::None)?.0)
+    Ok(run_program(compiled_program, witness_values, env, TrackerLogLevel::None)?.0)
 }
 
 /// The unspendable internal key specified in BIP-0341.
+///
+/// # Panics
+///
+/// This function **panics** if the hard-coded 32-byte slice is not a valid
+/// x-only public key. The panic originates from
+/// `secp256k1::XOnlyPublicKey::from_slice(...).expect(...)`.
+/// The unspendable internal key specified in BIP-0341.
 #[rustfmt::skip] // mangles byte vectors
+#[must_use] 
 pub fn unspendable_internal_key() -> secp256k1::XOnlyPublicKey {
 	secp256k1::XOnlyPublicKey::from_slice(&[
 		0x50, 0x92, 0x9b, 0x74, 0xc1, 0xa0, 0x49, 0x54, 0xb7, 0x8b, 0x4b, 0x60, 0x35, 0xe9, 0x7a, 0x5e,
@@ -69,6 +76,14 @@ fn script_ver(cmr: Cmr) -> (Script, LeafVersion) {
 
 /// Given a Simplicity CMR and an internal key, computes the [`TaprootSpendInfo`]
 /// for a Taptree with this CMR as its single leaf.
+///
+/// # Panics
+///
+/// This function **panics** if building the taproot tree fails (the calls to
+/// `TaprootBuilder::add_leaf_with_ver` or `.add_hidden` return `Err`) or if
+/// finalizing the builder fails. Those panics come from the `.expect(...)`
+/// calls on the builder methods.
+#[must_use]
 pub fn taproot_spend_info(
     internal_key: secp256k1::XOnlyPublicKey,
     state: [u8; 32],
@@ -114,7 +129,7 @@ mod cmr_storage_tests {
 
         // Calculate new_state
         // NOTE: Our example can be done with the line new_state[31] = 1
-        let mut new_state = old_state.clone();
+        let mut new_state = old_state;
         let mut val = u64::from_be_bytes(new_state[24..].try_into().unwrap());
         val += 1;
         new_state[24..].copy_from_slice(&val.to_be_bytes());
@@ -139,7 +154,6 @@ mod cmr_storage_tests {
             None,
         ));
 
-
         let control_block = old_spend_info
             .control_block(&script_ver(cmr))
             .expect("Must retrieve control block for the script path");
@@ -147,7 +161,7 @@ mod cmr_storage_tests {
         // Set up environment
         let env = ElementsEnv::new(
             Arc::new(pst.extract_tx()?),
-            vec![ simplicityhl::simplicity::jet::elements::ElementsUtxo {
+            vec![simplicityhl::simplicity::jet::elements::ElementsUtxo {
                 script_pubkey: old_script_pubkey,
                 asset: Asset::default(),
                 value: Value::default(),
