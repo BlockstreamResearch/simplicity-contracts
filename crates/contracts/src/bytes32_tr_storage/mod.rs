@@ -13,17 +13,20 @@ use simplicityhl::{CompiledProgram, TemplateProgram};
 use simplicityhl_core::run_program;
 
 mod build_witness;
-pub use build_witness::build_cmr_storage_witness;
 
-pub const CMR_STORAGE_SOURCE: &str = include_str!("source_simf/cmr_storage.simf");
+pub use build_witness::build_bytes32_tr_witness;
+
+pub const BYTES32_TR_STORAGE_SOURCE: &str = include_str!("source_simf/bytes32_tr_storage.simf");
 
 /// Get the storage template program for instantiation.
 ///
 /// # Panics
+///
 /// Panics if the embedded source fails to compile (should never happen).
 #[must_use]
-pub fn get_cmr_storage_template_program() -> TemplateProgram {
-    TemplateProgram::new(CMR_STORAGE_SOURCE).expect("INTERNAL: expected to compile successfully.")
+pub fn get_bytes32_tr_template_program() -> TemplateProgram {
+    TemplateProgram::new(BYTES32_TR_STORAGE_SOURCE)
+        .expect("INTERNAL: expected to compile successfully.")
 }
 
 /// Get compiled storage program, panicking on failure.
@@ -31,8 +34,8 @@ pub fn get_cmr_storage_template_program() -> TemplateProgram {
 /// # Panics
 /// Panics if program instantiation fails.
 #[must_use]
-pub fn get_cmr_storage_compiled_program() -> CompiledProgram {
-    let program = get_cmr_storage_template_program();
+pub fn get_bytes32_tr_compiled_program() -> CompiledProgram {
+    let program = get_bytes32_tr_template_program();
 
     program
         .instantiate(simplicityhl::Arguments::default(), true)
@@ -43,12 +46,12 @@ pub fn get_cmr_storage_compiled_program() -> CompiledProgram {
 ///
 /// # Errors
 /// Returns error if program execution fails.
-pub fn execute_cmr_storage_program(
+pub fn execute_bytes32_tr_program(
     state: [u8; 32],
     compiled_program: &CompiledProgram,
     env: &ElementsEnv<Arc<Transaction>>,
 ) -> anyhow::Result<Arc<RedeemNode<Elements>>> {
-    let witness_values = build_cmr_storage_witness(state);
+    let witness_values = build_bytes32_tr_witness(state);
     Ok(run_program(compiled_program, witness_values, env, TrackerLogLevel::None)?.0)
 }
 
@@ -112,7 +115,7 @@ pub fn taproot_spend_info(
 }
 
 #[cfg(test)]
-mod cmr_storage_tests {
+mod bytes32_tr_tests {
     use super::*;
     use anyhow::Result;
     use std::sync::Arc;
@@ -124,7 +127,7 @@ mod cmr_storage_tests {
     use simplicityhl::simplicity::jet::elements::ElementsEnv;
 
     #[test]
-    fn test_cmr_storage_mint_path() -> Result<()> {
+    fn test_bytes32_tr_mint_path() -> Result<()> {
         let old_state: [u8; 32] = [0u8; 32];
 
         // Calculate new_state
@@ -134,7 +137,7 @@ mod cmr_storage_tests {
         val += 1;
         new_state[24..].copy_from_slice(&val.to_be_bytes());
 
-        let program = get_cmr_storage_compiled_program();
+        let program = get_bytes32_tr_compiled_program();
         let cmr = program.commit().cmr();
 
         let old_spend_info = taproot_spend_info(unspendable_internal_key(), old_state, cmr);
@@ -174,7 +177,7 @@ mod cmr_storage_tests {
         );
 
         assert!(
-            execute_cmr_storage_program(old_state, &program, &env).is_ok(),
+            execute_bytes32_tr_program(old_state, &program, &env).is_ok(),
             "expected success mint path"
         );
 

@@ -29,7 +29,7 @@ fn main() {
 
     // Do a state update (and fail on 64-bit overflow even though we've got 192 other
     // bits we could be using..)
-    let (carry, new_state4): (bool, u64) = jet::add_64(state4, 1);
+    let (carry, new_state4): (bool, u64) = jet::increment_64(state4);
     assert!(jet::eq_1(<bool>::into(carry), 0));
     
     let new_state: u256 = <(u64, u64, u64, u64)>::into((state1, state2, state3, new_state4));
