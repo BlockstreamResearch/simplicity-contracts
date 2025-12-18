@@ -322,6 +322,104 @@ mod options_tests {
     }
 
     #[test]
+    fn test_hack_options_funding_path() -> Result<()> {
+        let keypair = Keypair::from_secret_key(
+            &Secp256k1::new(),
+            &secp256k1::SecretKey::from_slice(&[1u8; 32])?,
+        );
+
+        let collateral_per_contract = 20;
+        let settlement_per_contract = 25;
+
+        let ((pst, option_pubkey_gen), option_arguments) = get_creation_pst(
+            &keypair,
+            0,
+            0,
+            collateral_per_contract,
+            settlement_per_contract,
+        )?;
+        let pst = pst.extract_tx()?;
+
+        let collateral_amount = 1000;
+
+        let option_tx_out = pst.output[0].clone();
+        let option_tx_out_secrets = pst.output[0].unblind(SECP256K1, keypair.secret_key())?;
+
+        let grantor_tx_out = pst.output[1].clone();
+        let grantor_tx_out_secrets = pst.output[1].unblind(SECP256K1, keypair.secret_key())?;
+
+        let (pst, option_branch) = build_option_funding(
+            &keypair.public_key(),
+            (OutPoint::default(), option_tx_out, option_tx_out_secrets),
+            (OutPoint::default(), grantor_tx_out, grantor_tx_out_secrets),
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    value: Value::Explicit(collateral_amount + 1000),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: Script::new(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            None,
+            &option_arguments,
+            collateral_amount,
+            50,
+        )?;
+
+        // Let's reproduce issue: https://github.com/BlockstreamResearch/simplicity-contracts/issues/21#issue-3686301161
+        let mut hacked_tx = pst.extract_tx()?;
+        let stolen_asset_output = hacked_tx.output[0].clone();
+        println!("Stolen output: {:?}", stolen_asset_output);
+
+        hacked_tx.output[0].asset = Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET);  // Test LBTC instead of reissuance token
+        hacked_tx.output[0].value = Value::Explicit(0);  // Some dust
+        println!("Hacked output: {:?}", hacked_tx.output[0]);
+
+        // Add stolen asset to other output (for example next tx)
+        hacked_tx.output.push(stolen_asset_output);
+
+        let program = get_compiled_options_program(&option_arguments);
+
+        let env = ElementsEnv::new(
+            Arc::new(hacked_tx),
+            vec![
+                ElementsUtxo {
+                    script_pubkey: option_pubkey_gen.address.script_pubkey(),
+                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    value: Value::Explicit(1000),
+                },
+                ElementsUtxo {
+                    script_pubkey: option_pubkey_gen.address.script_pubkey(),
+                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    value: Value::Explicit(1000),
+                },
+                ElementsUtxo {
+                    script_pubkey: option_pubkey_gen.address.script_pubkey(),
+                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    value: Value::Explicit(collateral_amount),
+                },
+            ],
+            0,
+            simplicityhl::simplicity::Cmr::from_byte_array([0; 32]),
+            ControlBlock::from_slice(&[0xc0; 33])?,
+            None,
+            elements::BlockHash::all_zeros(),
+        );
+
+        let witness_values = build_option_witness(option_branch);
+
+        // Must be failed!!!
+        assert!(
+            !run_program(&program, witness_values, &env, TrackerLogLevel::None).is_ok(),
+            "SECURITY HOLE: The contract accepted a hacked transaction!"
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn test_options_cancellation_path() -> Result<()> {
         let keypair = Keypair::from_secret_key(
             &Secp256k1::new(),

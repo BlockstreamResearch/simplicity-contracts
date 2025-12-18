@@ -113,9 +113,6 @@ fn ensure_correct_change_at_index(index: u32, asset_id: u256, asset_amount_to_sp
  * Funding Path
  */
 fn funding_path(expected_asset_amount: u64) {
-    assert!(jet::eq_32(jet::num_inputs(), 3));
-    assert!(jet::eq_32(jet::num_outputs(), 7));
-
     ensure_input_and_output_script_hash_eq(0);
     ensure_input_and_output_script_hash_eq(1);
     assert!(dbg!(jet::eq_256(get_output_script_hash(0), get_output_script_hash(1))));
