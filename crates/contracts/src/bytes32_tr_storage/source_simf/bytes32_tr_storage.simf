@@ -1,3 +1,28 @@
+/*
+ * Computes the "State Commitment" — the expected Script PubKey (address) 
+ * for a specific state value.
+ *
+ * HOW IT WORKS:
+ * In Simplicity/Liquid, state is not stored in a dedicated database. Instead, 
+ * it is verified via a "Commitment Scheme" inside the Taproot tree of the UTXO.
+ *
+ * This function reconstructs the Taproot structure to validate that the provided 
+ * witness data (state_data) was indeed cryptographically embedded into the 
+ * transaction output that is currently being spent.
+ *
+ * LOGIC FLOW:
+ * 1. Takes state_data (passed via witness at runtime).
+ * 2. Hashes it as a non-executable TapData leaf.
+ * 3. Combines it with the current program's CMR (tapleaf_hash).
+ * 4. Derives the tweaked_key (Internal Key + Merkle Root).
+ * 5. Returns the final SHA256 script hash (SegWit v1).
+ *
+ * USAGE:
+ * - In main, we verify: CalculatedHash(witness::STATE) == input_script_hash.
+ * - This assertion proves that the UTXO is "locked" not just by the code, 
+ * but specifically by THIS instance of the state data.
+ */
+
 fn script_hash_for_input_script(state_data: u256) -> u256 {
     // This is the bulk of our "compute state commitment" logic from above.
     let tap_leaf: u256 = jet::tapleaf_hash();
