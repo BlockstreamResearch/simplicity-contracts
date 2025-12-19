@@ -1,6 +1,8 @@
 #![warn(clippy::all, clippy::pedantic)]
 extern crate core;
 
+#[cfg(feature = "array-tr-storage")]
+mod array_tr_storage;
 #[cfg(feature = "bytes32-tr-storage")]
 mod bytes32_tr_storage;
 #[cfg(feature = "dcd")]
@@ -12,6 +14,8 @@ mod simple_storage;
 #[cfg(any(feature = "sdk-basic", feature = "sdk-options"))]
 pub mod sdk;
 
+#[cfg(feature = "array-tr-storage")]
+pub use array_tr_storage::*;
 #[cfg(feature = "bytes32-tr-storage")]
 pub use bytes32_tr_storage::*;
 #[cfg(feature = "dcd")]
