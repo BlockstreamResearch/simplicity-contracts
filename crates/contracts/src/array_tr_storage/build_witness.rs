@@ -4,7 +4,7 @@ use simplicityhl::types::UIntType;
 use simplicityhl::value::{UIntValue, ValueConstructible};
 use simplicityhl::{WitnessValues, str::WitnessName};
 
-pub const MAX_VAL: usize = 10000; // u16::MAX as usize;
+pub const MAX_VAL: usize = 10000;
 
 #[must_use]
 pub fn build_array_tr_storage_witness(storage: [u8; MAX_VAL]) -> WitnessValues {
