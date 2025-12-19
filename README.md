@@ -29,3 +29,7 @@ Though this repository provides only examples, and because the basic Simplicity 
 ## Important Concepts
 
 It is recommended to study the [options.simf](crates/contracts/src/options/source_simf/options.simf) and related issues on GitHub to understand better how to write such contracts securely.
+
+You can see how to use the storage for 32 bytes in the [bytes32_tr_storage.simf](crates/contracts/src/bytes32_tr_storage/source_simf/bytes32_tr_storage.simf) file.  
+For a more general case, see the [array_tr_storage.simf](crates/contracts/src/array_tr_storage/source_simf/array_tr_storage.simf) file.  
+You can find a more detailed explanation of how it works in the first file.
