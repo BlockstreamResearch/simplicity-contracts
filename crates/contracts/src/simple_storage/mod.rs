@@ -1,4 +1,4 @@
-use simplicityhl_core::{create_p2tr_address, load_program, run_program};
+use simplicityhl_core::{ProgramError, create_p2tr_address, load_program, run_program};
 use std::sync::Arc;
 
 use simplicityhl::simplicity::RedeemNode;
@@ -38,7 +38,7 @@ pub fn get_storage_address(
     public_key: &XOnlyPublicKey,
     args: &StorageArguments,
     params: &'static AddressParams,
-) -> anyhow::Result<Address> {
+) -> Result<Address, ProgramError> {
     Ok(create_p2tr_address(
         get_storage_program(args)?.commit().cmr(),
         public_key,
@@ -46,7 +46,7 @@ pub fn get_storage_address(
     ))
 }
 
-fn get_storage_program(args: &StorageArguments) -> anyhow::Result<CompiledProgram> {
+fn get_storage_program(args: &StorageArguments) -> Result<CompiledProgram, ProgramError> {
     load_program(SIMPLE_STORAGE_SOURCE, build_storage_arguments(args))
 }
 
@@ -72,7 +72,7 @@ pub fn execute_storage_program(
     keypair: &Keypair,
     compiled_program: &CompiledProgram,
     env: &ElementsEnv<Arc<Transaction>>,
-) -> anyhow::Result<Arc<RedeemNode<Elements>>> {
+) -> Result<Arc<RedeemNode<Elements>>, ProgramError> {
     let sighash_all = secp256k1::Message::from_digest(env.c_tx_env().sighash_all().to_byte_array());
 
     let signature = keypair.sign_schnorr(sighash_all);
@@ -83,7 +83,9 @@ pub fn execute_storage_program(
 #[cfg(test)]
 mod simple_storage_tests {
     use super::*;
+
     use anyhow::Result;
+
     use std::sync::Arc;
 
     use simplicityhl::elements::confidential::{Asset, Value};

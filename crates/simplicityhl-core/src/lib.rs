@@ -4,6 +4,7 @@
 
 mod blinder;
 mod constants;
+mod error;
 #[cfg(feature = "explorer")]
 mod explorer;
 mod runner;
@@ -13,24 +14,26 @@ mod scripts;
 pub mod encoding {
     pub use bincode::{Decode, Encode};
 
+    use crate::error::EncodingError;
+
     /// Trait for binary encoding/decoding with hex string support.
     pub trait Encodable {
         /// Encode to binary bytes.
         ///
         /// # Errors
         /// Returns error if encoding fails.
-        fn encode(&self) -> anyhow::Result<Vec<u8>>
+        fn encode(&self) -> Result<Vec<u8>, EncodingError>
         where
             Self: Encode,
         {
-            bincode::encode_to_vec(self, bincode::config::standard()).map_err(anyhow::Error::msg)
+            Ok(bincode::encode_to_vec(self, bincode::config::standard())?)
         }
 
         /// Decode from binary bytes.
         ///
         /// # Errors
         /// Returns error if decoding fails.
-        fn decode(buf: &[u8]) -> anyhow::Result<Self>
+        fn decode(buf: &[u8]) -> Result<Self, EncodingError>
         where
             Self: Sized + Decode<()>,
         {
@@ -41,7 +44,7 @@ pub mod encoding {
         ///
         /// # Errors
         /// Returns error if encoding fails.
-        fn to_hex(&self) -> anyhow::Result<String>
+        fn to_hex(&self) -> Result<String, EncodingError>
         where
             Self: Encode,
         {
@@ -52,17 +55,21 @@ pub mod encoding {
         ///
         /// # Errors
         /// Returns error if hex decoding or binary decoding fails.
-        fn from_hex(hex: &str) -> anyhow::Result<Self>
+        fn from_hex(hex: &str) -> Result<Self, EncodingError>
         where
             Self: bincode::Decode<()>,
         {
-            Encodable::decode(&hex::decode(hex).map_err(anyhow::Error::msg)?)
+            Encodable::decode(&hex::decode(hex)?)
         }
     }
 }
 
 pub use blinder::*;
 pub use constants::*;
+pub use error::ProgramError;
+
+#[cfg(feature = "encoding")]
+pub use error::EncodingError;
 
 pub use runner::*;
 pub use scripts::*;
@@ -71,7 +78,10 @@ pub use scripts::*;
 pub use encoding::Encodable;
 
 #[cfg(feature = "explorer")]
+pub use error::ExplorerError;
+#[cfg(feature = "explorer")]
 pub use explorer::*;
+
 use simplicityhl::elements::secp256k1_zkp::schnorr::Signature;
 
 use std::collections::HashMap;
@@ -98,7 +108,7 @@ pub const P2PK_SOURCE: &str = include_str!("source_simf/p2pk.simf");
 pub fn get_p2pk_address(
     x_only_public_key: &XOnlyPublicKey,
     params: &'static AddressParams,
-) -> anyhow::Result<Address> {
+) -> Result<Address, ProgramError> {
     Ok(create_p2tr_address(
         get_p2pk_program(x_only_public_key)?.commit().cmr(),
         x_only_public_key,
@@ -110,7 +120,9 @@ pub fn get_p2pk_address(
 ///
 /// # Errors
 /// Returns error if program compilation fails.
-pub fn get_p2pk_program(account_public_key: &XOnlyPublicKey) -> anyhow::Result<CompiledProgram> {
+pub fn get_p2pk_program(
+    account_public_key: &XOnlyPublicKey,
+) -> Result<CompiledProgram, ProgramError> {
     let arguments = simplicityhl::Arguments::from(HashMap::from([(
         WitnessName::from_str_unchecked("PUBLIC_KEY"),
         Value::u256(U256::from_byte_array(account_public_key.serialize())),
@@ -134,7 +146,7 @@ pub fn execute_p2pk_program(
     schnorr_signature: &Signature,
     env: &ElementsEnv<Arc<Transaction>>,
     runner_log_level: TrackerLogLevel,
-) -> anyhow::Result<Arc<RedeemNode<Elements>>> {
+) -> Result<Arc<RedeemNode<Elements>>, ProgramError> {
     let witness_values = WitnessValues::from(HashMap::from([(
         WitnessName::from_str_unchecked("SIGNATURE"),
         Value::byte_array(schnorr_signature.serialize()),
@@ -156,7 +168,7 @@ pub fn create_p2pk_signature(
     input_index: usize,
     params: &'static AddressParams,
     genesis_hash: elements::BlockHash,
-) -> anyhow::Result<Signature> {
+) -> Result<Signature, ProgramError> {
     use simplicityhl::simplicity::hashes::Hash as _;
 
     let x_only_public_key = keypair.x_only_public_key().0;
@@ -199,7 +211,7 @@ pub fn finalize_p2pk_transaction(
     input_index: usize,
     params: &'static AddressParams,
     genesis_hash: elements::BlockHash,
-) -> anyhow::Result<Transaction> {
+) -> Result<Transaction, ProgramError> {
     let p2pk_program = get_p2pk_program(x_only_public_key)?;
 
     let env = get_and_verify_env(
@@ -251,7 +263,7 @@ pub fn finalize_transaction(
     witness_values: WitnessValues,
     params: &'static AddressParams,
     genesis_hash: elements::BlockHash,
-) -> anyhow::Result<Transaction> {
+) -> Result<Transaction, ProgramError> {
     let env = get_and_verify_env(
         &tx,
         program,
@@ -294,21 +306,28 @@ pub fn get_and_verify_env(
     params: &'static AddressParams,
     genesis_hash: elements::BlockHash,
     input_index: usize,
-) -> anyhow::Result<ElementsEnv<Arc<Transaction>>> {
+) -> Result<ElementsEnv<Arc<Transaction>>, ProgramError> {
     let cmr = program.commit().cmr();
 
-    anyhow::ensure!(
-        utxos.len() > input_index,
-        "UTXOs must be greater than input index"
-    );
+    if utxos.len() <= input_index {
+        return Err(ProgramError::UtxoIndexOutOfBounds {
+            input_index,
+            utxo_count: utxos.len(),
+        });
+    }
 
     let target_utxo = &utxos[input_index];
     let script_pubkey = create_p2tr_address(cmr, program_public_key, params).script_pubkey();
 
-    anyhow::ensure!(
-        target_utxo.script_pubkey == script_pubkey,
-        "Expected the UTXO to be spent to have the same script"
-    );
+    if target_utxo.script_pubkey != script_pubkey {
+        return Err(ProgramError::ScriptPubkeyMismatch {
+            expected_hash: script_pubkey.script_hash().to_string(),
+            actual_hash: target_utxo.script_pubkey.script_hash().to_string(),
+        });
+    }
+
+    let input_index_u32 =
+        u32::try_from(input_index).map_err(|_| ProgramError::InputIndexOverflow(input_index))?;
 
     Ok(ElementsEnv::new(
         Arc::new(tx.clone()),
@@ -320,7 +339,7 @@ pub fn get_and_verify_env(
                 value: utxo.value,
             })
             .collect(),
-        u32::try_from(input_index)?,
+        input_index_u32,
         cmr,
         control_block(cmr, *program_public_key),
         None,

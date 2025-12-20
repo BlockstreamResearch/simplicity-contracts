@@ -1,5 +1,6 @@
 use crate::OptionsArguments;
 use crate::build_witness::OptionBranch;
+use crate::error::TransactionBuildError;
 use crate::sdk::validation::TxOutExt;
 
 use simplicityhl::elements::bitcoin::secp256k1;
@@ -14,6 +15,7 @@ use simplicityhl::elements::{LockTime, OutPoint, Script, Sequence, TxOut};
 /// - The UTXO asset or amount (fee included) validation fails (ALL amounts and assets are expected to be explicit)
 /// - Insufficient settlement asset in comparison to amount of grantor tokens to burn
 /// - Transaction extraction or amount proof verification fails
+#[allow(clippy::too_many_lines)]
 pub fn build_option_settlement(
     settlement_asset_utxo: (OutPoint, TxOut),
     grantor_asset_utxo: (OutPoint, TxOut),
@@ -21,7 +23,7 @@ pub fn build_option_settlement(
     grantor_token_amount_to_burn: u64,
     fee_amount: u64,
     option_arguments: &OptionsArguments,
-) -> anyhow::Result<(PartiallySignedTransaction, OptionBranch)> {
+) -> Result<(PartiallySignedTransaction, OptionBranch), TransactionBuildError> {
     let (settlement_out_point, settlement_tx_out) = settlement_asset_utxo;
     let (grantor_out_point, grantor_tx_out) = grantor_asset_utxo;
     let (fee_out_point, fee_tx_out) = fee_utxo;
@@ -36,22 +38,28 @@ pub fn build_option_settlement(
     let (expected_grantor_token_id, _) = option_arguments.get_grantor_token_ids();
     let expected_settlement_asset_id = option_arguments.get_settlement_asset_id();
 
-    anyhow::ensure!(
-        grantor_token_id == expected_grantor_token_id,
-        "grantor-asset-utxo must be the grantor token"
-    );
-    anyhow::ensure!(
-        settlement_asset_id == expected_settlement_asset_id,
-        "settlement-asset-utxo must be the settlement asset"
-    );
+    if grantor_token_id != expected_grantor_token_id {
+        return Err(TransactionBuildError::WrongGrantorToken {
+            expected: expected_grantor_token_id.to_string(),
+            actual: grantor_token_id.to_string(),
+        });
+    }
+    if settlement_asset_id != expected_settlement_asset_id {
+        return Err(TransactionBuildError::WrongSettlementAsset {
+            expected: expected_settlement_asset_id.to_string(),
+            actual: settlement_asset_id.to_string(),
+        });
+    }
 
     let asset_amount =
         grantor_token_amount_to_burn.saturating_mul(option_arguments.settlement_per_contract);
 
-    anyhow::ensure!(
-        asset_amount <= available_settlement_asset,
-        "asset_amount exceeds available settlement asset"
-    );
+    if asset_amount > available_settlement_asset {
+        return Err(TransactionBuildError::InsufficientSettlementAsset {
+            required: asset_amount,
+            available: available_settlement_asset,
+        });
+    }
 
     let change_recipient_script = fee_tx_out.script_pubkey.clone();
     let contract_script = settlement_tx_out.script_pubkey.clone();

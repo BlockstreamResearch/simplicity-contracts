@@ -1,3 +1,4 @@
+use crate::error::TransactionBuildError;
 use crate::sdk::validation::TxOutExt;
 
 use simplicityhl::elements::bitcoin::secp256k1;
@@ -17,7 +18,7 @@ pub fn transfer_asset(
     to_address: &Address,
     send_amount: u64,
     fee_amount: u64,
-) -> anyhow::Result<PartiallySignedTransaction> {
+) -> Result<PartiallySignedTransaction, TransactionBuildError> {
     let (asset_out_point, asset_tx_out) = asset_utxo;
     let (fee_out_point, fee_tx_out) = fee_utxo;
 
@@ -27,10 +28,12 @@ pub fn transfer_asset(
         fee_tx_out.validate_amount(fee_amount)?,
     );
 
-    anyhow::ensure!(
-        send_amount <= total_input_asset,
-        "send_amount exceeds asset utxo value"
-    );
+    if send_amount > total_input_asset {
+        return Err(TransactionBuildError::SendAmountExceedsUtxo {
+            send_amount,
+            available: total_input_asset,
+        });
+    }
 
     let change_recipient_script = fee_tx_out.script_pubkey.clone();
 

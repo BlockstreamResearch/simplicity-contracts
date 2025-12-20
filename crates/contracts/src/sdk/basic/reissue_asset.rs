@@ -1,3 +1,4 @@
+use crate::error::TransactionBuildError;
 use crate::sdk::validation::TxOutExt;
 
 use std::collections::HashMap;
@@ -26,7 +27,7 @@ pub fn reissue_asset(
     reissue_amount: u64,
     fee_amount: u64,
     asset_entropy: Midstate,
-) -> anyhow::Result<PartiallySignedTransaction> {
+) -> Result<PartiallySignedTransaction, TransactionBuildError> {
     let (reissue_out_point, reissue_tx_out) = reissue_utxo;
     let (fee_out_point, fee_tx_out) = fee_utxo;
 

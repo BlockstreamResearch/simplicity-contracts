@@ -5,15 +5,17 @@
 //! `<seed_hex>:<xonly_pubkey_hex>:<taproot_address>` can be printed and
 //! later verified with the same arguments to prevent mismatches.
 
-use std::{fmt::Display, str::FromStr};
-
 use sha2::{Digest, Sha256};
+use std::fmt::Display;
+use std::str::FromStr;
 
 use simplicityhl::elements::{Address, AddressParams, schnorr::XOnlyPublicKey};
 
 use simplicityhl::simplicity::ToXOnlyPubkey;
 use simplicityhl::simplicity::bitcoin::PublicKey;
 use simplicityhl::simplicity::bitcoin::key::Parity;
+
+use crate::error::TaprootPubkeyGenError;
 
 /// Container for the seed, public key and derived address.
 #[derive(Debug, Clone)]
@@ -31,8 +33,12 @@ impl TaprootPubkeyGen {
     pub fn from<A>(
         arguments: &A,
         params: &'static AddressParams,
-        get_address: &impl Fn(&XOnlyPublicKey, &A, &'static AddressParams) -> anyhow::Result<Address>,
-    ) -> anyhow::Result<Self> {
+        get_address: &impl Fn(
+            &XOnlyPublicKey,
+            &A,
+            &'static AddressParams,
+        ) -> Result<Address, simplicityhl_core::ProgramError>,
+    ) -> Result<Self, TaprootPubkeyGenError> {
         let (not_existent_public_key, seed) = generate_public_key_without_private();
 
         let address = get_address(
@@ -56,9 +62,13 @@ impl TaprootPubkeyGen {
         s: &str,
         arguments: &A,
         params: &'static AddressParams,
-        get_address: &impl Fn(&XOnlyPublicKey, &A, &'static AddressParams) -> anyhow::Result<Address>,
-    ) -> anyhow::Result<Self> {
-        let taproot_pubkey_gen = Self::from_str(s)?;
+        get_address: &impl Fn(
+            &XOnlyPublicKey,
+            &A,
+            &'static AddressParams,
+        ) -> Result<Address, simplicityhl_core::ProgramError>,
+    ) -> Result<Self, TaprootPubkeyGenError> {
+        let taproot_pubkey_gen = Self::parse_from_str(s)?;
 
         taproot_pubkey_gen.verify(arguments, params, get_address)?;
 
@@ -73,8 +83,12 @@ impl TaprootPubkeyGen {
         &self,
         arguments: &A,
         params: &'static AddressParams,
-        get_address: &impl Fn(&XOnlyPublicKey, &A, &'static AddressParams) -> anyhow::Result<Address>,
-    ) -> anyhow::Result<()> {
+        get_address: &impl Fn(
+            &XOnlyPublicKey,
+            &A,
+            &'static AddressParams,
+        ) -> Result<Address, simplicityhl_core::ProgramError>,
+    ) -> Result<(), TaprootPubkeyGenError> {
         let rand_seed = self.seed.as_slice();
 
         let mut hasher = Sha256::new();
@@ -86,12 +100,20 @@ impl TaprootPubkeyGen {
         let expected_pubkey: PublicKey = XOnlyPublicKey::from_slice(&potential_pubkey)?
             .public_key(Parity::Even)
             .into();
+
         if expected_pubkey != self.pubkey {
-            return Err(anyhow::anyhow!("Invalid pubkey"));
+            return Err(TaprootPubkeyGenError::InvalidPubkey {
+                expected: expected_pubkey.to_string(),
+                actual: self.pubkey.to_string(),
+            });
         }
 
-        if self.address != get_address(&self.pubkey.to_x_only_pubkey(), arguments, params)? {
-            return Err(anyhow::anyhow!("Invalid address"));
+        let expected_address = get_address(&self.pubkey.to_x_only_pubkey(), arguments, params)?;
+        if self.address != expected_address {
+            return Err(TaprootPubkeyGenError::InvalidAddress {
+                expected: expected_address.to_string(),
+                actual: self.address.to_string(),
+            });
         }
 
         Ok(())
@@ -104,11 +126,13 @@ impl TaprootPubkeyGen {
     }
 
     /// Parse `<seed_hex>:<pubkey>:<address>` representation.
-    fn from_str(s: &str) -> anyhow::Result<Self> {
+    fn parse_from_str(s: &str) -> Result<Self, TaprootPubkeyGenError> {
         let parts = s.split(':').collect::<Vec<&str>>();
 
         if parts.len() != 3 {
-            return Err(anyhow::anyhow!("Invalid taproot pubkey gen string"));
+            return Err(TaprootPubkeyGenError::InvalidFormat {
+                parts_count: parts.len(),
+            });
         }
 
         Ok(Self {
@@ -132,7 +156,8 @@ impl Display for TaprootPubkeyGen {
 }
 
 /// Try to deterministically map a random seed into a valid X-only pubkey.
-fn try_generate_public_key_without_private() -> anyhow::Result<(PublicKey, Vec<u8>)> {
+fn try_generate_public_key_without_private() -> Result<(PublicKey, Vec<u8>), TaprootPubkeyGenError>
+{
     let rand_seed: [u8; 32] = get_random_seed();
 
     let mut hasher = Sha256::new();

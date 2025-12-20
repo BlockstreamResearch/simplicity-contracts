@@ -1,5 +1,6 @@
 use crate::OptionsArguments;
 use crate::build_witness::OptionBranch;
+use crate::error::TransactionBuildError;
 use crate::sdk::validation::TxOutExt;
 
 use std::collections::HashMap;
@@ -28,7 +29,7 @@ pub fn build_option_funding(
     option_arguments: &OptionsArguments,
     collateral_amount: u64,
     fee_amount: u64,
-) -> anyhow::Result<(PartiallySignedTransaction, OptionBranch)> {
+) -> Result<(PartiallySignedTransaction, OptionBranch), TransactionBuildError> {
     let (option_out_point, option_tx_out, option_tx_out_unblinded) = option_asset_utxo;
     let (grantor_out_point, grantor_tx_out, grantor_tx_out_unblinded) = grantor_asset_utxo;
     let (collateral_out_point, collateral_tx_out) = collateral_utxo;

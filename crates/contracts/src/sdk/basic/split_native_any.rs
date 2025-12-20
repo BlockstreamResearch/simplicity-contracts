@@ -1,3 +1,4 @@
+use crate::error::TransactionBuildError;
 use crate::sdk::validation::TxOutExt;
 
 use simplicityhl::elements::bitcoin::secp256k1;
@@ -15,8 +16,10 @@ pub fn split_native_any(
     utxo: (OutPoint, TxOut),
     parts_to_split: u64,
     fee_amount: u64,
-) -> anyhow::Result<PartiallySignedTransaction> {
-    anyhow::ensure!(parts_to_split > 0, "parts_to_split must be greater than 0");
+) -> Result<PartiallySignedTransaction, TransactionBuildError> {
+    if parts_to_split == 0 {
+        return Err(TransactionBuildError::InvalidSplitParts);
+    }
 
     let (out_point, tx_out) = utxo;
 

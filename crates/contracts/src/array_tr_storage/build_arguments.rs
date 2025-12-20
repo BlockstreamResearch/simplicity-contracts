@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use simplicityhl::{Arguments, str::WitnessName, value::UIntValue};
 
-#[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq)]
+#[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq)]
 pub struct UnlimitedStorageArguments {
     pub len: u16,
 }

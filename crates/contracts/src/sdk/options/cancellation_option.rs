@@ -1,5 +1,6 @@
 use crate::OptionsArguments;
 use crate::build_witness::OptionBranch;
+use crate::error::TransactionBuildError;
 use crate::sdk::validation::TxOutExt;
 
 use simplicityhl::elements::bitcoin::secp256k1;
@@ -14,6 +15,7 @@ use simplicityhl::elements::{OutPoint, Script, Sequence, TxOut};
 /// - The UTXO asset or amount (fee included) validation fails (ALL amounts and assets are expected to be explicit)
 /// - Insufficient collateral in comparison to amount of option and grantor tokens to burn
 /// - Transaction extraction or amount proof verification fails
+#[allow(clippy::too_many_lines)]
 pub fn build_option_cancellation(
     collateral_utxo: (OutPoint, TxOut),
     option_asset_utxo: (OutPoint, TxOut),
@@ -22,7 +24,7 @@ pub fn build_option_cancellation(
     option_arguments: &OptionsArguments,
     amount_to_burn: u64,
     fee_amount: u64,
-) -> anyhow::Result<(PartiallySignedTransaction, OptionBranch)> {
+) -> Result<(PartiallySignedTransaction, OptionBranch), TransactionBuildError> {
     let (collateral_out_point, collateral_tx_out) = collateral_utxo;
     let (option_out_point, option_tx_out) = option_asset_utxo;
     let (grantor_out_point, grantor_tx_out) = grantor_asset_utxo;
@@ -36,10 +38,12 @@ pub fn build_option_cancellation(
 
     let collateral_amount_to_withdraw = amount_to_burn * option_arguments.collateral_per_contract;
 
-    anyhow::ensure!(
-        collateral_amount_to_withdraw <= total_collateral,
-        "collateral exceeds input value"
-    );
+    if collateral_amount_to_withdraw > total_collateral {
+        return Err(TransactionBuildError::InsufficientCollateral {
+            required: collateral_amount_to_withdraw,
+            available: total_collateral,
+        });
+    }
 
     let (option_token_id, total_option_token_amount) = option_tx_out.explicit()?;
     let (grantor_token_id, total_grantor_token_amount) = grantor_tx_out.explicit()?;

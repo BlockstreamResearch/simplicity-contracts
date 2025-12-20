@@ -1,3 +1,4 @@
+use crate::error::TransactionBuildError;
 use crate::sdk::taproot_pubkey_gen::get_random_seed;
 use crate::sdk::validation::TxOutExt;
 
@@ -23,7 +24,7 @@ pub fn issue_asset(
     fee_utxo: (OutPoint, TxOut),
     issue_amount: u64,
     fee_amount: u64,
-) -> anyhow::Result<PartiallySignedTransaction> {
+) -> Result<PartiallySignedTransaction, TransactionBuildError> {
     let (fee_out_point, fee_tx_out) = fee_utxo;
 
     let (fee_asset_id, total_lbtc_left) = (

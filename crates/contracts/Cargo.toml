@@ -24,12 +24,16 @@ workspace = true
 [dependencies]
 bincode = "2.0.1"
 
+thiserror = "2"
+
 ring = { workspace = true }
 sha2 = { workspace = true }
 
 hex = { workspace = true }
-anyhow = { workspace = true }
 
 simplicityhl = { workspace = true }
 
 simplicityhl-core = { path = "../simplicityhl-core", features = ["encoding"] }
+
+[dev-dependencies]
+anyhow = "1"

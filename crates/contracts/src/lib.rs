@@ -1,6 +1,8 @@
 #![warn(clippy::all, clippy::pedantic)]
 extern crate core;
 
+pub mod error;
+
 #[cfg(feature = "array-tr-storage")]
 mod array_tr_storage;
 #[cfg(feature = "bytes32-tr-storage")]

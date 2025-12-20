@@ -12,6 +12,8 @@ use simplicityhl::simplicity::{BitMachine, RedeemNode, Value};
 use simplicityhl::tracker::{DefaultTracker, TrackerLogLevel};
 use simplicityhl::{CompiledProgram, WitnessValues};
 
+use crate::error::ProgramError;
+
 /// Satisfy and execute a compiled program in the provided environment.
 /// Returns the pruned program and the resulting value.
 ///
@@ -22,18 +24,17 @@ pub fn run_program(
     witness_values: WitnessValues,
     env: &ElementsEnv<Arc<Transaction>>,
     log_level: TrackerLogLevel,
-) -> anyhow::Result<(Arc<RedeemNode<Elements>>, Value)> {
+) -> Result<(Arc<RedeemNode<Elements>>, Value), ProgramError> {
     let satisfied = program
         .satisfy(witness_values)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        .map_err(ProgramError::WitnessSatisfaction)?;
 
     let mut tracker = DefaultTracker::new(satisfied.debug_symbols()).with_log_level(log_level);
 
     let pruned = satisfied.redeem().prune_with_tracker(env, &mut tracker)?;
     let mut mac = BitMachine::for_program(&pruned)?;
 
-    match mac.exec(&pruned, env) {
-        Ok(res) => Ok((pruned, res)),
-        Err(e) => Err(e.into()),
-    }
+    let result = mac.exec(&pruned, env).map_err(ProgramError::Execution)?;
+
+    Ok((pruned, result))
 }

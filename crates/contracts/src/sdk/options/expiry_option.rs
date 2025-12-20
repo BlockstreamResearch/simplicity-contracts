@@ -1,5 +1,6 @@
 use crate::OptionsArguments;
 use crate::build_witness::OptionBranch;
+use crate::error::TransactionBuildError;
 use crate::sdk::validation::TxOutExt;
 
 use simplicityhl::elements::bitcoin::secp256k1;
@@ -21,7 +22,7 @@ pub fn build_option_expiry(
     grantor_token_amount_to_burn: u64,
     fee_amount: u64,
     option_arguments: &OptionsArguments,
-) -> anyhow::Result<(PartiallySignedTransaction, OptionBranch)> {
+) -> Result<(PartiallySignedTransaction, OptionBranch), TransactionBuildError> {
     let (collateral_out_point, collateral_tx_out) = collateral_utxo;
     let (grantor_out_point, grantor_tx_out) = grantor_asset_utxo;
     let (fee_out_point, fee_tx_out) = fee_utxo;
@@ -35,18 +36,22 @@ pub fn build_option_expiry(
 
     let (expected_grantor_token_id, _) = option_arguments.get_grantor_token_ids();
 
-    anyhow::ensure!(
-        grantor_token_id == expected_grantor_token_id,
-        "grantor-asset-utxo must be the grantor token"
-    );
+    if grantor_token_id != expected_grantor_token_id {
+        return Err(TransactionBuildError::WrongGrantorToken {
+            expected: expected_grantor_token_id.to_string(),
+            actual: grantor_token_id.to_string(),
+        });
+    }
 
     let collateral_amount =
         grantor_token_amount_to_burn.saturating_mul(option_arguments.collateral_per_contract);
 
-    anyhow::ensure!(
-        collateral_amount <= total_collateral,
-        "collateral exceeds input value"
-    );
+    if collateral_amount > total_collateral {
+        return Err(TransactionBuildError::InsufficientCollateral {
+            required: collateral_amount,
+            available: total_collateral,
+        });
+    }
 
     let change_recipient_script = fee_tx_out.script_pubkey.clone();
     let contract_script = collateral_tx_out.script_pubkey.clone();
