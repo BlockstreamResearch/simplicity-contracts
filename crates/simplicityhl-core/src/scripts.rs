@@ -1,7 +1,5 @@
 //! Script and Taproot utilities plus minor helpers around Elements types.
 
-use anyhow::anyhow;
-
 use sha2::{Digest, Sha256};
 
 use simplicityhl::elements::{
@@ -12,13 +10,15 @@ use simplicityhl::simplicity::bitcoin::{XOnlyPublicKey, secp256k1};
 use simplicityhl::simplicity::hashes::{Hash, sha256};
 use simplicityhl::{Arguments, CompiledProgram};
 
+use crate::error::ProgramError;
+
 /// Load program source and compile it to a Simplicity program.
 ///
 /// # Errors
 /// Returns error if the program fails to compile.
-pub fn load_program(source: &str, arguments: Arguments) -> anyhow::Result<CompiledProgram> {
-    let compiled = CompiledProgram::new(source, arguments, true)
-        .map_err(|e| anyhow!("Failed to compile Simplicity program: {e}"))?;
+pub fn load_program(source: &str, arguments: Arguments) -> Result<CompiledProgram, ProgramError> {
+    let compiled =
+        CompiledProgram::new(source, arguments, true).map_err(ProgramError::Compilation)?;
     Ok(compiled)
 }
 

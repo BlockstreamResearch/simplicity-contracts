@@ -3,12 +3,12 @@ use std::str::FromStr;
 
 use hex::FromHex;
 
-use anyhow::{Result, anyhow, ensure};
-
 use simplicityhl::num::U256;
 use simplicityhl::{
     Arguments, simplicity::bitcoin::XOnlyPublicKey, str::WitnessName, value::UIntValue,
 };
+
+use crate::error::DCDRatioError;
 
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq)]
 pub struct DCDArguments {
@@ -74,115 +74,158 @@ impl DCDRatioArguments {
         incentive_basis_points: u64,
         strike_price: u64,
         filler_per_principal_collateral: u64,
-    ) -> Result<Self> {
+    ) -> Result<Self, DCDRatioError> {
         // interest_collateral_amount = (principal_collateral_amount * incentive_basis_points) / MAX_BASIS_POINTS
         let interest_collateral_amount: u128 = u128::from(principal_collateral_amount)
             .checked_mul(u128::from(incentive_basis_points))
-            .ok_or_else(|| {
-                anyhow!("overflow while computing interest_collateral_amount numerator")
+            .ok_or_else(|| DCDRatioError::Overflow {
+                operation: "principal_collateral_amount * incentive_basis_points".to_string(),
             })?;
-        ensure!(
-            interest_collateral_amount.is_multiple_of(u128::from(MAX_BASIS_POINTS)),
-            "principal_collateral_amount * incentive_basis_points must be divisible by MAX_BASIS_POINTS ({}), remainder {}",
-            MAX_BASIS_POINTS,
-            interest_collateral_amount % u128::from(MAX_BASIS_POINTS)
-        );
+
+        let remainder = interest_collateral_amount % u128::from(MAX_BASIS_POINTS);
+        if remainder != 0 {
+            return Err(DCDRatioError::NotDivisible {
+                dividend: "principal_collateral_amount * incentive_basis_points".to_string(),
+                divisor: "MAX_BASIS_POINTS".to_string(),
+                #[allow(clippy::cast_possible_truncation)]
+                remainder: remainder as u64,
+            });
+        }
         let interest_collateral_amount: u64 = (interest_collateral_amount
             / u128::from(MAX_BASIS_POINTS))
         .try_into()
-        .map_err(|_| anyhow!("interest_collateral_amount exceeds u64"))?;
+        .map_err(|_| DCDRatioError::U64Overflow {
+            value_name: "interest_collateral_amount".to_string(),
+        })?;
 
         let total_collateral_amount = principal_collateral_amount
             .checked_add(interest_collateral_amount)
-            .ok_or_else(|| anyhow!("overflow while computing total_collateral_amount"))?;
+            .ok_or_else(|| DCDRatioError::Overflow {
+                operation: "principal_collateral_amount + interest_collateral_amount".to_string(),
+            })?;
 
         // principal_asset_amount = principal_collateral_amount * strike_price
         let principal_asset_amount = principal_collateral_amount
             .checked_mul(strike_price)
-            .ok_or_else(|| anyhow!("overflow while computing principal_asset_amount"))?;
+            .ok_or_else(|| DCDRatioError::Overflow {
+                operation: "principal_collateral_amount * strike_price".to_string(),
+            })?;
 
         // interest_asset_amount = (principal_asset_amount * incentive_basis_points) / MAX_BASIS_POINTS
         let interest_asset_amount: u128 = u128::from(principal_asset_amount)
             .checked_mul(u128::from(incentive_basis_points))
-            .ok_or_else(|| anyhow!("overflow while computing interest_asset_amount numerator"))?;
-        ensure!(
-            interest_asset_amount.is_multiple_of(u128::from(MAX_BASIS_POINTS)),
-            "principal_asset_amount * incentive_basis_points must be divisible by MAX_BASIS_POINTS ({}), remainder {}",
-            MAX_BASIS_POINTS,
-            interest_asset_amount % u128::from(MAX_BASIS_POINTS)
-        );
+            .ok_or_else(|| DCDRatioError::Overflow {
+                operation: "principal_asset_amount * incentive_basis_points".to_string(),
+            })?;
+
+        let remainder = interest_asset_amount % u128::from(MAX_BASIS_POINTS);
+        if remainder != 0 {
+            return Err(DCDRatioError::NotDivisible {
+                dividend: "principal_asset_amount * incentive_basis_points".to_string(),
+                divisor: "MAX_BASIS_POINTS".to_string(),
+                #[allow(clippy::cast_possible_truncation)]
+                remainder: remainder as u64,
+            });
+        }
         let interest_asset_amount: u64 = (interest_asset_amount / u128::from(MAX_BASIS_POINTS))
             .try_into()
-            .map_err(|_| anyhow!("interest_asset_amount exceeds u64"))?;
+            .map_err(|_| DCDRatioError::U64Overflow {
+                value_name: "interest_asset_amount".to_string(),
+            })?;
 
         let total_asset_amount = principal_asset_amount
             .checked_add(interest_asset_amount)
-            .ok_or_else(|| anyhow!("overflow while computing total_asset_amount"))?;
+            .ok_or_else(|| DCDRatioError::Overflow {
+                operation: "principal_asset_amount + interest_asset_amount".to_string(),
+            })?;
 
         // filler_token_amount = principal_collateral_amount / filler_per_principal_collateral
-        ensure!(
-            filler_per_principal_collateral != 0,
-            "filler_per_principal_collateral must be non-zero"
-        );
-        ensure!(
-            principal_collateral_amount.is_multiple_of(filler_per_principal_collateral),
-            "principal_collateral_amount must be divisible by filler_per_principal_collateral, remainder {}",
-            principal_collateral_amount % filler_per_principal_collateral
-        );
+        if filler_per_principal_collateral == 0 {
+            return Err(DCDRatioError::ZeroValue {
+                value_name: "filler_per_principal_collateral".to_string(),
+            });
+        }
+        let remainder = principal_collateral_amount % filler_per_principal_collateral;
+        if remainder != 0 {
+            return Err(DCDRatioError::NotDivisible {
+                dividend: "principal_collateral_amount".to_string(),
+                divisor: "filler_per_principal_collateral".to_string(),
+                remainder,
+            });
+        }
         let filler_token_amount = principal_collateral_amount / filler_per_principal_collateral;
-        ensure!(
-            filler_token_amount != 0,
-            "filler_token_amount computed to zero; would cause division by zero later"
-        );
+        if filler_token_amount == 0 {
+            return Err(DCDRatioError::ZeroValue {
+                value_name: "filler_token_amount".to_string(),
+            });
+        }
 
         let grantor_collateral_token_amount = filler_token_amount;
         let grantor_settlement_token_amount = filler_token_amount;
 
         // filler_per_settlement_* divisions by filler_token_amount
-        ensure!(
-            total_collateral_amount % filler_token_amount == 0,
-            "total_collateral_amount must be divisible by filler_token_amount, remainder {}",
-            total_collateral_amount % filler_token_amount
-        );
+        let remainder = total_collateral_amount % filler_token_amount;
+        if remainder != 0 {
+            return Err(DCDRatioError::NotDivisible {
+                dividend: "total_collateral_amount".to_string(),
+                divisor: "filler_token_amount".to_string(),
+                remainder,
+            });
+        }
         let filler_per_settlement_collateral = total_collateral_amount / filler_token_amount;
 
-        ensure!(
-            total_asset_amount % filler_token_amount == 0,
-            "total_asset_amount must be divisible by filler_token_amount, remainder {}",
-            total_asset_amount % filler_token_amount
-        );
+        let remainder = total_asset_amount % filler_token_amount;
+        if remainder != 0 {
+            return Err(DCDRatioError::NotDivisible {
+                dividend: "total_asset_amount".to_string(),
+                divisor: "filler_token_amount".to_string(),
+                remainder,
+            });
+        }
         let filler_per_settlement_asset = total_asset_amount / filler_token_amount;
 
         // grantor_* per deposited/settlement divisions by grantor_*_token_amount (same as filler_token_amount)
-        ensure!(
-            total_asset_amount % grantor_settlement_token_amount == 0,
-            "total_asset_amount must be divisible by grantor_settlement_token_amount, remainder {}",
-            total_asset_amount % grantor_settlement_token_amount
-        );
+        let remainder = total_asset_amount % grantor_settlement_token_amount;
+        if remainder != 0 {
+            return Err(DCDRatioError::NotDivisible {
+                dividend: "total_asset_amount".to_string(),
+                divisor: "grantor_settlement_token_amount".to_string(),
+                remainder,
+            });
+        }
         let grantor_settlement_per_deposited_asset =
             total_asset_amount / grantor_settlement_token_amount;
 
-        ensure!(
-            interest_collateral_amount.is_multiple_of(grantor_collateral_token_amount),
-            "interest_collateral_amount must be divisible by grantor_collateral_token_amount, remainder {}",
-            interest_collateral_amount % grantor_collateral_token_amount
-        );
+        let remainder = interest_collateral_amount % grantor_collateral_token_amount;
+        if remainder != 0 {
+            return Err(DCDRatioError::NotDivisible {
+                dividend: "interest_collateral_amount".to_string(),
+                divisor: "grantor_collateral_token_amount".to_string(),
+                remainder,
+            });
+        }
         let grantor_collateral_per_deposited_collateral =
             interest_collateral_amount / grantor_collateral_token_amount;
 
-        ensure!(
-            total_collateral_amount % grantor_settlement_token_amount == 0,
-            "total_collateral_amount must be divisible by grantor_settlement_token_amount, remainder {}",
-            total_collateral_amount % grantor_settlement_token_amount
-        );
+        let remainder = total_collateral_amount % grantor_settlement_token_amount;
+        if remainder != 0 {
+            return Err(DCDRatioError::NotDivisible {
+                dividend: "total_collateral_amount".to_string(),
+                divisor: "grantor_settlement_token_amount".to_string(),
+                remainder,
+            });
+        }
         let grantor_per_settlement_collateral =
             total_collateral_amount / grantor_settlement_token_amount;
 
-        ensure!(
-            total_asset_amount % grantor_settlement_token_amount == 0,
-            "total_asset_amount must be divisible by grantor_settlement_token_amount, remainder {}",
-            total_asset_amount % grantor_settlement_token_amount
-        );
+        let remainder = total_asset_amount % grantor_settlement_token_amount;
+        if remainder != 0 {
+            return Err(DCDRatioError::NotDivisible {
+                dividend: "total_asset_amount".to_string(),
+                divisor: "grantor_settlement_token_amount".to_string(),
+                remainder,
+            });
+        }
         let grantor_per_settlement_asset = total_asset_amount / grantor_settlement_token_amount;
 
         Ok(Self {

@@ -1,3 +1,4 @@
+use crate::error::TransactionBuildError;
 use crate::sdk::validation::TxOutExt;
 
 use simplicityhl::elements::bitcoin::secp256k1;
@@ -16,7 +17,7 @@ pub fn transfer_native(
     to_address: &Address,
     amount_to_send: u64,
     fee_amount: u64,
-) -> anyhow::Result<PartiallySignedTransaction> {
+) -> Result<PartiallySignedTransaction, TransactionBuildError> {
     let (out_point, tx_out) = utxo;
 
     let (asset_id, total_lbtc_left) = (

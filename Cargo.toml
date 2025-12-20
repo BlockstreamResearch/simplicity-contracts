@@ -16,7 +16,6 @@ ring = "0.17.14"
 sha2 = { version = "0.10.9", features = ["compress"] }
 
 hex = "0.4.3"
-anyhow = "1"
 tracing = { version = "0.1.41" }
 
 simplicityhl = { version = "0.4.0" }

@@ -1,6 +1,6 @@
 use contracts::sdk::taproot_pubkey_gen::TaprootPubkeyGen;
 
-use simplicityhl_core::Encodable;
+use simplicityhl_core::{Encodable, ProgramError};
 
 use simplicityhl::simplicity::bitcoin::XOnlyPublicKey;
 use simplicityhl::simplicity::elements::{Address, AddressParams};
@@ -30,7 +30,11 @@ impl Store {
         taproot_pubkey_gen: &str,
         encoded_data: &str,
         params: &'static AddressParams,
-        get_address: &impl Fn(&XOnlyPublicKey, &A, &'static AddressParams) -> anyhow::Result<Address>,
+        get_address: &impl Fn(
+            &XOnlyPublicKey,
+            &A,
+            &'static AddressParams,
+        ) -> Result<Address, ProgramError>,
     ) -> anyhow::Result<()>
     where
         A: Encodable + simplicityhl_core::encoding::Decode<()>,

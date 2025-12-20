@@ -1,5 +1,6 @@
 use crate::OptionsArguments;
 use crate::build_witness::OptionBranch;
+use crate::error::TransactionBuildError;
 use crate::sdk::validation::TxOutExt;
 
 use simplicityhl::elements::bitcoin::secp256k1;
@@ -24,7 +25,7 @@ pub fn build_option_exercise(
     amount_to_burn: u64,
     fee_amount: u64,
     option_arguments: &OptionsArguments,
-) -> anyhow::Result<(PartiallySignedTransaction, OptionBranch)> {
+) -> Result<(PartiallySignedTransaction, OptionBranch), TransactionBuildError> {
     let (collateral_out_point, collateral_tx_out) = collateral_utxo;
     let (option_out_point, option_tx_out) = option_asset_utxo;
     let (asset_out_point, asset_tx_out) = asset_utxo;
@@ -41,8 +42,18 @@ pub fn build_option_exercise(
     let collateral_amount_to_get = amount_to_burn * option_arguments.collateral_per_contract;
     let asset_amount_to_pay = amount_to_burn * option_arguments.settlement_per_contract;
 
-    anyhow::ensure!(collateral_amount_to_get <= total_collateral,);
-    anyhow::ensure!(asset_amount_to_pay <= total_asset_amount,);
+    if collateral_amount_to_get > total_collateral {
+        return Err(TransactionBuildError::InsufficientCollateral {
+            required: collateral_amount_to_get,
+            available: total_collateral,
+        });
+    }
+    if asset_amount_to_pay > total_asset_amount {
+        return Err(TransactionBuildError::InsufficientSettlementAsset {
+            required: asset_amount_to_pay,
+            available: total_asset_amount,
+        });
+    }
 
     let change_recipient_script = fee_tx_out.script_pubkey.clone();
     let contract_script = collateral_tx_out.script_pubkey.clone();

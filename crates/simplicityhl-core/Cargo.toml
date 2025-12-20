@@ -1,6 +1,6 @@
 [package]
 name = "simplicityhl-core"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.90"
 description = "High-level helpers for compiling and executing Simplicity programs on Liquid"
@@ -20,6 +20,8 @@ encoding = ["dep:bincode"]
 explorer = ["dep:reqwest", "dep:tokio"]
 
 [dependencies]
+thiserror = "2"
+
 reqwest = { version = "0.12.23", optional = true }
 tokio = { version = "1", features = ["fs"], optional = true }
 
@@ -28,6 +30,5 @@ bincode = { version = "2.0.1", optional = true }
 sha2 = { workspace = true }
 
 hex = { workspace = true }
-anyhow = { workspace = true }
 
 simplicityhl = { workspace = true }

@@ -27,7 +27,8 @@ use simplicityhl::simplicity::jet::elements::{ElementsEnv, ElementsUtxo};
 use simplicityhl::tracker::TrackerLogLevel;
 use simplicityhl::{CompiledProgram, TemplateProgram};
 use simplicityhl_core::{
-    LIQUID_TESTNET_GENESIS, control_block, create_p2tr_address, load_program, run_program,
+    LIQUID_TESTNET_GENESIS, ProgramError, control_block, create_p2tr_address, load_program,
+    run_program,
 };
 
 mod build_arguments;
@@ -56,7 +57,7 @@ pub fn get_dcd_address(
     x_only_public_key: &XOnlyPublicKey,
     arguments: &DCDArguments,
     params: &'static AddressParams,
-) -> anyhow::Result<Address> {
+) -> Result<Address, ProgramError> {
     Ok(create_p2tr_address(
         get_dcd_program(arguments)?.commit().cmr(),
         x_only_public_key,
@@ -68,7 +69,7 @@ pub fn get_dcd_address(
 ///
 /// # Errors
 /// Returns error if compilation fails.
-pub fn get_dcd_program(arguments: &DCDArguments) -> anyhow::Result<CompiledProgram> {
+pub fn get_dcd_program(arguments: &DCDArguments) -> Result<CompiledProgram, ProgramError> {
     load_program(PRICE_ATTESTED_SDK_SOURCE, arguments.build_arguments())
 }
 
@@ -96,7 +97,7 @@ pub fn execute_dcd_program(
     branch: &DcdBranch,
     merge_branch: MergeBranch,
     runner_log_level: TrackerLogLevel,
-) -> anyhow::Result<Arc<RedeemNode<Elements>>> {
+) -> Result<Arc<RedeemNode<Elements>>, ProgramError> {
     let witness_values = build_dcd_witness(token_branch, branch, merge_branch);
     Ok(run_program(compiled_program, witness_values, env, runner_log_level)?.0)
 }
@@ -118,7 +119,7 @@ pub fn finalize_dcd_transaction_on_liquid_testnet(
     token_branch: TokenBranch,
     branch: &DcdBranch,
     merge_branch: MergeBranch,
-) -> anyhow::Result<Transaction> {
+) -> Result<Transaction, ProgramError> {
     let cmr = dcd_program.commit().cmr();
 
     assert!(

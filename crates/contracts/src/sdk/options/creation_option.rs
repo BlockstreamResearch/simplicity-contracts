@@ -1,3 +1,4 @@
+use crate::error::TransactionBuildError;
 use crate::sdk::taproot_pubkey_gen::TaprootPubkeyGen;
 use crate::sdk::validation::TxOutExt;
 use crate::{OptionsArguments, get_options_address};
@@ -21,6 +22,7 @@ use simplicityhl::elements::{AddressParams, OutPoint, Script, Sequence, TxOut, T
 /// - The taproot pubkey generation fails
 /// - Transaction blinding fails
 /// - Transaction extraction or amount proof verification fails
+#[allow(clippy::too_many_lines)]
 pub fn build_option_creation(
     blinding_key: &PublicKey,
     first_fee_utxo: (OutPoint, TxOut),
@@ -29,21 +31,25 @@ pub fn build_option_creation(
     issuance_asset_entropy: [u8; 32],
     fee_amount: u64,
     address_params: &'static AddressParams,
-) -> anyhow::Result<(PartiallySignedTransaction, TaprootPubkeyGen)> {
+) -> Result<(PartiallySignedTransaction, TaprootPubkeyGen), TransactionBuildError> {
     let (first_out_point, first_tx_out) = first_fee_utxo;
     let (second_out_point, second_tx_out) = second_fee_utxo;
 
     let (first_asset_id, first_value) = first_tx_out.explicit()?;
     let (second_asset_id, second_value) = second_tx_out.explicit()?;
 
-    anyhow::ensure!(
-        first_asset_id == second_asset_id,
-        "first and second fee UTXOs must have the same asset"
-    );
+    if first_asset_id != second_asset_id {
+        return Err(TransactionBuildError::FeeUtxoAssetMismatch {
+            first_script_hash: first_tx_out.script_pubkey.script_hash().to_string(),
+            first_asset: first_asset_id.to_string(),
+            second_script_hash: second_tx_out.script_pubkey.script_hash().to_string(),
+            second_asset: second_asset_id.to_string(),
+        });
+    }
 
     let total_input_fee = first_value + second_value;
 
-    anyhow::ensure!(fee_amount <= total_input_fee, "fee exceeds input value");
+    first_tx_out.validate_amount(fee_amount.saturating_sub(second_value))?;
 
     let change_recipient_script = first_tx_out.script_pubkey.clone();
 
@@ -66,15 +72,25 @@ pub fn build_option_creation(
     let (first_issuance_token, first_reissuance_asset) = first_issuance_tx.issuance_ids();
     let (second_issuance_token, second_reissuance_asset) = second_issuance_tx.issuance_ids();
 
-    anyhow::ensure!(
-        (first_issuance_token, first_reissuance_asset) == option_arguments.get_option_token_ids(),
-        "first issuance token and reissuance asset must be the option token"
-    );
-    anyhow::ensure!(
-        (second_issuance_token, second_reissuance_asset)
-            == option_arguments.get_grantor_token_ids(),
-        "second issuance token and reissuance asset must be the grantor token"
-    );
+    let expected_option = option_arguments.get_option_token_ids();
+    if (first_issuance_token, first_reissuance_asset) != expected_option {
+        return Err(TransactionBuildError::OptionTokenMismatch {
+            expected_token: expected_option.0.to_string(),
+            expected_reissuance: expected_option.1.to_string(),
+            actual_token: first_issuance_token.to_string(),
+            actual_reissuance: first_reissuance_asset.to_string(),
+        });
+    }
+
+    let expected_grantor = option_arguments.get_grantor_token_ids();
+    if (second_issuance_token, second_reissuance_asset) != expected_grantor {
+        return Err(TransactionBuildError::GrantorTokenMismatch {
+            expected_token: expected_grantor.0.to_string(),
+            expected_reissuance: expected_grantor.1.to_string(),
+            actual_token: second_issuance_token.to_string(),
+            actual_reissuance: second_reissuance_asset.to_string(),
+        });
+    }
 
     let options_taproot_pubkey_gen =
         TaprootPubkeyGen::from(option_arguments, address_params, &get_options_address)?;

@@ -3,7 +3,8 @@ use crate::build_witness::{OptionBranch, build_option_witness};
 use std::sync::Arc;
 
 use simplicityhl_core::{
-    LIQUID_TESTNET_GENESIS, control_block, create_p2tr_address, load_program, run_program,
+    LIQUID_TESTNET_GENESIS, ProgramError, control_block, create_p2tr_address, load_program,
+    run_program,
 };
 
 use simplicityhl::elements::{Address, AddressParams, Transaction, TxInWitness, TxOut};
@@ -41,7 +42,7 @@ pub fn get_options_address(
     x_only_public_key: &XOnlyPublicKey,
     arguments: &OptionsArguments,
     params: &'static AddressParams,
-) -> anyhow::Result<Address> {
+) -> Result<Address, ProgramError> {
     Ok(create_p2tr_address(
         get_options_program(arguments)?.commit().cmr(),
         x_only_public_key,
@@ -53,7 +54,7 @@ pub fn get_options_address(
 ///
 /// # Errors
 /// Returns error if compilation fails.
-pub fn get_options_program(arguments: &OptionsArguments) -> anyhow::Result<CompiledProgram> {
+pub fn get_options_program(arguments: &OptionsArguments) -> Result<CompiledProgram, ProgramError> {
     load_program(OPTION_SOURCE, arguments.build_option_arguments())
 }
 
@@ -79,7 +80,7 @@ pub fn execute_options_program(
     env: &ElementsEnv<Arc<Transaction>>,
     option_branch: OptionBranch,
     runner_log_level: TrackerLogLevel,
-) -> anyhow::Result<Arc<RedeemNode<Elements>>> {
+) -> Result<Arc<RedeemNode<Elements>>, ProgramError> {
     let witness_values = build_option_witness(option_branch);
 
     Ok(run_program(compiled_program, witness_values, env, runner_log_level)?.0)
@@ -99,7 +100,7 @@ pub fn finalize_options_transaction(
     utxos: &[TxOut],
     input_index: usize,
     option_branch: OptionBranch,
-) -> anyhow::Result<Transaction> {
+) -> Result<Transaction, ProgramError> {
     let cmr = options_program.commit().cmr();
 
     let target_utxo = &utxos[input_index];
@@ -122,7 +123,7 @@ pub fn finalize_options_transaction(
                 value: utxo.value,
             })
             .collect(),
-        u32::try_from(input_index)?,
+        u32::try_from(input_index).map_err(|_| ProgramError::InputIndexOverflow(input_index))?,
         cmr,
         control_block(cmr, *options_public_key),
         None,

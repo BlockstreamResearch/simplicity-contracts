@@ -10,7 +10,7 @@ use simplicityhl::simplicity::jet::elements::ElementsEnv;
 use simplicityhl::simplicity::{Cmr, RedeemNode, leaf_version};
 use simplicityhl::tracker::TrackerLogLevel;
 use simplicityhl::{CompiledProgram, TemplateProgram};
-use simplicityhl_core::run_program;
+use simplicityhl_core::{ProgramError, run_program};
 
 mod build_arguments;
 mod build_witness;
@@ -53,7 +53,7 @@ pub fn execute_array_tr_storage_program(
     storage: [u8; MAX_VAL],
     compiled_program: &CompiledProgram,
     env: &ElementsEnv<Arc<Transaction>>,
-) -> anyhow::Result<Arc<RedeemNode<Elements>>> {
+) -> Result<Arc<RedeemNode<Elements>>, ProgramError> {
     let witness_values = build_array_tr_storage_witness(storage);
     Ok(run_program(compiled_program, witness_values, env, TrackerLogLevel::None)?.0)
 }
