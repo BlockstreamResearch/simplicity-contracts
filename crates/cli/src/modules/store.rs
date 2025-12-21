@@ -80,7 +80,8 @@ impl Store {
 
 #[cfg(test)]
 mod tests {
-    use contracts::OptionsArguments;
+    use contracts::options::OptionsArguments;
+    use contracts::options::get_options_address;
     use contracts::sdk::taproot_pubkey_gen::get_random_seed;
     use simplicityhl::elements::AssetId;
     use simplicityhl_core::{
@@ -113,11 +114,8 @@ mod tests {
             grantor_token_entropy: get_random_seed(),
         };
 
-        let options_taproot_pubkey_gen = TaprootPubkeyGen::from(
-            &args,
-            &AddressParams::LIQUID_TESTNET,
-            &contracts::get_options_address,
-        )?;
+        let options_taproot_pubkey_gen =
+            TaprootPubkeyGen::from(&args, &AddressParams::LIQUID_TESTNET, &get_options_address)?;
 
         Ok((args, options_taproot_pubkey_gen))
     }
@@ -132,7 +130,7 @@ mod tests {
             &options_taproot_pubkey_gen.to_string(),
             &args.to_hex()?,
             &AddressParams::LIQUID_TESTNET,
-            &contracts::get_options_address,
+            &get_options_address,
         )?;
 
         let retrieved =
@@ -153,7 +151,7 @@ mod tests {
             &options_taproot_pubkey_gen.to_string(),
             &args.to_hex()?,
             &AddressParams::LIQUID_TESTNET,
-            &contracts::get_options_address,
+            &get_options_address,
         )?;
 
         let exported_hex = store.export_arguments(&options_taproot_pubkey_gen.to_string())?;
@@ -173,7 +171,7 @@ mod tests {
             &options_taproot_pubkey_gen.to_string(),
             &args.to_hex()?,
             &AddressParams::LIQUID_TESTNET,
-            &contracts::get_options_address,
+            &get_options_address,
         )?;
 
         let exported_hex = store.export_arguments(&options_taproot_pubkey_gen.to_string())?;

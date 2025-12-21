@@ -3,25 +3,17 @@ extern crate core;
 
 pub mod error;
 
-#[cfg(feature = "array-tr-storage")]
-mod array_tr_storage;
-#[cfg(feature = "bytes32-tr-storage")]
-mod bytes32_tr_storage;
-#[cfg(feature = "dcd")]
-mod dual_currency_deposit;
-mod options;
-#[cfg(feature = "simple-storage")]
-mod simple_storage;
-
-#[cfg(any(feature = "sdk-basic", feature = "sdk-options"))]
 pub mod sdk;
 
 #[cfg(feature = "array-tr-storage")]
-pub use array_tr_storage::*;
+pub mod array_tr_storage;
 #[cfg(feature = "bytes32-tr-storage")]
-pub use bytes32_tr_storage::*;
+pub mod bytes32_tr_storage;
 #[cfg(feature = "dcd")]
-pub use dual_currency_deposit::*;
-pub use options::*;
+pub mod dual_currency_deposit;
+#[cfg(feature = "options")]
+pub mod options;
 #[cfg(feature = "simple-storage")]
-pub use simple_storage::*;
+pub mod simple_storage;
+#[cfg(feature = "swap-with-change")]
+pub mod swap_with_change;

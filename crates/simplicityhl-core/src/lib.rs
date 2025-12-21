@@ -326,9 +326,6 @@ pub fn get_and_verify_env(
         });
     }
 
-    let input_index_u32 =
-        u32::try_from(input_index).map_err(|_| ProgramError::InputIndexOverflow(input_index))?;
-
     Ok(ElementsEnv::new(
         Arc::new(tx.clone()),
         utxos
@@ -339,7 +336,7 @@ pub fn get_and_verify_env(
                 value: utxo.value,
             })
             .collect(),
-        input_index_u32,
+        u32::try_from(input_index)?,
         cmr,
         control_block(cmr, *program_public_key),
         None,

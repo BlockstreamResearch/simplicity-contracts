@@ -1,6 +1,8 @@
-use crate::OptionsArguments;
-use crate::build_witness::OptionBranch;
+use crate::options::OptionsArguments;
+use crate::options::build_witness::OptionBranch;
+
 use crate::error::TransactionBuildError;
+
 use crate::sdk::validation::TxOutExt;
 
 use simplicityhl::elements::bitcoin::secp256k1;

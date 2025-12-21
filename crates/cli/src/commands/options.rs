@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Subcommand;
+use contracts::options::{OptionsArguments, finalize_options_transaction, get_options_program};
 use contracts::sdk::taproot_pubkey_gen::{TaprootPubkeyGen, get_random_seed};
-use contracts::{OptionsArguments, finalize_options_transaction, get_options_program};
 use std::str::FromStr;
 
 use simplicityhl::elements::pset::serialize::Serialize;
@@ -228,7 +228,7 @@ impl Options {
                 option_taproot_pubkey_gen,
                 encoded_options_arguments,
                 &AddressParams::LIQUID_TESTNET,
-                &contracts::get_options_address,
+                &contracts::options::get_options_address,
             ),
             Self::Export {
                 option_taproot_pubkey_gen,
@@ -330,7 +330,7 @@ impl Options {
                     &options_taproot_pubkey_gen.to_string(),
                     &option_arguments.to_hex()?,
                     &AddressParams::LIQUID_TESTNET,
-                    &contracts::get_options_address,
+                    &contracts::options::get_options_address,
                 )?;
 
                 if *broadcast {
@@ -362,7 +362,7 @@ impl Options {
                     option_taproot_pubkey_gen,
                     &option_arguments,
                     &AddressParams::LIQUID_TESTNET,
-                    &contracts::get_options_address,
+                    &contracts::options::get_options_address,
                 )?;
 
                 let option_tx_out = fetch_utxo(*option_asset_utxo).await?;
@@ -407,6 +407,8 @@ impl Options {
                     &utxos,
                     0,
                     option_branch,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
                 )?;
 
                 let tx = finalize_options_transaction(
@@ -416,6 +418,8 @@ impl Options {
                     &utxos,
                     1,
                     option_branch,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
                 )?;
 
                 let x_only_public_key = keypair.x_only_public_key().0;
@@ -465,7 +469,7 @@ impl Options {
                     option_taproot_pubkey_gen,
                     &option_arguments,
                     &AddressParams::LIQUID_TESTNET,
-                    &contracts::get_options_address,
+                    &contracts::options::get_options_address,
                 )?;
 
                 let collateral_tx_out = fetch_utxo(*collateral_utxo).await?;
@@ -498,6 +502,8 @@ impl Options {
                     &utxos,
                     0,
                     option_branch,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
                 )?;
 
                 let x_only_public_key = keypair.x_only_public_key().0;
@@ -584,7 +590,7 @@ impl Options {
                     option_taproot_pubkey_gen,
                     &option_arguments,
                     &AddressParams::LIQUID_TESTNET,
-                    &contracts::get_options_address,
+                    &contracts::options::get_options_address,
                 )?;
 
                 let settlement_tx_out = fetch_utxo(*settlement_asset_utxo).await?;
@@ -614,6 +620,8 @@ impl Options {
                     &utxos,
                     0,
                     option_branch,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
                 )?;
 
                 let x_only_public_key = keypair.x_only_public_key().0;
@@ -681,7 +689,7 @@ impl Options {
                     option_taproot_pubkey_gen,
                     &option_arguments,
                     &AddressParams::LIQUID_TESTNET,
-                    &contracts::get_options_address,
+                    &contracts::options::get_options_address,
                 )?;
 
                 let collateral_tx_out = fetch_utxo(*collateral_utxo).await?;
@@ -711,6 +719,8 @@ impl Options {
                     &utxos,
                     0,
                     option_branch,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
                 )?;
 
                 let x_only_public_key = keypair.x_only_public_key().0;
@@ -779,7 +789,7 @@ impl Options {
                     option_taproot_pubkey_gen,
                     &option_arguments,
                     &AddressParams::LIQUID_TESTNET,
-                    &contracts::get_options_address,
+                    &contracts::options::get_options_address,
                 )?;
 
                 let collateral_tx_out = fetch_utxo(*collateral_utxo).await?;
@@ -812,6 +822,8 @@ impl Options {
                     &utxos,
                     0,
                     option_branch,
+                    &AddressParams::LIQUID_TESTNET,
+                    *LIQUID_TESTNET_GENESIS,
                 )?;
 
                 let x_only_public_key = keypair.x_only_public_key().0;
