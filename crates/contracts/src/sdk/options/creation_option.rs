@@ -1,7 +1,10 @@
+use crate::options::OptionsArguments;
+use crate::options::get_options_address;
+
 use crate::error::TransactionBuildError;
+
 use crate::sdk::taproot_pubkey_gen::TaprootPubkeyGen;
 use crate::sdk::validation::TxOutExt;
-use crate::{OptionsArguments, get_options_address};
 
 use std::collections::HashMap;
 

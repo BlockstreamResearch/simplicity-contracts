@@ -53,8 +53,8 @@ pub enum ProgramError {
         actual_hash: String,
     },
 
-    #[error("Input index {0} exceeds u32 maximum")]
-    InputIndexOverflow(usize),
+    #[error("Input index exceeds u32 maximum: {0}")]
+    InputIndexOverflow(#[from] std::num::TryFromIntError),
 }
 
 /// Errors that occur when interacting with the Esplora API or local cache.

@@ -1,17 +1,15 @@
-use crate::build_witness::{OptionBranch, build_option_witness};
+use crate::options::build_witness::{OptionBranch, build_option_witness};
 
 use std::sync::Arc;
 
 use simplicityhl_core::{
-    LIQUID_TESTNET_GENESIS, ProgramError, control_block, create_p2tr_address, load_program,
-    run_program,
+    ProgramError, control_block, create_p2tr_address, get_and_verify_env, load_program, run_program,
 };
 
-use simplicityhl::elements::{Address, AddressParams, Transaction, TxInWitness, TxOut};
+use simplicityhl::elements::{self, Address, AddressParams, Transaction, TxInWitness, TxOut};
 
 use simplicityhl::simplicity::RedeemNode;
 use simplicityhl::simplicity::jet::Elements;
-use simplicityhl::simplicity::jet::elements::ElementsUtxo;
 use simplicityhl::simplicity::{bitcoin::XOnlyPublicKey, jet::elements::ElementsEnv};
 
 use simplicityhl::tracker::TrackerLogLevel;
@@ -89,10 +87,9 @@ pub fn execute_options_program(
 /// Finalize options funding path transaction with Simplicity witness.
 ///
 /// # Errors
-/// Returns error if program execution fails.
 ///
-/// # Panics
-/// - if UTXO script pubkey doesn't match expected options address.
+/// Returns error if program execution fails or script pubkey doesn't match.
+#[allow(clippy::too_many_arguments)]
 pub fn finalize_options_transaction(
     mut tx: Transaction,
     options_public_key: &XOnlyPublicKey,
@@ -100,35 +97,18 @@ pub fn finalize_options_transaction(
     utxos: &[TxOut],
     input_index: usize,
     option_branch: OptionBranch,
+    params: &'static AddressParams,
+    genesis_hash: elements::BlockHash,
 ) -> Result<Transaction, ProgramError> {
-    let cmr = options_program.commit().cmr();
-
-    let target_utxo = &utxos[input_index];
-    let script_pubkey =
-        create_p2tr_address(cmr, options_public_key, &AddressParams::LIQUID_TESTNET)
-            .script_pubkey();
-
-    assert_eq!(
-        target_utxo.script_pubkey, script_pubkey,
-        "Expected for the UTXO to be spent by Options to have the same script."
-    );
-
-    let env: ElementsEnv<Arc<Transaction>> = ElementsEnv::new(
-        Arc::new(tx.clone()),
-        utxos
-            .iter()
-            .map(|utxo| ElementsUtxo {
-                script_pubkey: utxo.script_pubkey.clone(),
-                asset: utxo.asset,
-                value: utxo.value,
-            })
-            .collect(),
-        u32::try_from(input_index).map_err(|_| ProgramError::InputIndexOverflow(input_index))?,
-        cmr,
-        control_block(cmr, *options_public_key),
-        None,
-        *LIQUID_TESTNET_GENESIS,
-    );
+    let env = get_and_verify_env(
+        &tx,
+        options_program,
+        options_public_key,
+        utxos,
+        params,
+        genesis_hash,
+        input_index,
+    )?;
 
     let pruned =
         execute_options_program(options_program, &env, option_branch, TrackerLogLevel::None)?;
@@ -173,6 +153,7 @@ mod options_tests {
     use simplicityhl::elements::secp256k1_zkp::SECP256K1;
     use simplicityhl::elements::taproot::ControlBlock;
     use simplicityhl::elements::{ContractHash, Script};
+    use simplicityhl::simplicity::jet::elements::ElementsUtxo;
     use simplicityhl_core::{LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_TEST_ASSET_ID_STR};
 
     fn get_creation_pst(
