@@ -56,38 +56,3 @@ pub enum ProgramError {
     #[error("Input index exceeds u32 maximum: {0}")]
     InputIndexOverflow(#[from] std::num::TryFromIntError),
 }
-
-/// Errors that occur when interacting with the Esplora API or local cache.
-///
-/// These errors are returned by [`EsploraClient`](crate::EsploraClient) methods
-/// for broadcasting transactions and fetching UTXOs.
-#[cfg(feature = "explorer")]
-#[derive(Debug, thiserror::Error)]
-pub enum ExplorerError {
-    /// Returned when an HTTP request to the Esplora API fails.
-    #[error("HTTP request failed: {0}")]
-    HttpRequest(#[from] reqwest::Error),
-
-    #[error("Broadcast failed with HTTP {status} for {url}: {message}")]
-    BroadcastRejected {
-        status: u16,
-        url: String,
-        message: String,
-    },
-
-    /// Returned when a filesystem operation fails (cache read/write, directory creation).
-    #[error("IO operation failed: {0}")]
-    Io(#[from] std::io::Error),
-
-    /// Returned when transaction data is not valid hexadecimal.
-    #[error("Invalid transaction hex: {0}")]
-    InvalidTransactionHex(#[from] hex::FromHexError),
-
-    /// Returned when raw transaction bytes cannot be parsed.
-    #[error("Failed to deserialize transaction: {0}")]
-    TransactionDeserialize(#[from] simplicityhl::simplicity::elements::encode::Error),
-
-    /// Returned when the requested output index does not exist in the transaction.
-    #[error("Output index {index} out of bounds for transaction {txid}")]
-    OutputIndexOutOfBounds { index: usize, txid: String },
-}

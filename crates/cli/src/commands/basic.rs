@@ -3,6 +3,7 @@ use crate::modules::utils::derive_keypair;
 
 use anyhow::anyhow;
 
+use crate::explorer::{broadcast_tx, fetch_utxo};
 use clap::Subcommand;
 use simplicityhl::elements::hashes::{Hash, sha256};
 use simplicityhl::elements::pset::serialize::Serialize;
@@ -11,8 +12,8 @@ use simplicityhl::elements::{AssetId, ContractHash};
 use simplicityhl::simplicity::elements::{Address, AddressParams, OutPoint};
 use simplicityhl::simplicity::hex::DisplayHex;
 use simplicityhl_core::{
-    LIQUID_TESTNET_GENESIS, broadcast_tx, create_p2pk_signature, derive_public_blinder_key,
-    fetch_utxo, finalize_p2pk_transaction, get_p2pk_address, hash_script_pubkey,
+    LIQUID_TESTNET_GENESIS, create_p2pk_signature, derive_public_blinder_key,
+    finalize_p2pk_transaction, get_p2pk_address, hash_script_pubkey,
 };
 
 #[derive(Subcommand, Debug)]

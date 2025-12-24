@@ -7,6 +7,7 @@
 //! - `options`: Utilities for the options contract.
 
 mod commands;
+mod explorer;
 mod modules;
 
 use anyhow::Result;

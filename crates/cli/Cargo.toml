@@ -16,6 +16,7 @@ workspace = true
 
 [dependencies]
 anyhow = "1"
+thiserror = "2"
 
 sled = "0.34.7"
 
@@ -23,7 +24,8 @@ dotenvy = "0.15"
 clap = { version = "4.5", features = ["derive"] }
 config = { version = "0.15.16", default-features = true }
 
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+reqwest = { version = "0.12.23" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs"] }
 
 hex = { workspace = true }
 
@@ -31,4 +33,4 @@ contracts = { path = "../contracts" }
 
 simplicityhl = { workspace = true }
 
-simplicityhl-core = { version = "0.2.1", features = ["explorer", "encoding"] }
+simplicityhl-core = { version = "0.2.1", features = ["encoding"] }

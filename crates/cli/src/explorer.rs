@@ -8,8 +8,6 @@ use tokio::fs;
 
 use simplicityhl::simplicity::elements::{OutPoint, Transaction, TxOut, encode};
 
-use crate::error::ExplorerError;
-
 /// Default Esplora API base URL for Liquid testnet.
 pub const DEFAULT_BASE_URL: &str = "https://blockstream.info/liquidtestnet/api";
 
@@ -175,4 +173,38 @@ pub async fn broadcast_tx(tx: &Transaction) -> Result<String, ExplorerError> {
 /// See [`EsploraClient::fetch_utxo`].
 pub async fn fetch_utxo(outpoint: OutPoint) -> Result<TxOut, ExplorerError> {
     EsploraClient::new().fetch_utxo(outpoint).await
+}
+
+/// Errors that occur when interacting with the Esplora API or local cache.
+///
+/// These errors are returned by [`EsploraClient`](crate::EsploraClient) methods
+/// for broadcasting transactions and fetching UTXOs.
+#[derive(Debug, thiserror::Error)]
+pub enum ExplorerError {
+    /// Returned when an HTTP request to the Esplora API fails.
+    #[error("HTTP request failed: {0}")]
+    HttpRequest(#[from] reqwest::Error),
+
+    #[error("Broadcast failed with HTTP {status} for {url}: {message}")]
+    BroadcastRejected {
+        status: u16,
+        url: String,
+        message: String,
+    },
+
+    /// Returned when a filesystem operation fails (cache read/write, directory creation).
+    #[error("IO operation failed: {0}")]
+    Io(#[from] std::io::Error),
+
+    /// Returned when transaction data is not valid hexadecimal.
+    #[error("Invalid transaction hex: {0}")]
+    InvalidTransactionHex(#[from] hex::FromHexError),
+
+    /// Returned when raw transaction bytes cannot be parsed.
+    #[error("Failed to deserialize transaction: {0}")]
+    TransactionDeserialize(#[from] simplicityhl::simplicity::elements::encode::Error),
+
+    /// Returned when the requested output index does not exist in the transaction.
+    #[error("Output index {index} out of bounds for transaction {txid}")]
+    OutputIndexOutOfBounds { index: usize, txid: String },
 }
