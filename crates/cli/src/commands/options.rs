@@ -10,13 +10,13 @@ use simplicityhl::elements::{AddressParams, OutPoint};
 use simplicityhl::simplicity::elements::AssetId;
 use simplicityhl::simplicity::hex::DisplayHex;
 
-use simplicityhl_core::{
-    Encodable, LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_GENESIS, broadcast_tx,
-    create_p2pk_signature, derive_public_blinder_key, fetch_utxo, finalize_p2pk_transaction,
-};
-
+use crate::explorer::{broadcast_tx, fetch_utxo};
 use crate::modules::store::Store;
 use crate::modules::utils::derive_keypair;
+use simplicityhl_core::{
+    Encodable, LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_GENESIS, create_p2pk_signature,
+    derive_public_blinder_key, finalize_p2pk_transaction,
+};
 
 /// Options contract utilities
 /// In that version only the LBTC asset can be used as collateral

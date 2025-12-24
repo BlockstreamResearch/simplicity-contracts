@@ -3,12 +3,9 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use reqwest::Client;
 use tokio::fs;
 
 use simplicityhl::simplicity::elements::{OutPoint, Transaction, TxOut, encode};
-
-use crate::error::ExplorerError;
 
 /// Default Esplora API base URL for Liquid testnet.
 pub const DEFAULT_BASE_URL: &str = "https://blockstream.info/liquidtestnet/api";
@@ -19,8 +16,8 @@ pub const DEFAULT_TIMEOUT_SECS: u64 = 10;
 /// Client for interacting with the Esplora API.
 #[derive(Debug, Clone)]
 pub struct EsploraClient {
-    client: Client,
     base_url: String,
+    timeout: Duration,
 }
 
 impl Default for EsploraClient {
@@ -37,20 +34,11 @@ impl EsploraClient {
     }
 
     /// Creates a new client with a custom base URL.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the HTTP client cannot be built (invalid TLS backend).
     #[must_use]
     pub fn with_base_url(base_url: &str) -> Self {
-        let client = Client::builder()
-            .timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECS))
-            .build()
-            .expect("Failed to build HTTP client");
-
         Self {
-            client,
             base_url: base_url.trim_end_matches('/').to_owned(),
+            timeout: Duration::from_secs(DEFAULT_TIMEOUT_SECS),
         }
     }
 
@@ -68,22 +56,30 @@ impl EsploraClient {
     pub async fn broadcast_transaction(&self, tx: &Transaction) -> Result<String, ExplorerError> {
         let tx_hex = encode::serialize_hex(tx);
         let url = format!("{}/tx", self.base_url);
+        let timeout_secs = self.timeout.as_secs();
 
-        let response = self.client.post(&url).body(tx_hex).send().await?;
+        let response = tokio::task::spawn_blocking(move || {
+            minreq::post(&url)
+                .with_timeout(timeout_secs)
+                .with_body(tx_hex)
+                .send()
+        })
+        .await
+        .map_err(|e| ExplorerError::TaskJoin(e.to_string()))??;
 
-        let status = response.status();
-        let response_url = response.url().to_string();
-        let body = response.text().await?;
+        let status = response.status_code;
+        let body = response.as_str().unwrap_or("").trim().to_owned();
 
-        if !status.is_success() {
+        if !(200..300).contains(&status) {
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             return Err(ExplorerError::BroadcastRejected {
-                status: status.as_u16(),
-                url: response_url,
-                message: body.trim().to_owned(),
+                status: status as u16, // HTTP status codes are always positive and fit in u16
+                url: format!("{}/tx", self.base_url),
+                message: body,
             });
         }
 
-        Ok(body.trim().to_owned())
+        Ok(body)
     }
 
     /// Fetches a UTXO from the network with local file caching.
@@ -115,14 +111,22 @@ impl EsploraClient {
         }
 
         let url = format!("{}/tx/{tx_id}/hex", self.base_url);
-        let tx_hex = self
-            .client
-            .get(&url)
-            .send()
-            .await?
-            .error_for_status()?
-            .text()
-            .await?;
+        let timeout_secs = self.timeout.as_secs();
+
+        let response = tokio::task::spawn_blocking(move || {
+            minreq::get(&url).with_timeout(timeout_secs).send()
+        })
+        .await
+        .map_err(|e| ExplorerError::TaskJoin(e.to_string()))??;
+
+        if !(200..300).contains(&response.status_code) {
+            return Err(ExplorerError::HttpRequest(format!(
+                "Request failed with status {}",
+                response.status_code
+            )));
+        }
+
+        let tx_hex = response.as_str().unwrap_or("").to_owned();
 
         // (best-effort, ignore errors)
         let _ = fs::write(&cache_path, &tx_hex).await;
@@ -175,4 +179,46 @@ pub async fn broadcast_tx(tx: &Transaction) -> Result<String, ExplorerError> {
 /// See [`EsploraClient::fetch_utxo`].
 pub async fn fetch_utxo(outpoint: OutPoint) -> Result<TxOut, ExplorerError> {
     EsploraClient::new().fetch_utxo(outpoint).await
+}
+
+/// Errors that occur when interacting with the Esplora API or local cache.
+///
+/// These errors are returned by [`EsploraClient`](crate::EsploraClient) methods
+/// for broadcasting transactions and fetching UTXOs.
+#[derive(Debug, thiserror::Error)]
+pub enum ExplorerError {
+    /// Returned when an HTTP request to the Esplora API fails.
+    #[error("HTTP request failed: {0}")]
+    HttpRequest(String),
+
+    /// Returned when minreq encounters an error.
+    #[error("HTTP error: {0}")]
+    Minreq(#[from] minreq::Error),
+
+    /// Returned when a tokio task join fails.
+    #[error("Task join error: {0}")]
+    TaskJoin(String),
+
+    #[error("Broadcast failed with HTTP {status} for {url}: {message}")]
+    BroadcastRejected {
+        status: u16,
+        url: String,
+        message: String,
+    },
+
+    /// Returned when a filesystem operation fails (cache read/write, directory creation).
+    #[error("IO operation failed: {0}")]
+    Io(#[from] std::io::Error),
+
+    /// Returned when transaction data is not valid hexadecimal.
+    #[error("Invalid transaction hex: {0}")]
+    InvalidTransactionHex(#[from] hex::FromHexError),
+
+    /// Returned when raw transaction bytes cannot be parsed.
+    #[error("Failed to deserialize transaction: {0}")]
+    TransactionDeserialize(#[from] simplicityhl::simplicity::elements::encode::Error),
+
+    /// Returned when the requested output index does not exist in the transaction.
+    #[error("Output index {index} out of bounds for transaction {txid}")]
+    OutputIndexOutOfBounds { index: usize, txid: String },
 }

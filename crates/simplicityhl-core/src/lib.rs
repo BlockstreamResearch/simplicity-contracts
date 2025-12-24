@@ -5,8 +5,6 @@
 mod blinder;
 mod constants;
 mod error;
-#[cfg(feature = "explorer")]
-mod explorer;
 mod runner;
 mod scripts;
 
@@ -76,11 +74,6 @@ pub use scripts::*;
 
 #[cfg(feature = "encoding")]
 pub use encoding::Encodable;
-
-#[cfg(feature = "explorer")]
-pub use error::ExplorerError;
-#[cfg(feature = "explorer")]
-pub use explorer::*;
 
 use simplicityhl::elements::secp256k1_zkp::schnorr::Signature;
 
