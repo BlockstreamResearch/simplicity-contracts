@@ -24,8 +24,8 @@ dotenvy = "0.15"
 clap = { version = "4.5", features = ["derive"] }
 config = { version = "0.15.16", default-features = true }
 
-reqwest = { version = "0.12.23" }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs"] }
+minreq = { version = "2.14", features = ["https"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "sync"] }
 
 hex = { workspace = true }
 
