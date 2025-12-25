@@ -130,7 +130,7 @@ mod simple_storage_tests {
         pst.add_output(Output::new_explicit(
             storage_address.script_pubkey(),
             new_value,
-            LIQUID_TESTNET_BITCOIN_ASSET,
+            *LIQUID_TESTNET_BITCOIN_ASSET,
             None,
         ));
 
@@ -148,7 +148,7 @@ mod simple_storage_tests {
             vec![
                 simplicityhl::simplicity::jet::elements::ElementsUtxo {
                     script_pubkey: storage_address.script_pubkey(),
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(old_value),
                 },
                 simplicityhl::simplicity::jet::elements::ElementsUtxo {
@@ -203,7 +203,7 @@ mod simple_storage_tests {
         pst.add_output(Output::new_explicit(
             storage_address.script_pubkey(),
             new_value,
-            LIQUID_TESTNET_BITCOIN_ASSET,
+            *LIQUID_TESTNET_BITCOIN_ASSET,
             None,
         ));
 
@@ -211,7 +211,7 @@ mod simple_storage_tests {
         pst.add_output(Output::new_explicit(
             Script::new_op_return(b"burn"),
             old_value - new_value,
-            LIQUID_TESTNET_BITCOIN_ASSET,
+            *LIQUID_TESTNET_BITCOIN_ASSET,
             None,
         ));
 
@@ -221,7 +221,7 @@ mod simple_storage_tests {
             Arc::new(pst.extract_tx()?),
             vec![simplicityhl::simplicity::jet::elements::ElementsUtxo {
                 script_pubkey: storage_address.script_pubkey(),
-                asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                 value: Value::Explicit(old_value),
             }],
             0,

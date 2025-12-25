@@ -267,7 +267,7 @@ impl Options {
                     *expiry_time,
                     *collateral_per_contract,
                     *settlement_per_contract,
-                    LIQUID_TESTNET_BITCOIN_ASSET,
+                    *LIQUID_TESTNET_BITCOIN_ASSET,
                     settlement_asset_id,
                     issuance_asset_entropy,
                     *first_fee_utxo,
