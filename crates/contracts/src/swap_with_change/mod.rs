@@ -204,7 +204,7 @@ mod swap_with_change_tests {
             (
                 OutPoint::new(Txid::from_slice(&[2; 32])?, 0),
                 TxOut {
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(fee_amount + 100),
                     nonce: elements::confidential::Nonce::Null,
                     script_pubkey: Script::new(),
@@ -445,7 +445,7 @@ mod swap_with_change_tests {
             (
                 OutPoint::new(Txid::from_slice(&[2; 32])?, 0),
                 TxOut {
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(fee_amount),
                     nonce: elements::confidential::Nonce::Null,
                     script_pubkey: Script::new(),
@@ -468,7 +468,7 @@ mod swap_with_change_tests {
                 witness: elements::TxOutWitness::default(),
             },
             TxOut {
-                asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                 value: Value::Explicit(fee_amount),
                 nonce: elements::confidential::Nonce::Null,
                 script_pubkey: Script::new(),
@@ -542,7 +542,7 @@ mod swap_with_change_tests {
             (
                 OutPoint::new(Txid::from_slice(&[2; 32])?, 0),
                 TxOut {
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(fee_amount),
                     nonce: elements::confidential::Nonce::Null,
                     script_pubkey: Script::new(),

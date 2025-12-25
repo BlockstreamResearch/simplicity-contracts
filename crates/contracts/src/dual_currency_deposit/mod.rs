@@ -313,7 +313,7 @@ mod dcd_merge_tests {
         pst.add_output(Output::new_explicit(
             dcd_address.script_pubkey(),
             ratio_args.interest_collateral_amount,
-            LIQUID_TESTNET_BITCOIN_ASSET,
+            *LIQUID_TESTNET_BITCOIN_ASSET,
             None,
         ));
 
@@ -349,7 +349,7 @@ mod dcd_merge_tests {
         pst.add_output(Output::new_explicit(
             Script::new(),
             1,
-            LIQUID_TESTNET_BITCOIN_ASSET,
+            *LIQUID_TESTNET_BITCOIN_ASSET,
             None,
         ));
 
@@ -365,7 +365,7 @@ mod dcd_merge_tests {
         pst.add_output(Output::new_explicit(
             Script::new(),
             1,
-            LIQUID_TESTNET_BITCOIN_ASSET,
+            *LIQUID_TESTNET_BITCOIN_ASSET,
             None,
         ));
 
@@ -376,17 +376,17 @@ mod dcd_merge_tests {
             vec![
                 ElementsUtxo {
                     script_pubkey: dcd_address.script_pubkey(),
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(1000),
                 },
                 ElementsUtxo {
                     script_pubkey: dcd_address.script_pubkey(),
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(1000),
                 },
                 ElementsUtxo {
                     script_pubkey: dcd_address.script_pubkey(),
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(1000),
                 },
                 // Input 3: settlement asset
@@ -400,7 +400,7 @@ mod dcd_merge_tests {
                 // Input 4: collateral asset
                 ElementsUtxo {
                     script_pubkey: dcd_address.script_pubkey(),
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(ratio_args.interest_collateral_amount),
                 },
             ],
@@ -654,7 +654,7 @@ mod dcd_merge_tests {
             vec![
                 ElementsUtxo {
                     script_pubkey: dcd_address.script_pubkey(),
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(available_collateral),
                 },
                 ElementsUtxo {
@@ -784,7 +784,7 @@ mod dcd_merge_tests {
             vec![
                 ElementsUtxo {
                     script_pubkey: dcd_address.script_pubkey(),
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(ratio_args.interest_collateral_amount),
                 },
                 ElementsUtxo {
@@ -1196,7 +1196,7 @@ mod dcd_merge_tests {
             Arc::new(pst.extract_tx()?),
             vec![ElementsUtxo {
                 script_pubkey: dcd_address.script_pubkey(),
-                asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                 value: Value::Explicit(available_collateral),
             }],
             0,
@@ -1327,7 +1327,7 @@ mod dcd_merge_tests {
             Arc::new(pst.extract_tx()?),
             vec![ElementsUtxo {
                 script_pubkey: dcd_address.script_pubkey(),
-                asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                 value: Value::Explicit(available_collateral),
             }],
             0,
@@ -1465,7 +1465,7 @@ mod dcd_merge_tests {
             Arc::new(pst.extract_tx()?),
             vec![ElementsUtxo {
                 script_pubkey: dcd_address.script_pubkey(),
-                asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                 value: Value::Explicit(amount_to_get),
             }],
             0,
@@ -1712,17 +1712,17 @@ mod dcd_merge_tests {
             vec![
                 ElementsUtxo {
                     script_pubkey: dcd_address.script_pubkey(),
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(1),
                 },
                 ElementsUtxo {
                     script_pubkey: dcd_address.script_pubkey(),
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(1),
                 },
                 ElementsUtxo {
                     script_pubkey: dcd_address.script_pubkey(),
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(1),
                 },
             ],
@@ -1831,22 +1831,22 @@ mod dcd_merge_tests {
             vec![
                 ElementsUtxo {
                     script_pubkey: dcd_address.script_pubkey(),
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(1),
                 },
                 ElementsUtxo {
                     script_pubkey: dcd_address.script_pubkey(),
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(1),
                 },
                 ElementsUtxo {
                     script_pubkey: dcd_address.script_pubkey(),
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(1),
                 },
                 ElementsUtxo {
                     script_pubkey: dcd_address.script_pubkey(),
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(1),
                 },
             ],
@@ -1959,27 +1959,27 @@ mod dcd_merge_tests {
             vec![
                 ElementsUtxo {
                     script_pubkey: dcd_address.script_pubkey(),
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(1),
                 },
                 ElementsUtxo {
                     script_pubkey: dcd_address.script_pubkey(),
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(1),
                 },
                 ElementsUtxo {
                     script_pubkey: dcd_address.script_pubkey(),
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(1),
                 },
                 ElementsUtxo {
                     script_pubkey: dcd_address.script_pubkey(),
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(1),
                 },
                 ElementsUtxo {
                     script_pubkey: dcd_address.script_pubkey(),
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(1),
                 },
             ],

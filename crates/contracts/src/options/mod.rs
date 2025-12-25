@@ -198,7 +198,7 @@ mod options_tests {
                 (
                     option_outpoint,
                     TxOut {
-                        asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                        asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                         value: Value::Explicit(500),
                         nonce: elements::confidential::Nonce::Null,
                         script_pubkey: Script::new(),
@@ -208,7 +208,7 @@ mod options_tests {
                 (
                     grantor_outpoint,
                     TxOut {
-                        asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                        asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                         value: Value::Explicit(1000),
                         nonce: elements::confidential::Nonce::Null,
                         script_pubkey: Script::new(),
@@ -270,7 +270,7 @@ mod options_tests {
             (
                 OutPoint::default(),
                 TxOut {
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(collateral_amount + 1000),
                     nonce: elements::confidential::Nonce::Null,
                     script_pubkey: Script::new(),
@@ -290,17 +290,17 @@ mod options_tests {
             vec![
                 ElementsUtxo {
                     script_pubkey: option_pubkey_gen.address.script_pubkey(),
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(1000),
                 },
                 ElementsUtxo {
                     script_pubkey: option_pubkey_gen.address.script_pubkey(),
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(1000),
                 },
                 ElementsUtxo {
                     script_pubkey: option_pubkey_gen.address.script_pubkey(),
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(collateral_amount),
                 },
             ],
@@ -350,7 +350,7 @@ mod options_tests {
             (
                 OutPoint::default(),
                 TxOut {
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(collateral_amount),
                     nonce: elements::confidential::Nonce::Null,
                     script_pubkey: option_pubkey_gen.address.script_pubkey(),
@@ -380,7 +380,7 @@ mod options_tests {
             (
                 OutPoint::default(),
                 TxOut {
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(100),
                     nonce: elements::confidential::Nonce::Null,
                     script_pubkey: Script::new(),
@@ -398,7 +398,7 @@ mod options_tests {
             Arc::new(pst.extract_tx()?),
             vec![ElementsUtxo {
                 script_pubkey: option_pubkey_gen.address.script_pubkey(),
-                asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                 value: Value::Explicit(collateral_amount),
             }],
             0,
@@ -448,7 +448,7 @@ mod options_tests {
             (
                 OutPoint::default(),
                 TxOut {
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(collateral_amount_total),
                     nonce: elements::confidential::Nonce::Null,
                     script_pubkey: option_pubkey_gen.address.script_pubkey(),
@@ -478,7 +478,7 @@ mod options_tests {
             (
                 OutPoint::default(),
                 TxOut {
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(100),
                     nonce: elements::confidential::Nonce::Null,
                     script_pubkey: Script::new(),
@@ -496,7 +496,7 @@ mod options_tests {
             Arc::new(pst.extract_tx()?),
             vec![ElementsUtxo {
                 script_pubkey: option_pubkey_gen.address.script_pubkey(),
-                asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                 value: Value::Explicit(collateral_amount_total),
             }],
             0,
@@ -564,7 +564,7 @@ mod options_tests {
             (
                 OutPoint::default(),
                 TxOut {
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(100),
                     nonce: elements::confidential::Nonce::Null,
                     script_pubkey: Script::new(),
@@ -632,7 +632,7 @@ mod options_tests {
             (
                 OutPoint::default(),
                 TxOut {
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(collateral_amount_total),
                     nonce: elements::confidential::Nonce::Null,
                     script_pubkey: option_pubkey_gen.address.script_pubkey(),
@@ -652,7 +652,7 @@ mod options_tests {
             (
                 OutPoint::default(),
                 TxOut {
-                    asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(100),
                     nonce: elements::confidential::Nonce::Null,
                     script_pubkey: Script::new(),
@@ -670,7 +670,7 @@ mod options_tests {
             Arc::new(pst.extract_tx()?),
             vec![ElementsUtxo {
                 script_pubkey: option_pubkey_gen.address.script_pubkey(),
-                asset: Asset::Explicit(LIQUID_TESTNET_BITCOIN_ASSET),
+                asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                 value: Value::Explicit(collateral_amount_total),
             }],
             0,
