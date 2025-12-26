@@ -109,12 +109,59 @@ fn ensure_correct_change_at_index(index: u32, asset_id: u256, asset_amount_to_sp
     }
 }
 
+fn verify_reissuance_token(index: u32, asset: Point, value: Point) {
+    let entropy: u256 = unwrap(unwrap(jet::issuance_entropy(index)));
+    let (actual_asset, actual_amount): (Asset1, Amount1) = unwrap(jet::output_amount(index));
+
+    match actual_asset {
+        Left(conf_asset: Point) => {
+            let (out_ax, out_ay): Point = conf_asset;
+            let (ax, ay): Point = asset;
+
+            assert!(jet::eq_1(out_ax, ax));
+            assert!(jet::eq_256(out_ay, ay));
+
+            match actual_amount {
+                Left(conf_val: Point) => {
+                    let (out_val_x, out_val_y): Point = conf_val;
+                    let (vx, vy): Point = value;
+
+                    assert!(jet::eq_1(out_val_x, vx));
+                    assert!(jet::eq_256(out_val_y, vy));
+                },
+                Right(value: u64) => {
+                    panic!();
+                }
+            };
+        },
+        Right(asset: u256) => {
+            panic!();
+
+            // However, it can be checked using the following code:
+            // assert!(jet::eq_256(
+            //     asset,
+            //     jet::calculate_explicit_token(entropy)
+            // ));
+        }
+    };
+}
+
 /*
  * Funding Path
  */
-fn funding_path(expected_asset_amount: u64) {
+fn funding_path(
+    expected_asset_amount: u64,
+    option_asset: Point,
+    option_value: Point,
+    grantor_asset: Point,
+    grantor_value: Point
+) {
     ensure_input_and_output_script_hash_eq(0);
     ensure_input_and_output_script_hash_eq(1);
+
+    verify_reissuance_token(0, option_asset, option_value);
+    verify_reissuance_token(1, grantor_asset, grantor_value);
+
     assert!(dbg!(jet::eq_256(get_output_script_hash(0), get_output_script_hash(1))));
 
     assert!(jet::le_32(jet::current_index(), 1));
@@ -255,7 +302,11 @@ fn main() {
     match witness::PATH {
         Left(left_or_right: Either<u64, Either<(bool, u64, u64, u64), (bool, u64, u64)>>) => match left_or_right {
             Left(expected_asset_amount: u64) => {
-                funding_path(expected_asset_amount)
+                funding_path(
+                    expected_asset_amount,
+                    (witness::OPTION_ASSET_PARITY, witness::OPTION_ASSET_X), (witness::OPTION_VALUE_PARITY, witness::OPTION_VALUE_X),
+                    (witness::GRANTOR_ASSET_PARITY, witness::GRANTOR_ASSET_X), (witness::GRANTOR_VALUE_PARITY, witness::GRANTOR_VALUE_X)
+                );
             },
             Right(exercise_or_settlement: Either<(bool, u64, u64, u64), (bool, u64, u64)>) => match exercise_or_settlement {
                 Left(params: (bool, u64, u64, u64)) => {
