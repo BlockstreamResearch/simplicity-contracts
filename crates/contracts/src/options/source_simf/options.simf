@@ -109,6 +109,9 @@ fn ensure_correct_change_at_index(index: u32, asset_id: u256, asset_amount_to_sp
     }
 }
 
+// Reissuance tokens are confidential because, in Elements,
+// the asset must be provided in blinded form in order to reissue tokens.
+// https://github.com/BlockstreamResearch/simplicity-contracts/issues/21#issuecomment-3691599583
 fn verify_reissuance_token(index: u32, asset: Point, value: Point) {
     let entropy: u256 = unwrap(unwrap(jet::issuance_entropy(index)));
     let (actual_asset, actual_amount): (Asset1, Amount1) = unwrap(jet::output_amount(index));
