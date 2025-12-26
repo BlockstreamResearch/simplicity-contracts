@@ -112,6 +112,9 @@ pub enum TransactionBuildError {
     #[error("Transaction amount proof verification failed: {0}")]
     AmountProofVerification(#[from] simplicityhl::elements::VerificationError),
 
+    #[error("Failed to unblind transaction output: {0}")]
+    Unblinding(#[from] simplicityhl::elements::UnblindError),
+
     #[error("Invalid lock time: {0}")]
     InvalidLockTime(#[from] simplicityhl::elements::locktime::Error),
 

@@ -1,8 +1,11 @@
+use std::str::FromStr;
+
 use anyhow::Result;
+
 use clap::Subcommand;
+
 use contracts::options::{OptionsArguments, finalize_options_transaction, get_options_program};
 use contracts::sdk::taproot_pubkey_gen::{TaprootPubkeyGen, get_random_seed};
-use std::str::FromStr;
 
 use simplicityhl::elements::pset::serialize::Serialize;
 use simplicityhl::elements::secp256k1_zkp::SECP256K1;
@@ -14,12 +17,11 @@ use crate::explorer::{broadcast_tx, fetch_utxo};
 use crate::modules::store::Store;
 use crate::modules::utils::derive_keypair;
 use simplicityhl_core::{
-    Encodable, LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_GENESIS, create_p2pk_signature,
-    derive_public_blinder_key, finalize_p2pk_transaction,
+    Encodable, LIQUID_TESTNET_GENESIS, create_p2pk_signature, derive_public_blinder_key,
+    finalize_p2pk_transaction,
 };
 
 /// Options contract utilities
-/// In that version only the LBTC asset can be used as collateral
 #[derive(Subcommand, Debug)]
 pub enum Options {
     /// Creates a set of two UTXOs (option and grantor) for the options contract
@@ -45,6 +47,9 @@ pub enum Options {
         /// Settlement asset id (hex, BE)
         #[arg(long = "settlement-asset-id-hex-be")]
         settlement_asset_id_hex_be: String,
+        /// Collateral asset id (hex, BE)
+        #[arg(long = "collateral-asset-id-hex-be")]
+        collateral_asset_id_hex_be: String,
         /// Account index that will pay for transaction fees and that owns a tokens to send
         #[arg(long = "account-index")]
         account_index: u32,
@@ -64,8 +69,8 @@ pub enum Options {
         #[arg(long = "grantor-asset-utxo")]
         grantor_asset_utxo: OutPoint,
         /// Collateral and fee UTXO
-        #[arg(long = "collateral-and-fee-utxo")]
-        collateral_and_fee_utxo: OutPoint,
+        #[arg(long = "collateral-utxo")]
+        collateral_utxo: OutPoint,
         /// Option taproot pubkey gen that in this CLI works as unique contract identifier
         #[arg(long = "option-taproot-pubkey-gen")]
         option_taproot_pubkey_gen: String,
@@ -75,6 +80,9 @@ pub enum Options {
         /// Account index that will pay for transaction fees and that owns a tokens to send
         #[arg(long = "account-index")]
         account_index: u32,
+        /// Transaction id (hex) and output index (vout) of the LBTC UTXO used to pay fees
+        #[arg(long = "fee-utxo")]
+        fee_utxo: Option<OutPoint>,
         /// Fee amount in satoshis (LBTC)
         #[arg(long = "fee-amount")]
         fee_amount: u64,
@@ -247,6 +255,7 @@ impl Options {
                 collateral_per_contract,
                 settlement_per_contract,
                 settlement_asset_id_hex_be,
+                collateral_asset_id_hex_be,
                 account_index,
                 fee_amount,
                 broadcast,
@@ -261,13 +270,14 @@ impl Options {
                 let issuance_asset_entropy = get_random_seed();
 
                 let settlement_asset_id = AssetId::from_str(settlement_asset_id_hex_be)?;
+                let collateral_asset_id = AssetId::from_str(collateral_asset_id_hex_be)?;
 
                 let option_arguments = OptionsArguments::new(
                     *start_time,
                     *expiry_time,
                     *collateral_per_contract,
                     *settlement_per_contract,
-                    *LIQUID_TESTNET_BITCOIN_ASSET,
+                    collateral_asset_id,
                     settlement_asset_id,
                     issuance_asset_entropy,
                     (*first_fee_utxo, false),
@@ -344,10 +354,11 @@ impl Options {
             Self::Fund {
                 option_asset_utxo,
                 grantor_asset_utxo,
-                collateral_and_fee_utxo,
+                collateral_utxo,
                 option_taproot_pubkey_gen,
                 collateral_amount,
                 account_index,
+                fee_utxo,
                 fee_amount,
                 broadcast,
             } => {
@@ -367,38 +378,50 @@ impl Options {
 
                 let option_tx_out = fetch_utxo(*option_asset_utxo).await?;
                 let grantor_tx_out = fetch_utxo(*grantor_asset_utxo).await?;
-                let collateral_tx_out = fetch_utxo(*collateral_and_fee_utxo).await?;
+                let collateral_tx_out = fetch_utxo(*collateral_utxo).await?;
 
-                let option_tx_out_secrets =
+                let fee_utxo = if let Some(outpoint) = *fee_utxo {
+                    let fee_tx_out = fetch_utxo(outpoint).await?;
+                    Some(&(outpoint, fee_tx_out))
+                } else {
+                    None
+                };
+
+                let input_option_secrets =
                     option_tx_out.unblind(SECP256K1, blinder_keypair.secret_key())?;
-                let grantor_tx_out_secrets =
+                let input_grantor_secrets =
                     grantor_tx_out.unblind(SECP256K1, blinder_keypair.secret_key())?;
 
                 let (pst, option_branch) = contracts::sdk::build_option_funding(
-                    &blinder_keypair.public_key(),
+                    &blinder_keypair,
                     (
                         *option_asset_utxo,
                         option_tx_out.clone(),
-                        option_tx_out_secrets,
+                        input_option_secrets,
                     ),
                     (
                         *grantor_asset_utxo,
                         grantor_tx_out.clone(),
-                        grantor_tx_out_secrets,
+                        input_grantor_secrets,
                     ),
-                    (*collateral_and_fee_utxo, collateral_tx_out.clone()),
-                    None,
+                    (*collateral_utxo, collateral_tx_out.clone()),
+                    fee_utxo,
                     &option_arguments,
                     *collateral_amount,
                     *fee_amount,
                 )?;
 
                 let tx = pst.extract_tx()?;
-                let utxos = vec![
+
+                let mut utxos = vec![
                     option_tx_out.clone(),
                     grantor_tx_out.clone(),
                     collateral_tx_out.clone(),
                 ];
+
+                if let Some((_, fee_tx_out)) = fee_utxo {
+                    utxos.push(fee_tx_out.clone());
+                }
 
                 let tx = finalize_options_transaction(
                     tx,
@@ -406,7 +429,7 @@ impl Options {
                     &get_options_program(&option_arguments)?,
                     &utxos,
                     0,
-                    option_branch,
+                    &option_branch,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
                 )?;
@@ -417,7 +440,7 @@ impl Options {
                     &get_options_program(&option_arguments)?,
                     &utxos,
                     1,
-                    option_branch,
+                    &option_branch,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
                 )?;
@@ -440,6 +463,28 @@ impl Options {
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
                 )?;
+
+                let tx = if fee_utxo.is_some() {
+                    let signature = create_p2pk_signature(
+                        &tx,
+                        &utxos,
+                        &keypair,
+                        3,
+                        &AddressParams::LIQUID_TESTNET,
+                        *LIQUID_TESTNET_GENESIS,
+                    )?;
+                    finalize_p2pk_transaction(
+                        tx,
+                        &utxos,
+                        &x_only_public_key,
+                        &signature,
+                        3,
+                        &AddressParams::LIQUID_TESTNET,
+                        *LIQUID_TESTNET_GENESIS,
+                    )?
+                } else {
+                    tx
+                };
 
                 if *broadcast {
                     println!("Broadcasted txid: {}", broadcast_tx(&tx).await?);
@@ -501,7 +546,7 @@ impl Options {
                     &get_options_program(&option_arguments)?,
                     &utxos,
                     0,
-                    option_branch,
+                    &option_branch,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
                 )?;
@@ -619,7 +664,7 @@ impl Options {
                     &get_options_program(&option_arguments)?,
                     &utxos,
                     0,
-                    option_branch,
+                    &option_branch,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
                 )?;
@@ -718,7 +763,7 @@ impl Options {
                     &get_options_program(&option_arguments)?,
                     &utxos,
                     0,
-                    option_branch,
+                    &option_branch,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
                 )?;
@@ -821,7 +866,7 @@ impl Options {
                     &get_options_program(&option_arguments)?,
                     &utxos,
                     0,
-                    option_branch,
+                    &option_branch,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
                 )?;
