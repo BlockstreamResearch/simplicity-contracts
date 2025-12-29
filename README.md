@@ -8,13 +8,9 @@ The only crate published to crates.io is `simplicity-contracts`, so read its [RE
 
 If you are new to contract development with Simplicity HL, below you will find a step-by-step workflow for how a contract can be developed, deployed, and used.
 
-Everything starts with the actual Simplicity HL code. See the [.simf files](crates/contracts/src), especially the [Options contract](crates/contracts/src/options/source_simf/options.simf) as the most structured example. Check the issues referenced in the contract for better understanding of development implications.
-
 You can use tools like [`hal-simplicity`](https://github.com/BlockstreamResearch/hal-simplicity) for ad-hoc interaction and manual testing.
 
-If you want to build an application or service around your new contract, take a look at the relevant builders of arguments and witness. See the [Options contract](crates/contracts/src/options/mod.rs) for how to write Rust functions to build those — it is well tested.
-
-The next step after writing helper functions to build args and witness is to do actual testing. Again, see [mod.rs](crates/contracts/src/options/mod.rs) as the best example.
+If you want to build an application or service around your new contract, take a look at the relevant builders of arguments and witness. See the [contract README](crates/contracts/README.md) for how to write Rust functions to build those.
 
 Here you could also take a look at how relevant SDK functions in [options](crates/contracts/src/sdk/options) are structured, and what their responsibilities are.
 
