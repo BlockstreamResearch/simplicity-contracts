@@ -17,3 +17,5 @@ pub mod options;
 pub mod simple_storage;
 #[cfg(feature = "swap-with-change")]
 pub mod swap_with_change;
+
+mod sig_verification;
