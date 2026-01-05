@@ -149,10 +149,10 @@ mod options_tests {
         build_option_cancellation, build_option_creation, build_option_exercise,
         build_option_expiry, build_option_funding, build_option_settlement,
     };
+    use simplicityhl::elements::Script;
     use simplicityhl::elements::pset::PartiallySignedTransaction;
     use simplicityhl::elements::secp256k1_zkp::SECP256K1;
     use simplicityhl::elements::taproot::ControlBlock;
-    use simplicityhl::elements::{ContractHash, Script};
     use simplicityhl::simplicity::jet::elements::ElementsUtxo;
     use simplicityhl_core::{LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_TEST_ASSET_ID_STR};
 
@@ -171,26 +171,17 @@ mod options_tests {
 
         let issuance_asset_entropy = get_random_seed();
 
-        let option_arguments = OptionsArguments {
+        let option_arguments = OptionsArguments::new(
             start_time,
             expiry_time,
             collateral_per_contract,
             settlement_per_contract,
-            collateral_asset_id: LIQUID_TESTNET_BITCOIN_ASSET.into_inner().0,
-            settlement_asset_id: AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?
-                .into_inner()
-                .0,
-            option_token_entropy: AssetId::generate_asset_entropy(
-                option_outpoint,
-                ContractHash::from_byte_array(issuance_asset_entropy),
-            )
-            .0,
-            grantor_token_entropy: AssetId::generate_asset_entropy(
-                grantor_outpoint,
-                ContractHash::from_byte_array(issuance_asset_entropy),
-            )
-            .0,
-        };
+            *LIQUID_TESTNET_BITCOIN_ASSET,
+            AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?,
+            issuance_asset_entropy,
+            option_outpoint,
+            grantor_outpoint,
+        );
 
         Ok((
             build_option_creation(

@@ -7,14 +7,14 @@ use simplicityhl::{Arguments, str::WitnessName, value::UIntValue};
 
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq, Default)]
 pub struct OptionsArguments {
-    pub start_time: u32,
-    pub expiry_time: u32,
-    pub collateral_per_contract: u64,
-    pub settlement_per_contract: u64,
-    pub collateral_asset_id: [u8; 32],
-    pub settlement_asset_id: [u8; 32],
-    pub option_token_entropy: [u8; 32],
-    pub grantor_token_entropy: [u8; 32],
+    start_time: u32,
+    expiry_time: u32,
+    collateral_per_contract: u64,
+    settlement_per_contract: u64,
+    collateral_asset_id: [u8; 32],
+    settlement_asset_id: [u8; 32],
+    option_token_entropy: [u8; 32],
+    grantor_token_entropy: [u8; 32],
 }
 
 impl OptionsArguments {
@@ -49,6 +49,42 @@ impl OptionsArguments {
             )
             .0,
         }
+    }
+
+    /// Returns the start time.
+    #[must_use]
+    pub const fn start_time(&self) -> u32 {
+        self.start_time
+    }
+
+    /// Returns the expiry time.
+    #[must_use]
+    pub const fn expiry_time(&self) -> u32 {
+        self.expiry_time
+    }
+
+    /// Returns the collateral per contract amount.
+    #[must_use]
+    pub const fn collateral_per_contract(&self) -> u64 {
+        self.collateral_per_contract
+    }
+
+    /// Returns the settlement per contract amount.
+    #[must_use]
+    pub const fn settlement_per_contract(&self) -> u64 {
+        self.settlement_per_contract
+    }
+
+    /// Returns the option token entropy.
+    #[must_use]
+    pub const fn option_token_entropy(&self) -> [u8; 32] {
+        self.option_token_entropy
+    }
+
+    /// Returns the grantor token entropy.
+    #[must_use]
+    pub const fn grantor_token_entropy(&self) -> [u8; 32] {
+        self.grantor_token_entropy
     }
 
     #[must_use]
@@ -151,7 +187,8 @@ impl simplicityhl_core::Encodable for OptionsArguments {}
 mod tests {
     use super::*;
     use crate::sdk::taproot_pubkey_gen::get_random_seed;
-    use simplicityhl_core::Encodable;
+    use simplicityhl::elements::Txid;
+    use simplicityhl_core::{Encodable, LIQUID_TESTNET_BITCOIN_ASSET};
 
     #[test]
     fn test_serialize_deserialize_default() -> anyhow::Result<()> {
@@ -164,16 +201,17 @@ mod tests {
 
     #[test]
     fn test_serialize_deserialize_full() -> anyhow::Result<()> {
-        let args = OptionsArguments {
-            start_time: 10,
-            expiry_time: 50,
-            collateral_per_contract: 100,
-            settlement_per_contract: 1000,
-            collateral_asset_id: AssetId::LIQUID_BTC.into_inner().0,
-            settlement_asset_id: AssetId::LIQUID_BTC.into_inner().0,
-            option_token_entropy: get_random_seed(),
-            grantor_token_entropy: get_random_seed(),
-        };
+        let args = OptionsArguments::new(
+            10,
+            50,
+            100,
+            1000,
+            *LIQUID_TESTNET_BITCOIN_ASSET,
+            *LIQUID_TESTNET_BITCOIN_ASSET,
+            get_random_seed(),
+            OutPoint::new(Txid::from_slice(&[1; 32])?, 0),
+            OutPoint::new(Txid::from_slice(&[2; 32])?, 0),
+        );
 
         let serialized = args.encode()?;
         let deserialized = OptionsArguments::decode(&serialized)?;

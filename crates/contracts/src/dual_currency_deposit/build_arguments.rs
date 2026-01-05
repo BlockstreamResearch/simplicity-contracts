@@ -13,52 +13,150 @@ use crate::error::DCDRatioError;
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq)]
 pub struct DCDArguments {
     // Time parameters
-    pub taker_funding_start_time: u32,
-    pub taker_funding_end_time: u32,
-    pub contract_expiry_time: u32,
-    pub early_termination_end_time: u32,
-    pub settlement_height: u32,
+    taker_funding_start_time: u32,
+    taker_funding_end_time: u32,
+    contract_expiry_time: u32,
+    early_termination_end_time: u32,
+    settlement_height: u32,
 
     // Pricing parameters
-    pub strike_price: u64,
-    pub incentive_basis_points: u64,
+    strike_price: u64,
+    incentive_basis_points: u64,
 
     // Asset IDs (hex LE strings)
-    pub collateral_asset_id_hex_le: String,
-    pub settlement_asset_id_hex_le: String,
-    pub filler_token_asset_id_hex_le: String,
-    pub grantor_collateral_token_asset_id_hex_le: String,
-    pub grantor_settlement_token_asset_id_hex_le: String,
+    collateral_asset_id_hex_le: String,
+    settlement_asset_id_hex_le: String,
+    filler_token_asset_id_hex_le: String,
+    grantor_collateral_token_asset_id_hex_le: String,
+    grantor_settlement_token_asset_id_hex_le: String,
 
     // Fee parameters
-    pub fee_basis_points: u64,
-    pub fee_script_hash_hex_le: String,
+    fee_basis_points: u64,
+    fee_script_hash_hex_le: String,
 
     // Ratio/denominator parameters
-    pub ratio_args: DCDRatioArguments,
+    ratio_args: DCDRatioArguments,
 
     // Oracle
-    pub oracle_public_key: String,
+    oracle_public_key: String,
 }
 
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq, Default)]
 pub struct DCDRatioArguments {
-    pub principal_collateral_amount: u64,
-    pub interest_collateral_amount: u64,
-    pub total_collateral_amount: u64,
-    pub principal_asset_amount: u64,
-    pub interest_asset_amount: u64,
-    pub total_asset_amount: u64,
-    pub filler_token_amount: u64,
-    pub grantor_collateral_token_amount: u64,
-    pub grantor_settlement_token_amount: u64,
-    pub filler_per_settlement_collateral: u64,
-    pub filler_per_settlement_asset: u64,
-    pub filler_per_principal_collateral: u64,
-    pub grantor_settlement_per_deposited_asset: u64,
-    pub grantor_collateral_per_deposited_collateral: u64,
-    pub grantor_per_settlement_collateral: u64,
-    pub grantor_per_settlement_asset: u64,
+    principal_collateral_amount: u64,
+    interest_collateral_amount: u64,
+    total_collateral_amount: u64,
+    principal_asset_amount: u64,
+    interest_asset_amount: u64,
+    total_asset_amount: u64,
+    filler_token_amount: u64,
+    grantor_collateral_token_amount: u64,
+    grantor_settlement_token_amount: u64,
+    filler_per_settlement_collateral: u64,
+    filler_per_settlement_asset: u64,
+    filler_per_principal_collateral: u64,
+    grantor_settlement_per_deposited_asset: u64,
+    grantor_collateral_per_deposited_collateral: u64,
+    grantor_per_settlement_collateral: u64,
+    grantor_per_settlement_asset: u64,
+}
+
+impl DCDRatioArguments {
+    /// Returns the principal collateral amount.
+    #[must_use]
+    pub const fn principal_collateral_amount(&self) -> u64 {
+        self.principal_collateral_amount
+    }
+
+    /// Returns the interest collateral amount.
+    #[must_use]
+    pub const fn interest_collateral_amount(&self) -> u64 {
+        self.interest_collateral_amount
+    }
+
+    /// Returns the total collateral amount.
+    #[must_use]
+    pub const fn total_collateral_amount(&self) -> u64 {
+        self.total_collateral_amount
+    }
+
+    /// Returns the principal asset amount.
+    #[must_use]
+    pub const fn principal_asset_amount(&self) -> u64 {
+        self.principal_asset_amount
+    }
+
+    /// Returns the interest asset amount.
+    #[must_use]
+    pub const fn interest_asset_amount(&self) -> u64 {
+        self.interest_asset_amount
+    }
+
+    /// Returns the total asset amount.
+    #[must_use]
+    pub const fn total_asset_amount(&self) -> u64 {
+        self.total_asset_amount
+    }
+
+    /// Returns the filler token amount.
+    #[must_use]
+    pub const fn filler_token_amount(&self) -> u64 {
+        self.filler_token_amount
+    }
+
+    /// Returns the grantor collateral token amount.
+    #[must_use]
+    pub const fn grantor_collateral_token_amount(&self) -> u64 {
+        self.grantor_collateral_token_amount
+    }
+
+    /// Returns the grantor settlement token amount.
+    #[must_use]
+    pub const fn grantor_settlement_token_amount(&self) -> u64 {
+        self.grantor_settlement_token_amount
+    }
+
+    /// Returns the filler per settlement collateral ratio.
+    #[must_use]
+    pub const fn filler_per_settlement_collateral(&self) -> u64 {
+        self.filler_per_settlement_collateral
+    }
+
+    /// Returns the filler per settlement asset ratio.
+    #[must_use]
+    pub const fn filler_per_settlement_asset(&self) -> u64 {
+        self.filler_per_settlement_asset
+    }
+
+    /// Returns the filler per principal collateral ratio.
+    #[must_use]
+    pub const fn filler_per_principal_collateral(&self) -> u64 {
+        self.filler_per_principal_collateral
+    }
+
+    /// Returns the grantor settlement per deposited asset ratio.
+    #[must_use]
+    pub const fn grantor_settlement_per_deposited_asset(&self) -> u64 {
+        self.grantor_settlement_per_deposited_asset
+    }
+
+    /// Returns the grantor collateral per deposited collateral ratio.
+    #[must_use]
+    pub const fn grantor_collateral_per_deposited_collateral(&self) -> u64 {
+        self.grantor_collateral_per_deposited_collateral
+    }
+
+    /// Returns the grantor per settlement collateral ratio.
+    #[must_use]
+    pub const fn grantor_per_settlement_collateral(&self) -> u64 {
+        self.grantor_per_settlement_collateral
+    }
+
+    /// Returns the grantor per settlement asset ratio.
+    #[must_use]
+    pub const fn grantor_per_settlement_asset(&self) -> u64 {
+        self.grantor_per_settlement_asset
+    }
 }
 
 pub const MAX_BASIS_POINTS: u64 = 10000;
@@ -273,6 +371,59 @@ impl Default for DCDArguments {
 }
 
 impl DCDArguments {
+    /// Create new DCD arguments.
+    #[allow(clippy::too_many_arguments)]
+    #[must_use]
+    pub const fn new(
+        taker_funding_start_time: u32,
+        taker_funding_end_time: u32,
+        contract_expiry_time: u32,
+        early_termination_end_time: u32,
+        settlement_height: u32,
+        strike_price: u64,
+        incentive_basis_points: u64,
+        fee_basis_points: u64,
+        collateral_asset_id_hex_le: String,
+        settlement_asset_id_hex_le: String,
+        filler_token_asset_id_hex_le: String,
+        grantor_collateral_token_asset_id_hex_le: String,
+        grantor_settlement_token_asset_id_hex_le: String,
+        ratio_args: DCDRatioArguments,
+        oracle_public_key: String,
+        fee_script_hash_hex_le: String,
+    ) -> Self {
+        Self {
+            taker_funding_start_time,
+            taker_funding_end_time,
+            contract_expiry_time,
+            early_termination_end_time,
+            settlement_height,
+            strike_price,
+            incentive_basis_points,
+            collateral_asset_id_hex_le,
+            settlement_asset_id_hex_le,
+            filler_token_asset_id_hex_le,
+            grantor_collateral_token_asset_id_hex_le,
+            grantor_settlement_token_asset_id_hex_le,
+            fee_basis_points,
+            fee_script_hash_hex_le,
+            ratio_args,
+            oracle_public_key,
+        }
+    }
+
+    /// Returns the taker funding start time.
+    #[must_use]
+    pub const fn taker_funding_start_time(&self) -> u32 {
+        self.taker_funding_start_time
+    }
+
+    /// Returns the early termination end time.
+    #[must_use]
+    pub const fn early_termination_end_time(&self) -> u32 {
+        self.early_termination_end_time
+    }
+
     /// Convert to Simplicity program arguments.
     ///
     /// # Panics
@@ -353,43 +504,44 @@ impl DCDArguments {
             (
                 WitnessName::from_str_unchecked("FILLER_PER_SETTLEMENT_COLLATERAL"),
                 simplicityhl::Value::from(UIntValue::U64(
-                    self.ratio_args.filler_per_settlement_collateral,
+                    self.ratio_args.filler_per_settlement_collateral(),
                 )),
             ),
             (
                 WitnessName::from_str_unchecked("FILLER_PER_SETTLEMENT_ASSET"),
                 simplicityhl::Value::from(UIntValue::U64(
-                    self.ratio_args.filler_per_settlement_asset,
+                    self.ratio_args.filler_per_settlement_asset(),
                 )),
             ),
             (
                 WitnessName::from_str_unchecked("FILLER_PER_PRINCIPAL_COLLATERAL"),
                 simplicityhl::Value::from(UIntValue::U64(
-                    self.ratio_args.filler_per_principal_collateral,
+                    self.ratio_args.filler_per_principal_collateral(),
                 )),
             ),
             (
                 WitnessName::from_str_unchecked("GRANTOR_SETTLEMENT_PER_DEPOSITED_ASSET"),
                 simplicityhl::Value::from(UIntValue::U64(
-                    self.ratio_args.grantor_settlement_per_deposited_asset,
+                    self.ratio_args.grantor_settlement_per_deposited_asset(),
                 )),
             ),
             (
                 WitnessName::from_str_unchecked("GRANTOR_COLLATERAL_PER_DEPOSITED_COLLATERAL"),
                 simplicityhl::Value::from(UIntValue::U64(
-                    self.ratio_args.grantor_collateral_per_deposited_collateral,
+                    self.ratio_args
+                        .grantor_collateral_per_deposited_collateral(),
                 )),
             ),
             (
                 WitnessName::from_str_unchecked("GRANTOR_PER_SETTLEMENT_COLLATERAL"),
                 simplicityhl::Value::from(UIntValue::U64(
-                    self.ratio_args.grantor_per_settlement_collateral,
+                    self.ratio_args.grantor_per_settlement_collateral(),
                 )),
             ),
             (
                 WitnessName::from_str_unchecked("GRANTOR_PER_SETTLEMENT_ASSET"),
                 simplicityhl::Value::from(UIntValue::U64(
-                    self.ratio_args.grantor_per_settlement_asset,
+                    self.ratio_args.grantor_per_settlement_asset(),
                 )),
             ),
             (

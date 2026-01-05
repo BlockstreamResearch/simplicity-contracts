@@ -154,8 +154,8 @@ mod swap_with_change_tests {
     use simplicityhl::simplicity::elements::{self, OutPoint, Txid};
     use simplicityhl::simplicity::hashes::Hash;
 
-    use simplicityhl::elements::Script;
     use simplicityhl::elements::taproot::ControlBlock;
+    use simplicityhl::elements::{AssetId, Script};
     use simplicityhl::simplicity::jet::elements::ElementsUtxo;
     use simplicityhl_core::{
         LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_GENESIS, get_and_verify_env, get_p2pk_address,
@@ -169,13 +169,13 @@ mod swap_with_change_tests {
         x_only_public_key: &XOnlyPublicKey,
         expiry_time: u32,
     ) -> SwapWithChangeArguments {
-        SwapWithChangeArguments {
-            collateral_asset_id: [1u8; 32],
-            settlement_asset_id: LIQUID_TESTNET_BITCOIN_ASSET.into_inner().0,
-            collateral_per_contract: 100,
+        SwapWithChangeArguments::new(
+            AssetId::from_slice(&[1u8; 32]).unwrap(),
+            *LIQUID_TESTNET_BITCOIN_ASSET,
+            100,
             expiry_time,
-            user_pubkey: x_only_public_key.serialize(),
-        }
+            x_only_public_key.serialize(),
+        )
     }
 
     #[test]
@@ -252,7 +252,7 @@ mod swap_with_change_tests {
 
         let input_collateral_amount = 1000u64;
         let collateral_to_receive = 400u64;
-        let settlement_required = collateral_to_receive * args.collateral_per_contract;
+        let settlement_required = collateral_to_receive * args.collateral_per_contract();
         let fee_amount = 500u64;
 
         let (pst, branch) = build_swap_exercise(
@@ -341,7 +341,7 @@ mod swap_with_change_tests {
 
         let input_collateral_amount = 1000u64;
         let collateral_to_receive = 1000u64;
-        let settlement_required = collateral_to_receive * args.collateral_per_contract;
+        let settlement_required = collateral_to_receive * args.collateral_per_contract();
         let fee_amount = 500u64;
 
         let (pst, branch) = build_swap_exercise(

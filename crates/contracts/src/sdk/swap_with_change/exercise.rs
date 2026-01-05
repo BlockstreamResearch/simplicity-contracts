@@ -70,7 +70,7 @@ pub fn build_swap_exercise(
     }
 
     let settlement_amount_required = collateral_amount_to_receive
-        .checked_mul(arguments.collateral_per_contract)
+        .checked_mul(arguments.collateral_per_contract())
         .ok_or(TransactionBuildError::InsufficientSettlementAsset {
             required: u64::MAX,
             available: total_settlement,

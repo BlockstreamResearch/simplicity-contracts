@@ -37,7 +37,7 @@ pub fn build_option_cancellation(
     );
     let (collateral_asset_id, total_collateral) = collateral_tx_out.explicit()?;
 
-    let collateral_amount_to_withdraw = amount_to_burn * option_arguments.collateral_per_contract;
+    let collateral_amount_to_withdraw = amount_to_burn * option_arguments.collateral_per_contract();
 
     if collateral_amount_to_withdraw > total_collateral {
         return Err(TransactionBuildError::InsufficientCollateral {

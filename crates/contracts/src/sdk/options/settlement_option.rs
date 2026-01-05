@@ -54,7 +54,7 @@ pub fn build_option_settlement(
     }
 
     let asset_amount =
-        grantor_token_amount_to_burn.saturating_mul(option_arguments.settlement_per_contract);
+        grantor_token_amount_to_burn.saturating_mul(option_arguments.settlement_per_contract());
 
     if asset_amount > available_settlement_asset {
         return Err(TransactionBuildError::InsufficientSettlementAsset {
@@ -67,7 +67,8 @@ pub fn build_option_settlement(
     let contract_script = settlement_tx_out.script_pubkey.clone();
 
     let mut pst = PartiallySignedTransaction::new_v2();
-    pst.global.tx_data.fallback_locktime = Some(LockTime::from_time(option_arguments.start_time)?);
+    pst.global.tx_data.fallback_locktime =
+        Some(LockTime::from_time(option_arguments.start_time())?);
 
     let mut settlement_input = Input::from_prevout(settlement_out_point);
     settlement_input.witness_utxo = Some(settlement_tx_out.clone());

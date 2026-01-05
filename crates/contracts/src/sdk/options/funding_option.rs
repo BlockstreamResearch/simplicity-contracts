@@ -41,7 +41,7 @@ pub fn build_option_funding(
     let (option_asset_id, option_token_id) = option_arguments.get_option_token_ids();
     let (grantor_asset_id, grantor_token_id) = option_arguments.get_grantor_token_ids();
 
-    let option_token_amount = collateral_amount / option_arguments.collateral_per_contract;
+    let option_token_amount = collateral_amount / option_arguments.collateral_per_contract();
 
     let change_recipient_script = collateral_tx_out.script_pubkey.clone();
     let contract_script = option_tx_out.script_pubkey.clone();
@@ -52,7 +52,7 @@ pub fn build_option_funding(
     first_reissuance_tx.witness_utxo = Some(option_tx_out.clone());
     first_reissuance_tx.issuance_value_amount = Some(option_token_amount);
     first_reissuance_tx.issuance_inflation_keys = None;
-    first_reissuance_tx.issuance_asset_entropy = Some(option_arguments.option_token_entropy);
+    first_reissuance_tx.issuance_asset_entropy = Some(option_arguments.option_token_entropy());
     first_reissuance_tx.blinded_issuance = Some(0x00);
     first_reissuance_tx.issuance_blinding_nonce =
         Some(option_tx_out_unblinded.asset_bf.into_inner());
@@ -62,7 +62,7 @@ pub fn build_option_funding(
     second_reissuance_tx.witness_utxo = Some(grantor_tx_out.clone());
     second_reissuance_tx.issuance_value_amount = Some(option_token_amount);
     second_reissuance_tx.issuance_inflation_keys = None;
-    second_reissuance_tx.issuance_asset_entropy = Some(option_arguments.grantor_token_entropy);
+    second_reissuance_tx.issuance_asset_entropy = Some(option_arguments.grantor_token_entropy());
     second_reissuance_tx.blinded_issuance = Some(0x00);
     second_reissuance_tx.issuance_blinding_nonce =
         Some(grantor_tx_out_unblinded.asset_bf.into_inner());
@@ -191,7 +191,7 @@ pub fn build_option_funding(
     pst.extract_tx()?
         .verify_tx_amt_proofs(secp256k1::SECP256K1, &utxos)?;
 
-    let expected_asset_amount = option_token_amount * option_arguments.settlement_per_contract;
+    let expected_asset_amount = option_token_amount * option_arguments.settlement_per_contract();
     let option_branch = OptionBranch::Funding {
         expected_asset_amount,
     };

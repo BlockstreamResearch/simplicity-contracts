@@ -52,7 +52,7 @@ pub fn build_swap_expiry(
 
     let mut pst = PartiallySignedTransaction::new_v2();
 
-    pst.global.tx_data.fallback_locktime = Some(LockTime::from_time(arguments.expiry_time)?);
+    pst.global.tx_data.fallback_locktime = Some(LockTime::from_time(arguments.expiry_time())?);
 
     let mut collateral_input = Input::from_prevout(collateral_outpoint);
     collateral_input.witness_utxo = Some(collateral_tx_out.clone());
