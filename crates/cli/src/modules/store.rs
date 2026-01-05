@@ -114,8 +114,8 @@ mod tests {
             *LIQUID_TESTNET_BITCOIN_ASSET,
             settlement_asset_id,
             get_random_seed(),
-            OutPoint::new(Txid::from_slice(&[1; 32])?, 0),
-            OutPoint::new(Txid::from_slice(&[2; 32])?, 0),
+            (OutPoint::new(Txid::from_slice(&[1; 32])?, 0), false),
+            (OutPoint::new(Txid::from_slice(&[2; 32])?, 0), false),
         );
 
         let options_taproot_pubkey_gen =

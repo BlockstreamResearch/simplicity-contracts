@@ -122,6 +122,19 @@ pub enum TransactionBuildError {
     TaprootPubkeyGen(#[from] TaprootPubkeyGenError),
 }
 
+/// Errors from extracting arguments from Arguments struct.
+#[derive(Debug, thiserror::Error)]
+pub enum FromArgumentsError {
+    #[error("Missing witness name: {name}")]
+    MissingWitness { name: String },
+
+    #[error("Wrong value type for {name}: expected {expected}")]
+    WrongValueType { name: String, expected: String },
+
+    #[error("Invalid asset ID bytes for {name}")]
+    InvalidAssetId { name: String },
+}
+
 /// Errors from DCD ratio calculations.
 #[cfg(feature = "dcd")]
 #[derive(Debug, thiserror::Error)]

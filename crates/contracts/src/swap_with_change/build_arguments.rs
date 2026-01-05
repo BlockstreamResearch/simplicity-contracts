@@ -4,6 +4,9 @@ use simplicityhl::elements::AssetId;
 use simplicityhl::num::U256;
 use simplicityhl::{Arguments, str::WitnessName, value::UIntValue};
 
+use crate::arguments_helpers::{extract_u32, extract_u64, extract_u256_bytes};
+use crate::error::FromArgumentsError;
+
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq, Default)]
 pub struct SwapWithChangeArguments {
     /// Asset ID of collateral (the asset user deposits)
@@ -105,6 +108,27 @@ impl SwapWithChangeArguments {
     pub fn get_settlement_asset_id(&self) -> AssetId {
         AssetId::from_slice(&self.settlement_asset_id).unwrap()
     }
+
+    /// Build struct from Simplicity Arguments.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if any required witness is missing, has wrong type, or has invalid value.
+    pub fn from_arguments(args: &Arguments) -> Result<Self, FromArgumentsError> {
+        let collateral_asset_id = extract_u256_bytes(args, "COLLATERAL_ASSET_ID")?;
+        let settlement_asset_id = extract_u256_bytes(args, "SETTLEMENT_ASSET_ID")?;
+        let collateral_per_contract = extract_u64(args, "COLLATERAL_PER_CONTRACT")?;
+        let expiry_time = extract_u32(args, "EXPIRY_TIME")?;
+        let user_pubkey = extract_u256_bytes(args, "USER_PUBKEY")?;
+
+        Ok(Self {
+            collateral_asset_id,
+            settlement_asset_id,
+            collateral_per_contract,
+            expiry_time,
+            user_pubkey,
+        })
+    }
 }
 
 impl simplicityhl_core::Encodable for SwapWithChangeArguments {}
@@ -140,6 +164,36 @@ mod tests {
         let deserialized = SwapWithChangeArguments::decode(&serialized)?;
 
         assert_eq!(args, deserialized);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_arguments_roundtrip_default() -> anyhow::Result<()> {
+        let original = SwapWithChangeArguments::default();
+        let arguments = original.build_arguments();
+
+        let recovered = SwapWithChangeArguments::from_arguments(&arguments)?;
+
+        assert_eq!(original, recovered);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_arguments_roundtrip_full() -> anyhow::Result<()> {
+        let original = SwapWithChangeArguments::new(
+            AssetId::from_slice(&[1u8; 32])?,
+            AssetId::from_slice(&[2u8; 32])?,
+            1000,
+            1_700_000_000,
+            [3u8; 32],
+        );
+        let arguments = original.build_arguments();
+
+        let recovered = SwapWithChangeArguments::from_arguments(&arguments)?;
+
+        assert_eq!(original, recovered);
 
         Ok(())
     }

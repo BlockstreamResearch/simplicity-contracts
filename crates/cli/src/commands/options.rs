@@ -270,8 +270,8 @@ impl Options {
                     *LIQUID_TESTNET_BITCOIN_ASSET,
                     settlement_asset_id,
                     issuance_asset_entropy,
-                    *first_fee_utxo,
-                    *second_fee_utxo,
+                    (*first_fee_utxo, false),
+                    (*second_fee_utxo, false),
                 );
 
                 let (pst, options_taproot_pubkey_gen) = contracts::sdk::build_option_creation(

@@ -1,9 +1,58 @@
 use std::collections::HashMap;
 
-use simplicityhl::elements::hashes::{Hash, sha256};
-use simplicityhl::elements::{AssetId, ContractHash, OutPoint};
+use simplicityhl::elements::hashes::Hash;
+use simplicityhl::elements::{AssetId, ContractHash, OutPoint, Txid};
 use simplicityhl::num::U256;
 use simplicityhl::{Arguments, str::WitnessName, value::UIntValue};
+
+use crate::arguments_helpers::{extract_bool, extract_u32, extract_u64, extract_u256_bytes};
+use crate::error::FromArgumentsError;
+
+#[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq, Default)]
+pub struct OutPointWithConfidential {
+    txid: [u8; 32],
+    vout: u32,
+    confidential: bool,
+}
+
+impl OutPointWithConfidential {
+    #[must_use]
+    pub fn new(outpoint: OutPoint, confidential: bool) -> Self {
+        Self {
+            txid: outpoint.txid.to_byte_array(),
+            vout: outpoint.vout,
+            confidential,
+        }
+    }
+
+    /// Convert back to `OutPoint`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the stored txid bytes are invalid (should never happen).
+    #[must_use]
+    pub fn outpoint(&self) -> OutPoint {
+        OutPoint::new(Txid::from_slice(&self.txid).unwrap(), self.vout)
+    }
+
+    /// Returns the confidential flag.
+    #[must_use]
+    pub const fn confidential(&self) -> bool {
+        self.confidential
+    }
+
+    /// Returns as tuple (`OutPoint`, bool).
+    #[must_use]
+    pub fn as_tuple(&self) -> (OutPoint, bool) {
+        (self.outpoint(), self.confidential)
+    }
+}
+
+impl From<(OutPoint, bool)> for OutPointWithConfidential {
+    fn from((outpoint, confidential): (OutPoint, bool)) -> Self {
+        Self::new(outpoint, confidential)
+    }
+}
 
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq, Default)]
 pub struct OptionsArguments {
@@ -13,11 +62,18 @@ pub struct OptionsArguments {
     settlement_per_contract: u64,
     collateral_asset_id: [u8; 32],
     settlement_asset_id: [u8; 32],
-    option_token_entropy: [u8; 32],
-    grantor_token_entropy: [u8; 32],
+    issuance_asset_entropy: [u8; 32],
+    option_creation_outpoint: OutPointWithConfidential,
+    grantor_creation_outpoint: OutPointWithConfidential,
 }
 
 impl OptionsArguments {
+    /// Create new options arguments.
+    ///
+    /// # Arguments
+    ///
+    /// * `option_creation_outpoint` - Tuple of (`OutPoint`, `confidential_flag`) for option token
+    /// * `grantor_creation_outpoint` - Tuple of (`OutPoint`, `confidential_flag`) for grantor token
     #[allow(clippy::too_many_arguments)]
     #[must_use]
     pub fn new(
@@ -28,8 +84,8 @@ impl OptionsArguments {
         collateral_asset_id: AssetId,
         settlement_asset_id: AssetId,
         issuance_asset_entropy: [u8; 32],
-        option_creation_outpoint: OutPoint,
-        grantor_creation_outpoint: OutPoint,
+        option_creation_outpoint: (OutPoint, bool),
+        grantor_creation_outpoint: (OutPoint, bool),
     ) -> Self {
         Self {
             start_time,
@@ -38,16 +94,9 @@ impl OptionsArguments {
             settlement_per_contract,
             collateral_asset_id: collateral_asset_id.into_inner().0,
             settlement_asset_id: settlement_asset_id.into_inner().0,
-            option_token_entropy: AssetId::generate_asset_entropy(
-                option_creation_outpoint,
-                ContractHash::from_byte_array(issuance_asset_entropy),
-            )
-            .0,
-            grantor_token_entropy: AssetId::generate_asset_entropy(
-                grantor_creation_outpoint,
-                ContractHash::from_byte_array(issuance_asset_entropy),
-            )
-            .0,
+            issuance_asset_entropy,
+            option_creation_outpoint: option_creation_outpoint.into(),
+            grantor_creation_outpoint: grantor_creation_outpoint.into(),
         }
     }
 
@@ -75,23 +124,95 @@ impl OptionsArguments {
         self.settlement_per_contract
     }
 
-    /// Returns the option token entropy.
+    /// Returns the issuance asset entropy.
     #[must_use]
-    pub const fn option_token_entropy(&self) -> [u8; 32] {
-        self.option_token_entropy
+    pub const fn issuance_asset_entropy(&self) -> [u8; 32] {
+        self.issuance_asset_entropy
     }
 
-    /// Returns the grantor token entropy.
+    /// Returns the option creation outpoint with confidential flag.
     #[must_use]
-    pub const fn grantor_token_entropy(&self) -> [u8; 32] {
-        self.grantor_token_entropy
+    pub fn option_creation_outpoint(&self) -> (OutPoint, bool) {
+        self.option_creation_outpoint.as_tuple()
     }
 
+    /// Returns the grantor creation outpoint with confidential flag.
+    #[must_use]
+    pub fn grantor_creation_outpoint(&self) -> (OutPoint, bool) {
+        self.grantor_creation_outpoint.as_tuple()
+    }
+
+    /// Computes and returns the option token entropy.
+    #[must_use]
+    pub fn option_token_entropy(&self) -> [u8; 32] {
+        let contract_hash = ContractHash::from_byte_array(self.issuance_asset_entropy);
+        AssetId::generate_asset_entropy(self.option_creation_outpoint.outpoint(), contract_hash).0
+    }
+
+    /// Computes and returns the grantor token entropy.
+    #[must_use]
+    pub fn grantor_token_entropy(&self) -> [u8; 32] {
+        let contract_hash = ContractHash::from_byte_array(self.issuance_asset_entropy);
+        AssetId::generate_asset_entropy(self.grantor_creation_outpoint.outpoint(), contract_hash).0
+    }
+
+    /// Computes and returns the option token asset ID.
+    #[must_use]
+    pub fn option_token(&self) -> AssetId {
+        let entropy = simplicityhl::elements::hashes::sha256::Midstate::from_byte_array(
+            self.option_token_entropy(),
+        );
+        AssetId::from_entropy(entropy)
+    }
+
+    /// Computes and returns the option reissuance token asset ID.
+    #[must_use]
+    pub fn option_reissuance_token(&self) -> AssetId {
+        let entropy = simplicityhl::elements::hashes::sha256::Midstate::from_byte_array(
+            self.option_token_entropy(),
+        );
+        AssetId::reissuance_token_from_entropy(
+            entropy,
+            self.option_creation_outpoint.confidential(),
+        )
+    }
+
+    /// Computes and returns the grantor token asset ID.
+    #[must_use]
+    pub fn grantor_token(&self) -> AssetId {
+        let entropy = simplicityhl::elements::hashes::sha256::Midstate::from_byte_array(
+            self.grantor_token_entropy(),
+        );
+        AssetId::from_entropy(entropy)
+    }
+
+    /// Computes and returns the grantor reissuance token asset ID.
+    #[must_use]
+    pub fn grantor_reissuance_token(&self) -> AssetId {
+        let entropy = simplicityhl::elements::hashes::sha256::Midstate::from_byte_array(
+            self.grantor_token_entropy(),
+        );
+        AssetId::reissuance_token_from_entropy(
+            entropy,
+            self.grantor_creation_outpoint.confidential(),
+        )
+    }
+
+    /// Returns the option token ID and reissuance asset ID as a tuple.
+    #[must_use]
+    pub fn get_option_token_ids(&self) -> (AssetId, AssetId) {
+        (self.option_token(), self.option_reissuance_token())
+    }
+
+    /// Returns the grantor token ID and reissuance asset ID as a tuple.
+    #[must_use]
+    pub fn get_grantor_token_ids(&self) -> (AssetId, AssetId) {
+        (self.grantor_token(), self.grantor_reissuance_token())
+    }
+
+    /// Build Simplicity arguments for contract instantiation.
     #[must_use]
     pub fn build_option_arguments(&self) -> Arguments {
-        let (option_asset_id, _) = self.get_option_token_ids();
-        let (grantor_asset_id, _) = self.get_grantor_token_ids();
-
         Arguments::from(HashMap::from([
             (
                 WitnessName::from_str_unchecked("START_TIME"),
@@ -122,40 +243,108 @@ impl OptionsArguments {
                 ))),
             ),
             (
+                WitnessName::from_str_unchecked("ISSUANCE_ASSET_ENTROPY"),
+                simplicityhl::Value::from(UIntValue::U256(U256::from_byte_array(
+                    self.issuance_asset_entropy,
+                ))),
+            ),
+            (
+                WitnessName::from_str_unchecked("OPTION_OUTPOINT_TXID"),
+                simplicityhl::Value::from(UIntValue::U256(U256::from_byte_array(
+                    self.option_creation_outpoint.txid,
+                ))),
+            ),
+            (
+                WitnessName::from_str_unchecked("OPTION_OUTPOINT_VOUT"),
+                simplicityhl::Value::from(UIntValue::U32(self.option_creation_outpoint.vout)),
+            ),
+            (
+                WitnessName::from_str_unchecked("OPTION_CONFIDENTIAL"),
+                simplicityhl::Value::from(self.option_creation_outpoint.confidential),
+            ),
+            (
+                WitnessName::from_str_unchecked("GRANTOR_OUTPOINT_TXID"),
+                simplicityhl::Value::from(UIntValue::U256(U256::from_byte_array(
+                    self.grantor_creation_outpoint.txid,
+                ))),
+            ),
+            (
+                WitnessName::from_str_unchecked("GRANTOR_OUTPOINT_VOUT"),
+                simplicityhl::Value::from(UIntValue::U32(self.grantor_creation_outpoint.vout)),
+            ),
+            (
+                WitnessName::from_str_unchecked("GRANTOR_CONFIDENTIAL"),
+                simplicityhl::Value::from(self.grantor_creation_outpoint.confidential),
+            ),
+            // Also include computed values for convenience
+            (
                 WitnessName::from_str_unchecked("OPTION_TOKEN_ASSET"),
                 simplicityhl::Value::from(UIntValue::U256(U256::from_byte_array(
-                    option_asset_id.into_inner().0,
+                    self.option_token().into_inner().0,
+                ))),
+            ),
+            (
+                WitnessName::from_str_unchecked("OPTION_REISSUANCE_TOKEN_ASSET"),
+                simplicityhl::Value::from(UIntValue::U256(U256::from_byte_array(
+                    self.option_reissuance_token().into_inner().0,
                 ))),
             ),
             (
                 WitnessName::from_str_unchecked("GRANTOR_TOKEN_ASSET"),
                 simplicityhl::Value::from(UIntValue::U256(U256::from_byte_array(
-                    grantor_asset_id.into_inner().0,
+                    self.grantor_token().into_inner().0,
+                ))),
+            ),
+            (
+                WitnessName::from_str_unchecked("GRANTOR_REISSUANCE_TOKEN_ASSET"),
+                simplicityhl::Value::from(UIntValue::U256(U256::from_byte_array(
+                    self.grantor_reissuance_token().into_inner().0,
                 ))),
             ),
         ]))
     }
 
-    /// Returns the grantor token ID and reissuance asset ID.
-    #[must_use]
-    pub fn get_grantor_token_ids(&self) -> (AssetId, AssetId) {
-        let grantor_asset_entropy = sha256::Midstate::from_byte_array(self.grantor_token_entropy);
+    /// Build struct from Simplicity Arguments.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if any required witness is missing, has wrong type, or has invalid value.
+    pub fn from_arguments(args: &Arguments) -> Result<Self, FromArgumentsError> {
+        let start_time = extract_u32(args, "START_TIME")?;
+        let expiry_time = extract_u32(args, "EXPIRY_TIME")?;
+        let collateral_per_contract = extract_u64(args, "COLLATERAL_PER_CONTRACT")?;
+        let settlement_per_contract = extract_u64(args, "SETTLEMENT_PER_CONTRACT")?;
+        let collateral_asset_id = extract_u256_bytes(args, "COLLATERAL_ASSET_ID")?;
+        let settlement_asset_id = extract_u256_bytes(args, "SETTLEMENT_ASSET_ID")?;
+        let issuance_asset_entropy = extract_u256_bytes(args, "ISSUANCE_ASSET_ENTROPY")?;
 
-        (
-            AssetId::from_entropy(grantor_asset_entropy),
-            AssetId::reissuance_token_from_entropy(grantor_asset_entropy, false),
-        )
-    }
+        let option_outpoint_txid = extract_u256_bytes(args, "OPTION_OUTPOINT_TXID")?;
+        let option_outpoint_vout = extract_u32(args, "OPTION_OUTPOINT_VOUT")?;
+        let option_confidential = extract_bool(args, "OPTION_CONFIDENTIAL")?;
 
-    /// Returns the option token ID and reissuance asset ID.
-    #[must_use]
-    pub fn get_option_token_ids(&self) -> (AssetId, AssetId) {
-        let option_asset_entropy = sha256::Midstate::from_byte_array(self.option_token_entropy);
+        let grantor_outpoint_txid = extract_u256_bytes(args, "GRANTOR_OUTPOINT_TXID")?;
+        let grantor_outpoint_vout = extract_u32(args, "GRANTOR_OUTPOINT_VOUT")?;
+        let grantor_confidential = extract_bool(args, "GRANTOR_CONFIDENTIAL")?;
 
-        (
-            AssetId::from_entropy(option_asset_entropy),
-            AssetId::reissuance_token_from_entropy(option_asset_entropy, false),
-        )
+        Ok(Self {
+            start_time,
+            expiry_time,
+            collateral_per_contract,
+            settlement_per_contract,
+            collateral_asset_id,
+            settlement_asset_id,
+            issuance_asset_entropy,
+            option_creation_outpoint: OutPointWithConfidential {
+                txid: option_outpoint_txid,
+                vout: option_outpoint_vout,
+                confidential: option_confidential,
+            },
+            grantor_creation_outpoint: OutPointWithConfidential {
+                txid: grantor_outpoint_txid,
+                vout: grantor_outpoint_vout,
+                confidential: grantor_confidential,
+            },
+        })
     }
 
     /// Returns the settlement asset ID.
@@ -187,7 +376,7 @@ impl simplicityhl_core::Encodable for OptionsArguments {}
 mod tests {
     use super::*;
     use crate::sdk::taproot_pubkey_gen::get_random_seed;
-    use simplicityhl::elements::Txid;
+    use simplicityhl::elements::hashes::Hash;
     use simplicityhl_core::{Encodable, LIQUID_TESTNET_BITCOIN_ASSET};
 
     #[test]
@@ -209,14 +398,48 @@ mod tests {
             *LIQUID_TESTNET_BITCOIN_ASSET,
             *LIQUID_TESTNET_BITCOIN_ASSET,
             get_random_seed(),
-            OutPoint::new(Txid::from_slice(&[1; 32])?, 0),
-            OutPoint::new(Txid::from_slice(&[2; 32])?, 0),
+            (OutPoint::new(Txid::from_slice(&[1; 32])?, 0), false),
+            (OutPoint::new(Txid::from_slice(&[2; 32])?, 0), false),
         );
 
         let serialized = args.encode()?;
         let deserialized = OptionsArguments::decode(&serialized)?;
 
         assert_eq!(args, deserialized);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_arguments_roundtrip_default() -> anyhow::Result<()> {
+        let original = OptionsArguments::default();
+        let arguments = original.build_option_arguments();
+
+        let recovered = OptionsArguments::from_arguments(&arguments)?;
+
+        assert_eq!(original, recovered);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_arguments_roundtrip_full() -> anyhow::Result<()> {
+        let original = OptionsArguments::new(
+            10,
+            50,
+            100,
+            1000,
+            *LIQUID_TESTNET_BITCOIN_ASSET,
+            *LIQUID_TESTNET_BITCOIN_ASSET,
+            get_random_seed(),
+            (OutPoint::new(Txid::from_slice(&[1; 32])?, 0), false),
+            (OutPoint::new(Txid::from_slice(&[2; 32])?, 0), true),
+        );
+        let arguments = original.build_option_arguments();
+
+        let recovered = OptionsArguments::from_arguments(&arguments)?;
+
+        assert_eq!(original, recovered);
 
         Ok(())
     }
