@@ -179,8 +179,8 @@ mod options_tests {
             *LIQUID_TESTNET_BITCOIN_ASSET,
             AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?,
             issuance_asset_entropy,
-            option_outpoint,
-            grantor_outpoint,
+            (option_outpoint, false),
+            (grantor_outpoint, false),
         );
 
         Ok((
