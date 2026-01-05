@@ -109,10 +109,10 @@ mod simple_storage_tests {
             &secp256k1::SecretKey::from_slice(&[1u8; 32])?,
         );
 
-        let storage_arguments = StorageArguments {
-            public_key: keypair.x_only_public_key().0.serialize(),
-            slot_asset: LIQUID_TESTNET_BITCOIN_ASSET.to_string(),
-        };
+        let storage_arguments = StorageArguments::new(
+            keypair.x_only_public_key().0.serialize(),
+            LIQUID_TESTNET_BITCOIN_ASSET.to_string(),
+        );
 
         let storage_address = get_storage_address(
             &keypair.x_only_public_key().0,
@@ -183,10 +183,10 @@ mod simple_storage_tests {
             &secp256k1::SecretKey::from_slice(&[1u8; 32])?,
         );
 
-        let storage_arguments = StorageArguments {
-            public_key: keypair.x_only_public_key().0.serialize(),
-            slot_asset: LIQUID_TESTNET_BITCOIN_ASSET.to_string(),
-        };
+        let storage_arguments = StorageArguments::new(
+            keypair.x_only_public_key().0.serialize(),
+            LIQUID_TESTNET_BITCOIN_ASSET.to_string(),
+        );
 
         let storage_address = get_storage_address(
             &keypair.x_only_public_key().0,

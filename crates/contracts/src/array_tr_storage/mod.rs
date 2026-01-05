@@ -135,7 +135,7 @@ mod array_tr_storage_tests {
         let mut old_storage = [0u8; MAX_VAL];
         old_storage[3] = 0xff;
 
-        let array_tr_storage_arguments = UnlimitedStorageArguments { len: 5 };
+        let array_tr_storage_arguments = UnlimitedStorageArguments::new(5);
 
         let program = get_array_tr_storage_compiled_program(&array_tr_storage_arguments);
         let cmr = program.commit().cmr();
@@ -143,7 +143,7 @@ mod array_tr_storage_tests {
         let spend_info = unlimited_storage_taproot_spend_info(
             unlimited_storage_unspendable_internal_key(),
             &old_storage,
-            array_tr_storage_arguments.len as usize,
+            array_tr_storage_arguments.len() as usize,
             cmr,
         );
         let script_pubkey = Script::new_v1_p2tr_tweaked(spend_info.output_key());

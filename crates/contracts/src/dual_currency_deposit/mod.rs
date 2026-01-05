@@ -237,24 +237,24 @@ mod dcd_merge_tests {
         let ratio_args =
             DCDRatioArguments::build_from(1000, incentive_basis_points, strike_price, 10)?;
 
-        let dcd_arguments = DCDArguments {
-            taker_funding_start_time: 10,
-            taker_funding_end_time: 0,
-            contract_expiry_time: 0,
-            early_termination_end_time: 0,
-            settlement_height: 0,
+        let dcd_arguments = DCDArguments::new(
+            10,
+            0,
+            0,
+            0,
+            0,
             strike_price,
             incentive_basis_points,
-            fee_basis_points: 0,
-            collateral_asset_id_hex_le: LIQUID_TESTNET_BITCOIN_ASSET.to_string(),
-            settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
-            filler_token_asset_id_hex_le: first_asset_id.to_string(),
-            grantor_collateral_token_asset_id_hex_le: second_asset_id.to_string(),
-            grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
-            ratio_args: ratio_args.clone(),
-            oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
-            fee_script_hash_hex_le: "00".repeat(32),
-        };
+            0,
+            LIQUID_TESTNET_BITCOIN_ASSET.to_string(),
+            LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
+            first_asset_id.to_string(),
+            second_asset_id.to_string(),
+            third_asset_id.to_string(),
+            ratio_args.clone(),
+            oracle_kp.x_only_public_key().0.to_string(),
+            "00".repeat(32),
+        );
 
         let keypair = Keypair::from_secret_key(
             &Secp256k1::new(),
@@ -269,17 +269,17 @@ mod dcd_merge_tests {
         let mut pst = PartiallySignedTransaction::new_v2();
 
         let mut first_reissuance_tx = Input::from_prevout(outpoint);
-        first_reissuance_tx.issuance_value_amount = Some(ratio_args.filler_token_amount);
+        first_reissuance_tx.issuance_value_amount = Some(ratio_args.filler_token_amount());
         first_reissuance_tx.issuance_inflation_keys = None;
         first_reissuance_tx.issuance_asset_entropy = Some(first_asset_entropy.to_byte_array());
 
         let mut second_reissuance_tx = Input::from_prevout(outpoint);
-        second_reissuance_tx.issuance_value_amount = Some(ratio_args.filler_token_amount);
+        second_reissuance_tx.issuance_value_amount = Some(ratio_args.filler_token_amount());
         second_reissuance_tx.issuance_inflation_keys = None;
         second_reissuance_tx.issuance_asset_entropy = Some(second_asset_entropy.to_byte_array());
 
         let mut third_reissuance_tx = Input::from_prevout(outpoint);
-        third_reissuance_tx.issuance_value_amount = Some(ratio_args.filler_token_amount);
+        third_reissuance_tx.issuance_value_amount = Some(ratio_args.filler_token_amount());
         third_reissuance_tx.issuance_inflation_keys = None;
         third_reissuance_tx.issuance_asset_entropy = Some(third_asset_entropy.to_byte_array());
 
@@ -312,35 +312,35 @@ mod dcd_merge_tests {
 
         pst.add_output(Output::new_explicit(
             dcd_address.script_pubkey(),
-            ratio_args.interest_collateral_amount,
+            ratio_args.interest_collateral_amount(),
             *LIQUID_TESTNET_BITCOIN_ASSET,
             None,
         ));
 
         pst.add_output(Output::new_explicit(
             dcd_address.script_pubkey(),
-            ratio_args.total_asset_amount,
+            ratio_args.total_asset_amount(),
             AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?,
             None,
         ));
 
         pst.add_output(Output::new_explicit(
             dcd_address.script_pubkey(),
-            ratio_args.filler_token_amount,
+            ratio_args.filler_token_amount(),
             first_asset_id,
             None,
         ));
 
         pst.add_output(Output::new_explicit(
             Script::new(),
-            ratio_args.filler_token_amount,
+            ratio_args.filler_token_amount(),
             second_asset_id,
             None,
         ));
 
         pst.add_output(Output::new_explicit(
             Script::new(),
-            ratio_args.filler_token_amount,
+            ratio_args.filler_token_amount(),
             third_asset_id,
             None,
         ));
@@ -395,13 +395,13 @@ mod dcd_merge_tests {
                     asset: Asset::Explicit(
                         AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR).unwrap(),
                     ),
-                    value: Value::Explicit(ratio_args.total_asset_amount),
+                    value: Value::Explicit(ratio_args.total_asset_amount()),
                 },
                 // Input 4: collateral asset
                 ElementsUtxo {
                     script_pubkey: dcd_address.script_pubkey(),
                     asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
-                    value: Value::Explicit(ratio_args.interest_collateral_amount),
+                    value: Value::Explicit(ratio_args.interest_collateral_amount()),
                 },
             ],
             0,
@@ -414,10 +414,10 @@ mod dcd_merge_tests {
         let witness_values = build_dcd_witness(
             TokenBranch::default(),
             &DcdBranch::MakerFunding {
-                principal_collateral_amount: ratio_args.principal_collateral_amount,
-                principal_asset_amount: ratio_args.principal_asset_amount,
-                interest_collateral_amount: ratio_args.interest_collateral_amount,
-                interest_asset_amount: ratio_args.interest_asset_amount,
+                principal_collateral_amount: ratio_args.principal_collateral_amount(),
+                principal_asset_amount: ratio_args.principal_asset_amount(),
+                interest_collateral_amount: ratio_args.interest_collateral_amount(),
+                interest_asset_amount: ratio_args.interest_asset_amount(),
             },
             MergeBranch::default(),
         );
@@ -454,24 +454,24 @@ mod dcd_merge_tests {
         let ratio_args =
             DCDRatioArguments::build_from(1000, incentive_basis_points, strike_price, 10)?;
 
-        let dcd_arguments = DCDArguments {
-            taker_funding_start_time: now + 10,
-            taker_funding_end_time: now + 20,
-            contract_expiry_time: now + 30,
-            early_termination_end_time: now,
-            settlement_height: 0,
+        let dcd_arguments = DCDArguments::new(
+            now + 10,
+            now + 20,
+            now + 30,
+            now,
+            0,
             strike_price,
             incentive_basis_points,
-            fee_basis_points: 0,
-            collateral_asset_id_hex_le: AssetId::LIQUID_BTC.to_string(),
-            settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
-            filler_token_asset_id_hex_le: first_asset_id.to_string(),
-            grantor_collateral_token_asset_id_hex_le: second_asset_id.to_string(),
-            grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
-            ratio_args: ratio_args.clone(),
-            oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
-            fee_script_hash_hex_le: "00".repeat(32),
-        };
+            0,
+            AssetId::LIQUID_BTC.to_string(),
+            LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
+            first_asset_id.to_string(),
+            second_asset_id.to_string(),
+            third_asset_id.to_string(),
+            ratio_args.clone(),
+            oracle_kp.x_only_public_key().0.to_string(),
+            "00".repeat(32),
+        );
 
         let keypair = Keypair::from_secret_key(
             &Secp256k1::new(),
@@ -486,7 +486,7 @@ mod dcd_merge_tests {
         let mut pst = PartiallySignedTransaction::new_v2();
         // Locktime window: start <= t < end and t < expiry
         pst.global.tx_data.fallback_locktime = Some(elements::LockTime::from_time(
-            dcd_arguments.taker_funding_start_time + 5,
+            dcd_arguments.taker_funding_start_time() + 5,
         )?);
 
         // Input[0]: FILLER token input that will provide change
@@ -495,8 +495,8 @@ mod dcd_merge_tests {
 
         // Outputs:
         // 0: FILLER change (available - to_get)
-        let available_filler = ratio_args.filler_token_amount * 2; // 200
-        let filler_to_get = ratio_args.filler_token_amount; // 100
+        let available_filler = ratio_args.filler_token_amount() * 2; // 200
+        let filler_to_get = ratio_args.filler_token_amount(); // 100
         let filler_change = available_filler - filler_to_get; // 100
         pst.add_output(Output::new_explicit(
             dcd_address.script_pubkey(),
@@ -506,7 +506,7 @@ mod dcd_merge_tests {
         ));
 
         // 1: Collateral to covenant (deposit)
-        let collateral_deposit = ratio_args.filler_per_principal_collateral * filler_to_get; // 1000
+        let collateral_deposit = ratio_args.filler_per_principal_collateral() * filler_to_get; // 1000
         pst.add_output(Output::new_explicit(
             dcd_address.script_pubkey(),
             collateral_deposit,
@@ -580,24 +580,24 @@ mod dcd_merge_tests {
         let ratio_args =
             DCDRatioArguments::build_from(1000, incentive_basis_points, strike_price, 10)?;
 
-        let dcd_arguments = DCDArguments {
-            taker_funding_start_time: now,
-            taker_funding_end_time: now,
-            contract_expiry_time: now + 30,
-            early_termination_end_time: now + 20,
-            settlement_height: 0,
+        let dcd_arguments = DCDArguments::new(
+            now,
+            now,
+            now + 30,
+            now + 20,
+            0,
             strike_price,
             incentive_basis_points,
-            fee_basis_points: 0,
-            collateral_asset_id_hex_le: AssetId::LIQUID_BTC.to_string(),
-            settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
-            filler_token_asset_id_hex_le: first_asset_id.to_string(),
-            grantor_collateral_token_asset_id_hex_le: second_asset_id.to_string(),
-            grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
-            ratio_args: ratio_args.clone(),
-            oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
-            fee_script_hash_hex_le: "00".repeat(32),
-        };
+            0,
+            AssetId::LIQUID_BTC.to_string(),
+            LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
+            first_asset_id.to_string(),
+            second_asset_id.to_string(),
+            third_asset_id.to_string(),
+            ratio_args.clone(),
+            oracle_kp.x_only_public_key().0.to_string(),
+            "00".repeat(32),
+        );
 
         let keypair = Keypair::from_secret_key(
             &Secp256k1::new(),
@@ -612,7 +612,7 @@ mod dcd_merge_tests {
         let mut pst = PartiallySignedTransaction::new_v2();
         // Locktime t <= early_term_end
         pst.global.tx_data.fallback_locktime = Some(elements::LockTime::from_time(
-            dcd_arguments.early_termination_end_time - 5,
+            dcd_arguments.early_termination_end_time() - 5,
         )?);
 
         // Inputs: 0 -> collateral, 1 -> filler token
@@ -620,8 +620,8 @@ mod dcd_merge_tests {
         pst.inputs_mut()[0].sequence = Some(elements::Sequence::ENABLE_LOCKTIME_NO_RBF);
         pst.add_input(Input::from_prevout(outpoint));
 
-        let collateral_get = ratio_args.principal_collateral_amount; // 1000
-        let filler_return = ratio_args.filler_token_amount; // 100
+        let collateral_get = ratio_args.principal_collateral_amount(); // 1000
+        let filler_return = ratio_args.filler_token_amount(); // 100
         let available_collateral = collateral_get + 500; // to force change
         let collateral_change = available_collateral - collateral_get; // 500
 
@@ -712,24 +712,24 @@ mod dcd_merge_tests {
         let ratio_args =
             DCDRatioArguments::build_from(1000, incentive_basis_points, strike_price, 10)?;
 
-        let dcd_arguments = DCDArguments {
-            taker_funding_start_time: now,
-            taker_funding_end_time: now,
-            contract_expiry_time: now + 30,
-            early_termination_end_time: now + 20,
-            settlement_height: 0,
+        let dcd_arguments = DCDArguments::new(
+            now,
+            now,
+            now + 30,
+            now + 20,
+            0,
             strike_price,
             incentive_basis_points,
-            fee_basis_points: 0,
-            collateral_asset_id_hex_le: AssetId::LIQUID_BTC.to_string(),
-            settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
-            filler_token_asset_id_hex_le: first_asset_id.to_string(),
-            grantor_collateral_token_asset_id_hex_le: second_asset_id.to_string(),
-            grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
-            ratio_args: ratio_args.clone(),
-            oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
-            fee_script_hash_hex_le: "00".repeat(32),
-        };
+            0,
+            AssetId::LIQUID_BTC.to_string(),
+            LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
+            first_asset_id.to_string(),
+            second_asset_id.to_string(),
+            third_asset_id.to_string(),
+            ratio_args.clone(),
+            oracle_kp.x_only_public_key().0.to_string(),
+            "00".repeat(32),
+        );
 
         let keypair = Keypair::from_secret_key(
             &Secp256k1::new(),
@@ -743,7 +743,7 @@ mod dcd_merge_tests {
 
         let mut pst = PartiallySignedTransaction::new_v2();
         pst.global.tx_data.fallback_locktime = Some(elements::LockTime::from_time(
-            dcd_arguments.early_termination_end_time - 1,
+            dcd_arguments.early_termination_end_time() - 1,
         )?);
 
         // Inputs: 0 -> collateral, 1 -> grantor collateral token
@@ -751,9 +751,9 @@ mod dcd_merge_tests {
         pst.inputs_mut()[0].sequence = Some(elements::Sequence::ENABLE_LOCKTIME_NO_RBF);
         pst.add_input(Input::from_prevout(outpoint));
 
-        let grantor_burn = ratio_args.filler_token_amount / 2; // 50
-        let collateral_get = ratio_args.interest_collateral_amount / 2; // 1000
-        let collateral_change = ratio_args.interest_collateral_amount - collateral_get;
+        let grantor_burn = ratio_args.filler_token_amount() / 2; // 50
+        let collateral_get = ratio_args.interest_collateral_amount() / 2; // 1000
+        let collateral_change = ratio_args.interest_collateral_amount() - collateral_get;
 
         // 0: collateral change
         pst.add_output(Output::new_explicit(
@@ -785,7 +785,7 @@ mod dcd_merge_tests {
                 ElementsUtxo {
                     script_pubkey: dcd_address.script_pubkey(),
                     asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
-                    value: Value::Explicit(ratio_args.interest_collateral_amount),
+                    value: Value::Explicit(ratio_args.interest_collateral_amount()),
                 },
                 ElementsUtxo {
                     script_pubkey: dcd_address.script_pubkey(),
@@ -842,24 +842,24 @@ mod dcd_merge_tests {
         let ratio_args =
             DCDRatioArguments::build_from(1000, incentive_basis_points, strike_price, 10)?;
 
-        let dcd_arguments = DCDArguments {
-            taker_funding_start_time: now,
-            taker_funding_end_time: now,
-            contract_expiry_time: now + 30,
-            early_termination_end_time: now + 20,
-            settlement_height: 0,
+        let dcd_arguments = DCDArguments::new(
+            now,
+            now,
+            now + 30,
+            now + 20,
+            0,
             strike_price,
             incentive_basis_points,
-            fee_basis_points: 0,
-            collateral_asset_id_hex_le: AssetId::LIQUID_BTC.to_string(),
-            settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
-            filler_token_asset_id_hex_le: first_asset_id.to_string(),
-            grantor_collateral_token_asset_id_hex_le: second_asset_id.to_string(),
-            grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
-            ratio_args: ratio_args.clone(),
-            oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
-            fee_script_hash_hex_le: "00".repeat(32),
-        };
+            0,
+            AssetId::LIQUID_BTC.to_string(),
+            LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
+            first_asset_id.to_string(),
+            second_asset_id.to_string(),
+            third_asset_id.to_string(),
+            ratio_args.clone(),
+            oracle_kp.x_only_public_key().0.to_string(),
+            "00".repeat(32),
+        );
 
         let keypair = Keypair::from_secret_key(
             &Secp256k1::new(),
@@ -873,7 +873,7 @@ mod dcd_merge_tests {
 
         let mut pst = PartiallySignedTransaction::new_v2();
         pst.global.tx_data.fallback_locktime = Some(elements::LockTime::from_time(
-            dcd_arguments.early_termination_end_time - 1,
+            dcd_arguments.early_termination_end_time() - 1,
         )?);
 
         // Inputs: 0 -> settlement asset, 1 -> grantor settlement token
@@ -881,9 +881,9 @@ mod dcd_merge_tests {
         pst.inputs_mut()[0].sequence = Some(elements::Sequence::ENABLE_LOCKTIME_NO_RBF);
         pst.add_input(Input::from_prevout(outpoint));
 
-        let grantor_burn = ratio_args.filler_token_amount / 2; // 100
-        let settlement_get = ratio_args.total_asset_amount / 2; // 11000
-        let settlement_change = ratio_args.total_asset_amount - settlement_get;
+        let grantor_burn = ratio_args.filler_token_amount() / 2; // 100
+        let settlement_get = ratio_args.total_asset_amount() / 2; // 11000
+        let settlement_change = ratio_args.total_asset_amount() - settlement_get;
 
         // 0: settlement change
         pst.add_output(Output::new_explicit(
@@ -915,7 +915,7 @@ mod dcd_merge_tests {
                 ElementsUtxo {
                     script_pubkey: dcd_address.script_pubkey(),
                     asset: Asset::Explicit(AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?),
-                    value: Value::Explicit(ratio_args.total_asset_amount),
+                    value: Value::Explicit(ratio_args.total_asset_amount()),
                 },
                 ElementsUtxo {
                     script_pubkey: dcd_address.script_pubkey(),
@@ -973,24 +973,24 @@ mod dcd_merge_tests {
             DCDRatioArguments::build_from(1000, incentive_basis_points, strike_price, 10)?;
 
         let settlement_height = 100u32;
-        let dcd_arguments = DCDArguments {
-            taker_funding_start_time: now,
-            taker_funding_end_time: now,
-            contract_expiry_time: now,
-            early_termination_end_time: now,
+        let dcd_arguments = DCDArguments::new(
+            now,
+            now,
+            now,
+            now,
             settlement_height,
             strike_price,
             incentive_basis_points,
-            fee_basis_points: 0,
-            collateral_asset_id_hex_le: AssetId::LIQUID_BTC.to_string(),
-            settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
-            filler_token_asset_id_hex_le: first_asset_id.to_string(),
-            grantor_collateral_token_asset_id_hex_le: second_asset_id.to_string(),
-            grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
-            ratio_args: ratio_args.clone(),
-            oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
-            fee_script_hash_hex_le: "00".repeat(32),
-        };
+            0,
+            AssetId::LIQUID_BTC.to_string(),
+            LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
+            first_asset_id.to_string(),
+            second_asset_id.to_string(),
+            third_asset_id.to_string(),
+            ratio_args.clone(),
+            oracle_kp.x_only_public_key().0.to_string(),
+            "00".repeat(32),
+        );
 
         let keypair = Keypair::from_secret_key(
             &Secp256k1::new(),
@@ -1010,9 +1010,9 @@ mod dcd_merge_tests {
         pst.inputs_mut()[0].sequence = Some(elements::Sequence::ENABLE_LOCKTIME_NO_RBF);
 
         // Maker gets ALT branch (price <= strike): input is SETTLEMENT asset
-        let amount_to_get = ratio_args.total_asset_amount / 2; // 11000
-        let grantor_burn = ratio_args.filler_token_amount / 2; // 100
-        let available_settlement = ratio_args.total_asset_amount;
+        let amount_to_get = ratio_args.total_asset_amount() / 2; // 11000
+        let grantor_burn = ratio_args.filler_token_amount() / 2; // 100
+        let available_settlement = ratio_args.total_asset_amount();
 
         // 0: settlement change
         pst.add_output(Output::new_explicit(
@@ -1112,24 +1112,24 @@ mod dcd_merge_tests {
             DCDRatioArguments::build_from(1000, incentive_basis_points, strike_price, 10)?;
 
         let settlement_height = 100u32;
-        let dcd_arguments = DCDArguments {
-            taker_funding_start_time: now,
-            taker_funding_end_time: now,
-            contract_expiry_time: now,
-            early_termination_end_time: now,
+        let dcd_arguments = DCDArguments::new(
+            now,
+            now,
+            now,
+            now,
             settlement_height,
             strike_price,
             incentive_basis_points,
-            fee_basis_points: 0,
-            collateral_asset_id_hex_le: AssetId::LIQUID_BTC.to_string(),
-            settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
-            filler_token_asset_id_hex_le: first_asset_id.to_string(),
-            grantor_collateral_token_asset_id_hex_le: second_asset_id.to_string(),
-            grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
-            ratio_args: ratio_args.clone(),
-            oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
-            fee_script_hash_hex_le: "00".repeat(32),
-        };
+            0,
+            AssetId::LIQUID_BTC.to_string(),
+            LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
+            first_asset_id.to_string(),
+            second_asset_id.to_string(),
+            third_asset_id.to_string(),
+            ratio_args.clone(),
+            oracle_kp.x_only_public_key().0.to_string(),
+            "00".repeat(32),
+        );
 
         let keypair = Keypair::from_secret_key(
             &Secp256k1::new(),
@@ -1149,9 +1149,9 @@ mod dcd_merge_tests {
         pst.inputs_mut()[0].sequence = Some(elements::Sequence::ENABLE_LOCKTIME_NO_RBF);
 
         // Maker gets LBTC branch (price > strike): input is COLLATERAL
-        let amount_to_get = ratio_args.total_collateral_amount / 2; // 1100
-        let grantor_burn = ratio_args.filler_token_amount / 2; // 100
-        let available_collateral = ratio_args.total_collateral_amount;
+        let amount_to_get = ratio_args.total_collateral_amount() / 2; // 1100
+        let grantor_burn = ratio_args.filler_token_amount() / 2; // 100
+        let available_collateral = ratio_args.total_collateral_amount();
 
         // 0: collateral change
         pst.add_output(Output::new_explicit(
@@ -1251,24 +1251,24 @@ mod dcd_merge_tests {
             DCDRatioArguments::build_from(1000, incentive_basis_points, strike_price, 10)?;
 
         let settlement_height = 100u32;
-        let dcd_arguments = DCDArguments {
-            taker_funding_start_time: now,
-            taker_funding_end_time: now,
-            contract_expiry_time: now,
-            early_termination_end_time: now,
+        let dcd_arguments = DCDArguments::new(
+            now,
+            now,
+            now,
+            now,
             settlement_height,
             strike_price,
             incentive_basis_points,
-            fee_basis_points: 0,
-            collateral_asset_id_hex_le: AssetId::LIQUID_BTC.to_string(),
-            settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
-            filler_token_asset_id_hex_le: first_asset_id.to_string(),
-            grantor_collateral_token_asset_id_hex_le: second_asset_id.to_string(),
-            grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
-            ratio_args: ratio_args.clone(),
-            oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
-            fee_script_hash_hex_le: "00".repeat(32),
-        };
+            0,
+            AssetId::LIQUID_BTC.to_string(),
+            LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
+            first_asset_id.to_string(),
+            second_asset_id.to_string(),
+            third_asset_id.to_string(),
+            ratio_args.clone(),
+            oracle_kp.x_only_public_key().0.to_string(),
+            "00".repeat(32),
+        );
 
         let keypair = Keypair::from_secret_key(
             &Secp256k1::new(),
@@ -1287,9 +1287,9 @@ mod dcd_merge_tests {
         pst.inputs_mut()[0].sequence = Some(elements::Sequence::ENABLE_LOCKTIME_NO_RBF);
 
         // Taker receives LBTC (price <= strike): input is COLLATERAL
-        let amount_to_get = ratio_args.total_collateral_amount / 2; // 1100
-        let filler_burn = ratio_args.filler_token_amount / 2; // 100
-        let available_collateral = ratio_args.total_collateral_amount;
+        let amount_to_get = ratio_args.total_collateral_amount() / 2; // 1100
+        let filler_burn = ratio_args.filler_token_amount() / 2; // 100
+        let available_collateral = ratio_args.total_collateral_amount();
 
         // 0: collateral change
         pst.add_output(Output::new_explicit(
@@ -1391,24 +1391,24 @@ mod dcd_merge_tests {
         fee_script_hash.reverse();
 
         let settlement_height = 100u32;
-        let dcd_arguments = DCDArguments {
-            taker_funding_start_time: now,
-            taker_funding_end_time: now,
-            contract_expiry_time: now,
-            early_termination_end_time: now,
+        let dcd_arguments = DCDArguments::new(
+            now,
+            now,
+            now,
+            now,
             settlement_height,
             strike_price,
             incentive_basis_points,
             fee_basis_points,
-            collateral_asset_id_hex_le: AssetId::LIQUID_BTC.to_string(),
-            settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
-            filler_token_asset_id_hex_le: first_asset_id.to_string(),
-            grantor_collateral_token_asset_id_hex_le: second_asset_id.to_string(),
-            grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
-            ratio_args: ratio_args.clone(),
-            oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
-            fee_script_hash_hex_le: hex::encode(fee_script_hash),
-        };
+            AssetId::LIQUID_BTC.to_string(),
+            LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
+            first_asset_id.to_string(),
+            second_asset_id.to_string(),
+            third_asset_id.to_string(),
+            ratio_args.clone(),
+            oracle_kp.x_only_public_key().0.to_string(),
+            hex::encode(fee_script_hash),
+        );
 
         let keypair = Keypair::from_secret_key(
             &Secp256k1::new(),
@@ -1420,8 +1420,8 @@ mod dcd_merge_tests {
             &AddressParams::LIQUID_TESTNET,
         )?;
 
-        let amount_to_get = ratio_args.total_collateral_amount;
-        let filler_burn = ratio_args.filler_token_amount;
+        let amount_to_get = ratio_args.total_collateral_amount();
+        let filler_burn = ratio_args.filler_token_amount();
         let fee_amount = amount_to_get * fee_basis_points / build_arguments::MAX_BASIS_POINTS;
         let user_amount = amount_to_get - fee_amount;
 
@@ -1520,24 +1520,24 @@ mod dcd_merge_tests {
             DCDRatioArguments::build_from(1000, incentive_basis_points, strike_price, 10)?;
 
         let settlement_height = 100u32;
-        let dcd_arguments = DCDArguments {
-            taker_funding_start_time: now,
-            taker_funding_end_time: now,
-            contract_expiry_time: now,
-            early_termination_end_time: now,
+        let dcd_arguments = DCDArguments::new(
+            now,
+            now,
+            now,
+            now,
             settlement_height,
             strike_price,
             incentive_basis_points,
-            fee_basis_points: 0,
-            collateral_asset_id_hex_le: AssetId::LIQUID_BTC.to_string(),
-            settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
-            filler_token_asset_id_hex_le: first_asset_id.to_string(),
-            grantor_collateral_token_asset_id_hex_le: second_asset_id.to_string(),
-            grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
-            ratio_args: ratio_args.clone(),
-            oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
-            fee_script_hash_hex_le: "00".repeat(32),
-        };
+            0,
+            AssetId::LIQUID_BTC.to_string(),
+            LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
+            first_asset_id.to_string(),
+            second_asset_id.to_string(),
+            third_asset_id.to_string(),
+            ratio_args.clone(),
+            oracle_kp.x_only_public_key().0.to_string(),
+            "00".repeat(32),
+        );
 
         let keypair = Keypair::from_secret_key(
             &Secp256k1::new(),
@@ -1556,9 +1556,9 @@ mod dcd_merge_tests {
         pst.inputs_mut()[0].sequence = Some(elements::Sequence::ENABLE_LOCKTIME_NO_RBF);
 
         // Taker receives SETTLEMENT (price > strike): input is SETTLEMENT asset
-        let amount_to_get = ratio_args.total_asset_amount / 2; // 11000
-        let filler_burn = ratio_args.filler_token_amount / 2; // 100
-        let available_settlement = ratio_args.total_asset_amount;
+        let amount_to_get = ratio_args.total_asset_amount() / 2; // 11000
+        let filler_burn = ratio_args.filler_token_amount() / 2; // 100
+        let available_settlement = ratio_args.total_asset_amount();
 
         // 0: settlement change
         pst.add_output(Output::new_explicit(
@@ -1650,24 +1650,24 @@ mod dcd_merge_tests {
         let ratio_args =
             DCDRatioArguments::build_from(1000, incentive_basis_points, strike_price, 10)?;
 
-        let dcd_arguments = DCDArguments {
-            taker_funding_start_time: now,
-            taker_funding_end_time: now,
-            contract_expiry_time: now,
-            early_termination_end_time: now,
-            settlement_height: 0,
+        let dcd_arguments = DCDArguments::new(
+            now,
+            now,
+            now,
+            now,
+            0,
             strike_price,
             incentive_basis_points,
-            fee_basis_points: 0,
-            collateral_asset_id_hex_le: AssetId::LIQUID_BTC.to_string(),
-            settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
-            filler_token_asset_id_hex_le: first_asset_id.to_string(),
-            grantor_collateral_token_asset_id_hex_le: second_asset_id.to_string(),
-            grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
+            0,
+            AssetId::LIQUID_BTC.to_string(),
+            LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
+            first_asset_id.to_string(),
+            second_asset_id.to_string(),
+            third_asset_id.to_string(),
             ratio_args,
-            oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
-            fee_script_hash_hex_le: "00".repeat(32),
-        };
+            oracle_kp.x_only_public_key().0.to_string(),
+            "00".repeat(32),
+        );
 
         let keypair = Keypair::from_secret_key(
             &Secp256k1::new(),
@@ -1768,24 +1768,24 @@ mod dcd_merge_tests {
         let ratio_args =
             DCDRatioArguments::build_from(1000, incentive_basis_points, strike_price, 10)?;
 
-        let dcd_arguments = DCDArguments {
-            taker_funding_start_time: now,
-            taker_funding_end_time: now,
-            contract_expiry_time: now,
-            early_termination_end_time: now,
-            settlement_height: 0,
+        let dcd_arguments = DCDArguments::new(
+            now,
+            now,
+            now,
+            now,
+            0,
             strike_price,
             incentive_basis_points,
-            fee_basis_points: 0,
-            collateral_asset_id_hex_le: AssetId::LIQUID_BTC.to_string(),
-            settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
-            filler_token_asset_id_hex_le: first_asset_id.to_string(),
-            grantor_collateral_token_asset_id_hex_le: second_asset_id.to_string(),
-            grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
+            0,
+            AssetId::LIQUID_BTC.to_string(),
+            LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
+            first_asset_id.to_string(),
+            second_asset_id.to_string(),
+            third_asset_id.to_string(),
             ratio_args,
-            oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
-            fee_script_hash_hex_le: "00".repeat(32),
-        };
+            oracle_kp.x_only_public_key().0.to_string(),
+            "00".repeat(32),
+        );
 
         let keypair = Keypair::from_secret_key(
             &Secp256k1::new(),
@@ -1895,24 +1895,24 @@ mod dcd_merge_tests {
         let ratio_args =
             DCDRatioArguments::build_from(1000, incentive_basis_points, strike_price, 10)?;
 
-        let dcd_arguments = DCDArguments {
-            taker_funding_start_time: now,
-            taker_funding_end_time: now,
-            contract_expiry_time: now,
-            early_termination_end_time: now,
-            settlement_height: 0,
+        let dcd_arguments = DCDArguments::new(
+            now,
+            now,
+            now,
+            now,
+            0,
             strike_price,
             incentive_basis_points,
-            fee_basis_points: 0,
-            collateral_asset_id_hex_le: AssetId::LIQUID_BTC.to_string(),
-            settlement_asset_id_hex_le: LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
-            filler_token_asset_id_hex_le: first_asset_id.to_string(),
-            grantor_collateral_token_asset_id_hex_le: second_asset_id.to_string(),
-            grantor_settlement_token_asset_id_hex_le: third_asset_id.to_string(),
+            0,
+            AssetId::LIQUID_BTC.to_string(),
+            LIQUID_TESTNET_TEST_ASSET_ID_STR.to_string(),
+            first_asset_id.to_string(),
+            second_asset_id.to_string(),
+            third_asset_id.to_string(),
             ratio_args,
-            oracle_public_key: oracle_kp.x_only_public_key().0.to_string(),
-            fee_script_hash_hex_le: "00".repeat(32),
-        };
+            oracle_kp.x_only_public_key().0.to_string(),
+            "00".repeat(32),
+        );
 
         let keypair = Keypair::from_secret_key(
             &Secp256k1::new(),

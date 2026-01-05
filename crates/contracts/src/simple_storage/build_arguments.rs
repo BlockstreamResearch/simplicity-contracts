@@ -7,8 +7,31 @@ use simplicityhl::{Arguments, str::WitnessName, value::UIntValue};
 
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq)]
 pub struct StorageArguments {
-    pub public_key: [u8; 32],
-    pub slot_asset: String,
+    public_key: [u8; 32],
+    slot_asset: String,
+}
+
+impl StorageArguments {
+    /// Create new storage arguments.
+    #[must_use]
+    pub const fn new(public_key: [u8; 32], slot_asset: String) -> Self {
+        Self {
+            public_key,
+            slot_asset,
+        }
+    }
+
+    /// Returns the public key.
+    #[must_use]
+    pub const fn public_key(&self) -> [u8; 32] {
+        self.public_key
+    }
+
+    /// Returns the slot asset.
+    #[must_use]
+    pub const fn slot_asset(&self) -> &String {
+        &self.slot_asset
+    }
 }
 
 /// Build Simplicity arguments for storage program.
@@ -17,7 +40,7 @@ pub struct StorageArguments {
 /// Panics if the slot asset hex string is invalid.
 #[must_use]
 pub fn build_storage_arguments(args: &StorageArguments) -> Arguments {
-    let mut slot_id = <[u8; 32]>::from_hex(&args.slot_asset).unwrap();
+    let mut slot_id = <[u8; 32]>::from_hex(args.slot_asset()).unwrap();
     slot_id.reverse();
 
     Arguments::from(HashMap::from([

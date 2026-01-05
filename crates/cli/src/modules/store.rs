@@ -84,6 +84,9 @@ mod tests {
     use contracts::options::get_options_address;
     use contracts::sdk::taproot_pubkey_gen::get_random_seed;
     use simplicityhl::elements::AssetId;
+    use simplicityhl::elements::OutPoint;
+    use simplicityhl::elements::Txid;
+    use simplicityhl::elements::hashes::Hash;
     use simplicityhl_core::{
         Encodable, LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_TEST_ASSET_ID_STR,
     };
@@ -103,16 +106,17 @@ mod tests {
         let settlement_asset_id =
             AssetId::from_slice(&hex::decode(LIQUID_TESTNET_TEST_ASSET_ID_STR)?)?;
 
-        let args = OptionsArguments {
-            start_time: 10,
-            expiry_time: 50,
-            collateral_per_contract: 100,
-            settlement_per_contract: 1000,
-            collateral_asset_id: LIQUID_TESTNET_BITCOIN_ASSET.into_inner().0,
-            settlement_asset_id: settlement_asset_id.into_inner().0,
-            option_token_entropy: get_random_seed(),
-            grantor_token_entropy: get_random_seed(),
-        };
+        let args = OptionsArguments::new(
+            10,
+            50,
+            100,
+            1000,
+            *LIQUID_TESTNET_BITCOIN_ASSET,
+            settlement_asset_id,
+            get_random_seed(),
+            OutPoint::new(Txid::from_slice(&[1; 32])?, 0),
+            OutPoint::new(Txid::from_slice(&[2; 32])?, 0),
+        );
 
         let options_taproot_pubkey_gen =
             TaprootPubkeyGen::from(&args, &AddressParams::LIQUID_TESTNET, &get_options_address)?;

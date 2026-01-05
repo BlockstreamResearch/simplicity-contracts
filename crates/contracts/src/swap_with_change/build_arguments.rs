@@ -7,30 +7,30 @@ use simplicityhl::{Arguments, str::WitnessName, value::UIntValue};
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq, Default)]
 pub struct SwapWithChangeArguments {
     /// Asset ID of collateral (the asset user deposits)
-    pub collateral_asset_id: [u8; 32],
+    collateral_asset_id: [u8; 32],
     /// Asset ID of settlement asset (the asset counterparty pays with)
-    pub settlement_asset_id: [u8; 32],
+    settlement_asset_id: [u8; 32],
     /// Settlement rate: `settlement_amount` = `COLLATERAL_PER_CONTRACT` * `collateral_amount`
-    pub collateral_per_contract: u64,
+    collateral_per_contract: u64,
     /// Unix timestamp after which user can reclaim collateral
-    pub expiry_time: u32,
+    expiry_time: u32,
     /// User's x-only public key for signature verification (32 bytes)
-    pub user_pubkey: [u8; 32],
+    user_pubkey: [u8; 32],
 }
 
 impl SwapWithChangeArguments {
     /// Create new swap with change arguments.
     #[must_use]
-    pub const fn new(
-        collateral_asset_id: [u8; 32],
-        settlement_asset_id: [u8; 32],
+    pub fn new(
+        collateral_asset_id: AssetId,
+        settlement_asset_id: AssetId,
         collateral_per_contract: u64,
         expiry_time: u32,
         user_pubkey: [u8; 32],
     ) -> Self {
         Self {
-            collateral_asset_id,
-            settlement_asset_id,
+            collateral_asset_id: collateral_asset_id.into_inner().0,
+            settlement_asset_id: settlement_asset_id.into_inner().0,
             collateral_per_contract,
             expiry_time,
             user_pubkey,
@@ -66,6 +66,24 @@ impl SwapWithChangeArguments {
                 simplicityhl::Value::from(UIntValue::U256(U256::from_byte_array(self.user_pubkey))),
             ),
         ]))
+    }
+
+    /// Returns the collateral per contract amount.
+    #[must_use]
+    pub const fn collateral_per_contract(&self) -> u64 {
+        self.collateral_per_contract
+    }
+
+    /// Returns the expiry time.
+    #[must_use]
+    pub const fn expiry_time(&self) -> u32 {
+        self.expiry_time
+    }
+
+    /// Returns the user's public key.
+    #[must_use]
+    pub const fn user_pubkey(&self) -> [u8; 32] {
+        self.user_pubkey
     }
 
     /// Returns the collateral asset ID.
@@ -110,13 +128,13 @@ mod tests {
 
     #[test]
     fn test_serialize_deserialize_full() -> anyhow::Result<()> {
-        let args = SwapWithChangeArguments {
-            collateral_asset_id: [1u8; 32],
-            settlement_asset_id: [2u8; 32],
-            collateral_per_contract: 1000,
-            expiry_time: 1_700_000_000,
-            user_pubkey: [3u8; 32],
-        };
+        let args = SwapWithChangeArguments::new(
+            AssetId::from_slice(&[1u8; 32])?,
+            AssetId::from_slice(&[2u8; 32])?,
+            1000,
+            1_700_000_000,
+            [3u8; 32],
+        );
 
         let serialized = args.encode()?;
         let deserialized = SwapWithChangeArguments::decode(&serialized)?;

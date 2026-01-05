@@ -46,7 +46,7 @@ pub fn build_option_expiry(
     }
 
     let collateral_amount =
-        grantor_token_amount_to_burn.saturating_mul(option_arguments.collateral_per_contract);
+        grantor_token_amount_to_burn.saturating_mul(option_arguments.collateral_per_contract());
 
     if collateral_amount > total_collateral {
         return Err(TransactionBuildError::InsufficientCollateral {
@@ -59,7 +59,8 @@ pub fn build_option_expiry(
     let contract_script = collateral_tx_out.script_pubkey.clone();
 
     let mut pst = PartiallySignedTransaction::new_v2();
-    pst.global.tx_data.fallback_locktime = Some(LockTime::from_time(option_arguments.start_time)?);
+    pst.global.tx_data.fallback_locktime =
+        Some(LockTime::from_time(option_arguments.start_time())?);
 
     let mut collateral_input = Input::from_prevout(collateral_out_point);
     collateral_input.witness_utxo = Some(collateral_tx_out.clone());

@@ -41,8 +41,8 @@ pub fn build_option_exercise(
     let (option_token_id, total_option_token_amount) = option_tx_out.explicit()?;
     let (settlement_asset_id, total_asset_amount) = asset_tx_out.explicit()?;
 
-    let collateral_amount_to_get = amount_to_burn * option_arguments.collateral_per_contract;
-    let asset_amount_to_pay = amount_to_burn * option_arguments.settlement_per_contract;
+    let collateral_amount_to_get = amount_to_burn * option_arguments.collateral_per_contract();
+    let asset_amount_to_pay = amount_to_burn * option_arguments.settlement_per_contract();
 
     if collateral_amount_to_get > total_collateral {
         return Err(TransactionBuildError::InsufficientCollateral {
@@ -61,7 +61,8 @@ pub fn build_option_exercise(
     let contract_script = collateral_tx_out.script_pubkey.clone();
 
     let mut pst = PartiallySignedTransaction::new_v2();
-    pst.global.tx_data.fallback_locktime = Some(LockTime::from_time(option_arguments.start_time)?);
+    pst.global.tx_data.fallback_locktime =
+        Some(LockTime::from_time(option_arguments.start_time())?);
 
     let mut collateral_input = Input::from_prevout(collateral_out_point);
     collateral_input.witness_utxo = Some(collateral_tx_out.clone());
