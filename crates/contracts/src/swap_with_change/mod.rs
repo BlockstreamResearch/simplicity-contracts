@@ -122,7 +122,7 @@ pub fn finalize_swap_with_change_transaction(
     )?;
 
     let pruned =
-        execute_swap_with_change_program(contract_program, &env, branch, TrackerLogLevel::None)?;
+        execute_swap_with_change_program(contract_program, &env, branch, TrackerLogLevel::Trace)?;
 
     let (simplicity_program_bytes, simplicity_witness_bytes) = pruned.to_vec_with_witness();
     let cmr = pruned.cmr();
