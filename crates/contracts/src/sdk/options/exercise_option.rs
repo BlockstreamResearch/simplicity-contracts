@@ -66,22 +66,22 @@ pub fn build_option_exercise(
 
     let mut collateral_input = Input::from_prevout(collateral_out_point);
     collateral_input.witness_utxo = Some(collateral_tx_out.clone());
-    collateral_input.sequence = Some(Sequence::ENABLE_LOCKTIME_NO_RBF);
+    collateral_input.sequence = Some(Sequence::ZERO);
     pst.add_input(collateral_input);
 
     let mut option_input = Input::from_prevout(option_out_point);
     option_input.witness_utxo = Some(option_tx_out.clone());
-    option_input.sequence = Some(Sequence::ENABLE_LOCKTIME_NO_RBF);
+    option_input.sequence = Some(Sequence::ZERO);
     pst.add_input(option_input);
 
     let mut asset_input = Input::from_prevout(asset_out_point);
     asset_input.witness_utxo = Some(asset_tx_out.clone());
-    asset_input.sequence = Some(Sequence::ENABLE_LOCKTIME_NO_RBF);
+    asset_input.sequence = Some(Sequence::ZERO);
     pst.add_input(asset_input);
 
     let mut fee_input = Input::from_prevout(fee_out_point);
     fee_input.witness_utxo = Some(fee_tx_out.clone());
-    fee_input.sequence = Some(Sequence::ENABLE_LOCKTIME_NO_RBF);
+    fee_input.sequence = Some(Sequence::ZERO);
     pst.add_input(fee_input);
 
     let is_collateral_change_needed = total_collateral != collateral_amount_to_get;
