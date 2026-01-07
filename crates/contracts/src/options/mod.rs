@@ -252,7 +252,7 @@ mod options_tests {
                     ElementsUtxo {
                         script_pubkey: self.pubkey_gen.address.script_pubkey(),
                         asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
-                        value: Value::Explicit(self.collateral_amount),
+                        value: Value::Explicit(self.collateral_amount + 1000),
                     },
                 ],
                 0,
