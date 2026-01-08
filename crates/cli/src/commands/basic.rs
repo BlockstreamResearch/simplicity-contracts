@@ -13,7 +13,7 @@ use simplicityhl::simplicity::elements::{Address, AddressParams, OutPoint};
 use simplicityhl::simplicity::hex::DisplayHex;
 use simplicityhl_core::{
     LIQUID_TESTNET_GENESIS, create_p2pk_signature, derive_public_blinder_key,
-    finalize_p2pk_transaction, get_p2pk_address, hash_script_pubkey,
+    finalize_p2pk_transaction, get_p2pk_address, hash_script,
 };
 
 #[derive(Subcommand, Debug)]
@@ -150,7 +150,7 @@ impl Basic {
                 let public_key = keypair.x_only_public_key().0;
                 let address = get_p2pk_address(&public_key, &AddressParams::LIQUID_TESTNET)?;
 
-                let mut script_hash: [u8; 32] = hash_script_pubkey(&address);
+                let mut script_hash: [u8; 32] = hash_script(&address.script_pubkey());
                 script_hash.reverse();
 
                 println!("X Only Public Key: {public_key}");

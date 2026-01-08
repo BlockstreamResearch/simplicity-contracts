@@ -19,7 +19,7 @@ hex = "0.4.3"
 tracing = { version = "0.1.41" }
 
 simplicityhl = { version = "0.4.0" }
-simplicityhl-core = { version = "0.3.3", features = ["encoding"] }
+simplicityhl-core = { version = "0.3.4", features = ["encoding"] }
 
 [patch.crates-io]
 simplicity-sys = { git = "https://github.com/BlockstreamResearch/rust-simplicity", tag = "simplicity-sys-0.6.1" }
