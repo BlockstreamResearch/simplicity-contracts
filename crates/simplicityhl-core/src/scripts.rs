@@ -76,9 +76,9 @@ pub fn control_block(
 
 /// SHA256 hash of an address's scriptPubKey bytes.
 #[must_use]
-pub fn hash_script_pubkey(address: &Address) -> [u8; 32] {
+pub fn hash_script(script: &Script) -> [u8; 32] {
     let mut hasher = Sha256::new();
-    sha2::digest::Update::update(&mut hasher, address.script_pubkey().as_bytes());
+    sha2::digest::Update::update(&mut hasher, script.as_bytes());
     hasher.finalize().into()
 }
 
