@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use simplicityhl::{
-    ResolvedType, WitnessValues, parse::ParseFromStr, str::WitnessName, types::TypeConstructible,
+    ResolvedType, WitnessValues, elements::TxOutSecrets, num::U256, parse::ParseFromStr,
+    str::WitnessName, types::TypeConstructible, value::UIntValue,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -32,12 +33,20 @@ pub enum OptionBranch {
     },
 }
 
+pub struct ExtraInputs {
+    pub option_tx_out_secrets: TxOutSecrets,
+    pub grantor_tx_out_secrets: TxOutSecrets,
+}
+
 /// Build witness values for options program execution.
 ///
 /// # Panics
 /// Panics if type parsing fails (should never happen with valid constants).
 #[must_use]
-pub fn build_option_witness(branch: OptionBranch) -> WitnessValues {
+pub fn build_option_witness(
+    branch: OptionBranch,
+    extra_inputs: Option<&ExtraInputs>,
+) -> WitnessValues {
     let single = ResolvedType::parse_from_str("u64").unwrap();
     let quadruple = ResolvedType::parse_from_str("(bool, u64, u64, u64)").unwrap();
     let triple = ResolvedType::parse_from_str("(bool, u64, u64)").unwrap();
@@ -90,8 +99,42 @@ pub fn build_option_witness(branch: OptionBranch) -> WitnessValues {
         }
     };
 
-    simplicityhl::WitnessValues::from(HashMap::from([(
+    let mut witness_map = HashMap::new();
+
+    witness_map.insert(
         WitnessName::from_str_unchecked("PATH"),
         simplicityhl::Value::parse_from_str(&branch_str, &path_type).unwrap(),
-    )]))
+    );
+
+    let (option_asset_blind, option_value_blind, grantor_asset_blind, grantor_value_blind) =
+        if let Some(inputs) = extra_inputs {
+            (
+                U256::from_byte_array(*inputs.option_tx_out_secrets.asset_bf.into_inner().as_ref()),
+                U256::from_byte_array(*inputs.option_tx_out_secrets.value_bf.into_inner().as_ref()),
+                U256::from_byte_array(
+                    *inputs.grantor_tx_out_secrets.asset_bf.into_inner().as_ref(),
+                ),
+                U256::from_byte_array(
+                    *inputs.grantor_tx_out_secrets.value_bf.into_inner().as_ref(),
+                ),
+            )
+        } else {
+            let zero = U256::from(0u64);
+            (zero, zero, zero, zero)
+        };
+
+    let mut insert_witness = |name: &str, val: U256| {
+        witness_map.insert(
+            WitnessName::from_str_unchecked(name),
+            simplicityhl::Value::from(UIntValue::U256(val)),
+        );
+    };
+
+    insert_witness("OPTION_ABF", option_asset_blind);
+    insert_witness("OPTION_VBF", option_value_blind);
+
+    insert_witness("GRANTOR_ABF", grantor_asset_blind);
+    insert_witness("GRANTOR_VBF", grantor_value_blind);
+
+    simplicityhl::WitnessValues::from(witness_map)
 }
