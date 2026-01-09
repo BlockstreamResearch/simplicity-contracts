@@ -60,21 +60,21 @@ pub fn build_option_expiry(
 
     let mut pst = PartiallySignedTransaction::new_v2();
     pst.global.tx_data.fallback_locktime =
-        Some(LockTime::from_time(option_arguments.start_time())?);
+        Some(LockTime::from_time(option_arguments.expiry_time())?);
 
     let mut collateral_input = Input::from_prevout(collateral_out_point);
     collateral_input.witness_utxo = Some(collateral_tx_out.clone());
-    collateral_input.sequence = Some(Sequence::ENABLE_LOCKTIME_NO_RBF);
+    collateral_input.sequence = Some(Sequence::ZERO);
     pst.add_input(collateral_input);
 
     let mut grantor_input = Input::from_prevout(grantor_out_point);
     grantor_input.witness_utxo = Some(grantor_tx_out.clone());
-    grantor_input.sequence = Some(Sequence::ENABLE_LOCKTIME_NO_RBF);
+    grantor_input.sequence = Some(Sequence::ZERO);
     pst.add_input(grantor_input);
 
     let mut fee_input = Input::from_prevout(fee_out_point);
     fee_input.witness_utxo = Some(fee_tx_out.clone());
-    fee_input.sequence = Some(Sequence::ENABLE_LOCKTIME_NO_RBF);
+    fee_input.sequence = Some(Sequence::ZERO);
     pst.add_input(fee_input);
 
     let is_collateral_change_needed = total_collateral != collateral_amount;

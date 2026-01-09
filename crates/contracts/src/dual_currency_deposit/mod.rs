@@ -212,7 +212,7 @@ mod dcd_merge_tests {
     use simplicityhl::simplicity::jet::elements::{ElementsEnv, ElementsUtxo};
     use simplicityhl_core::{
         LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_TEST_ASSET_ID_STR, get_new_asset_entropy,
-        get_p2pk_address, hash_script_pubkey,
+        get_p2pk_address, hash_script,
     };
 
     #[test]
@@ -1387,7 +1387,7 @@ mod dcd_merge_tests {
             &AddressParams::LIQUID_TESTNET,
         )?;
 
-        let mut fee_script_hash: [u8; 32] = hash_script_pubkey(&fee_recipient);
+        let mut fee_script_hash: [u8; 32] = hash_script(&fee_recipient.script_pubkey());
         fee_script_hash.reverse();
 
         let settlement_height = 100u32;
