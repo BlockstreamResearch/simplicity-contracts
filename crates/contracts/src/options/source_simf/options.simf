@@ -109,15 +109,123 @@ fn ensure_correct_change_at_index(index: u32, asset_id: u256, asset_amount_to_sp
     }
 }
 
+fn check_y(expected_y: Fe, actual_y: Fe) {
+    match jet::eq_256(expected_y, actual_y) {
+        true => {},
+        false => {
+            assert!(jet::eq_256(expected_y, jet::fe_negate(actual_y)));
+        }
+    };
+}
+
+fn ensure_input_and_output_reissuance_token_eq(index: u32) {
+    let (input_asset, input_amount): (Asset1, Amount1) = unwrap(jet::input_amount(index));
+    let (output_asset, output_amount): (Asset1, Amount1) = unwrap(jet::output_amount(index));
+
+    match (input_asset) {
+        Left(in_conf: Point) => {
+            let (input_asset_parity, input_asset_x): (u1, u256) = in_conf;
+            let (output_asset_parity, output_asset_x): (u1, u256) = unwrap_left::<u256>(output_asset);
+            
+            assert!(jet::eq_1(input_asset_parity, output_asset_parity));
+            assert!(jet::eq_256(input_asset_x, output_asset_x));
+        },
+        Right(in_expl: u256) => {
+            let out_expl: u256 = unwrap_right::<Point>(output_asset);
+            assert!(jet::eq_256(in_expl, out_expl));
+        }
+    };
+
+    match (input_amount) {
+        Left(in_conf: Point) => {
+            let (input_amount_parity, input_amount_x): (u1, u256) = in_conf;
+            let (output_amount_parity, output_amount_x): (u1, u256) = unwrap_left::<u64>(output_amount);
+
+            assert!(jet::eq_1(input_amount_parity, output_amount_parity));
+            assert!(jet::eq_256(input_amount_x, output_amount_x));
+        },
+        Right(in_expl: u64) => {
+            let out_expl: u64 = unwrap_right::<Point>(output_amount);
+            assert!(jet::eq_64(in_expl, out_expl));
+        }
+    };
+}
+
+// Verify that a reissuance token commitment matches the expected token ID using provided blinding factors.
+// Reissuance tokens are confidential because, in Elements,
+// the asset must be provided in blinded form in order to reissue tokens.
+// https://github.com/BlockstreamResearch/simplicity-contracts/issues/21#issuecomment-3691599583
+fn verify_token_commitment(actual_asset: Asset1, actual_amount: Amount1, expected_token_id: u256, abf: u256, vbf: u256) {
+    match actual_asset {
+        Left(conf_token: Point) => {
+            let amount_scalar: u256 = 1;
+            let (actual_ax, actual_ay): Ge = unwrap(jet::decompress(conf_token));
+
+            let gej_point: Gej = (jet::hash_to_curve(expected_token_id), 1);
+            let asset_blind_point: Gej = jet::generate(abf);
+
+            let asset_generator: Gej = jet::gej_add(gej_point, asset_blind_point);
+            let (ax, ay): Ge = unwrap(jet::gej_normalize(asset_generator));
+
+            assert!(jet::eq_256(actual_ax, ax));
+            check_y(actual_ay, ay);
+
+            // Check amount
+            let conf_val: Point = unwrap_left::<u64>(actual_amount);
+            let (actual_vx, actual_vy): Ge = unwrap(jet::decompress(conf_val));
+
+            let amount_part: Gej = jet::scale(amount_scalar, asset_generator);
+            let vbf_part: Gej = jet::generate(vbf);
+
+            let value_generator: Gej = jet::gej_add(amount_part, vbf_part);
+            let (vx, vy): Ge = unwrap(jet::gej_normalize(value_generator));
+
+            assert!(jet::eq_256(actual_vx, vx));
+            check_y(actual_vy, vy);
+        },
+        Right(reissuance_token: u256) => {
+            let expected_amount: u64 = 1;
+            let actual_amount: u64 = unwrap_right::<Point>(actual_amount);
+            
+            assert!(jet::eq_64(expected_amount, actual_amount));
+            assert!(jet::eq_256(reissuance_token, expected_token_id));
+        }
+    };
+}
+
+fn verify_output_reissuance_token(index: u32, expected_token_id: u256, abf: u256, vbf: u256) {
+    let (asset, amount): (Asset1, Amount1) = unwrap(jet::output_amount(index));
+    verify_token_commitment(asset, amount, expected_token_id, abf, vbf);
+}
+
+fn verify_input_reissuance_token(index: u32, expected_token_id: u256, abf: u256, vbf: u256) {
+    let (asset, amount): (Asset1, Amount1) = unwrap(jet::input_amount(index));
+    verify_token_commitment(asset, amount, expected_token_id, abf, vbf);
+}
+
 /*
  * Funding Path
  */
-fn funding_path(expected_asset_amount: u64) {
-    assert!(jet::eq_32(jet::num_inputs(), 3));
-    assert!(jet::eq_32(jet::num_outputs(), 7));
-
+fn funding_path(
+    expected_asset_amount: u64,
+    input_option_abf: u256,
+    input_option_vbf: u256,
+    input_grantor_abf: u256,
+    input_grantor_vbf: u256,
+    output_option_abf: u256,
+    output_option_vbf: u256,
+    output_grantor_abf: u256,
+    output_grantor_vbf: u256
+) {
     ensure_input_and_output_script_hash_eq(0);
     ensure_input_and_output_script_hash_eq(1);
+
+    verify_input_reissuance_token(0, param::OPTION_REISSUANCE_TOKEN_ASSET, input_option_abf, input_option_vbf);
+    verify_input_reissuance_token(1, param::GRANTOR_REISSUANCE_TOKEN_ASSET, input_grantor_abf, input_grantor_vbf);
+
+    verify_output_reissuance_token(0, param::OPTION_REISSUANCE_TOKEN_ASSET, output_option_abf, output_option_vbf);
+    verify_output_reissuance_token(1, param::GRANTOR_REISSUANCE_TOKEN_ASSET, output_grantor_abf, output_grantor_vbf);
+
     assert!(dbg!(jet::eq_256(get_output_script_hash(0), get_output_script_hash(1))));
 
     assert!(jet::le_32(jet::current_index(), 1));
@@ -135,11 +243,6 @@ fn funding_path(expected_asset_amount: u64) {
     ensure_output_asset_with_amount_eq(2, param::COLLATERAL_ASSET_ID, collateral_amount);
     ensure_output_asset_with_amount_eq(3, param::OPTION_TOKEN_ASSET, option_token_amount);
     ensure_output_asset_with_amount_eq(4, param::GRANTOR_TOKEN_ASSET, grantor_token_amount);
-
-    ensure_input_asset_eq(2, param::COLLATERAL_ASSET_ID);
-
-    ensure_output_asset_eq(5, param::COLLATERAL_ASSET_ID);
-    ensure_output_asset_eq(6, param::COLLATERAL_ASSET_ID);
 }
 
 /*
@@ -256,9 +359,16 @@ fn expiry_path(grantor_token_amount_to_burn: u64, collateral_amount: u64, is_cha
 
 fn main() {
     match witness::PATH {
-        Left(left_or_right: Either<u64, Either<(bool, u64, u64, u64), (bool, u64, u64)>>) => match left_or_right {
-            Left(expected_asset_amount: u64) => {
-                funding_path(expected_asset_amount)
+        Left(left_or_right: Either<(u64, u256, u256, u256, u256, u256, u256, u256, u256), Either<(bool, u64, u64, u64), (bool, u64, u64)>>) => match left_or_right {
+            Left(params: (u64, u256, u256, u256, u256, u256, u256, u256, u256)) => {
+                let (expected_asset_amount, input_option_abf, input_option_vbf, input_grantor_abf, input_grantor_vbf, output_option_abf, output_option_vbf, output_grantor_abf, output_grantor_vbf): (u64, u256, u256, u256, u256, u256, u256, u256, u256) = params;
+                funding_path(
+                    expected_asset_amount,
+                    input_option_abf, input_option_vbf,
+                    input_grantor_abf, input_grantor_vbf,
+                    output_option_abf, output_option_vbf,
+                    output_grantor_abf, output_grantor_vbf
+                );
             },
             Right(exercise_or_settlement: Either<(bool, u64, u64, u64), (bool, u64, u64)>) => match exercise_or_settlement {
                 Left(params: (bool, u64, u64, u64)) => {
