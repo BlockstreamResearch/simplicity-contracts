@@ -55,7 +55,7 @@ cargo run -p cli -- basic transfer-native \
 cargo run -p cli -- basic split-native \
     --broadcast \
     --fee-utxo a35f7fc317cf8cf2eec88b1046de046e8c7e186259bf54c01eb0ead391f1505b:4 \
-    --split-parts 2 \
+    --split-parts 5 \
     --fee-amount 100
 ```
 

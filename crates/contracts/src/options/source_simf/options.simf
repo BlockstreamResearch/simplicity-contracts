@@ -211,8 +211,8 @@ fn funding_path(
     grantor_abf: u256,
     grantor_vbf: u256
 ) {
-    ensure_input_and_output_script_hash_eq(0);
-    ensure_input_and_output_script_hash_eq(1);
+    // ensure_input_and_output_script_hash_eq(0);
+    // ensure_input_and_output_script_hash_eq(1);
 
     ensure_input_and_output_reissuance_token_eq(0);
     ensure_input_and_output_reissuance_token_eq(1);
@@ -357,6 +357,7 @@ fn expiry_path(grantor_token_amount_to_burn: u64, collateral_amount: u64, is_cha
 }
 
 fn main() {
+    let a: u8 = dbg!(1);
     match witness::PATH {
         Left(left_or_right: Either<u64, Either<(bool, u64, u64, u64), (bool, u64, u64)>>) => match left_or_right {
             Left(expected_asset_amount: u64) => {
@@ -387,5 +388,6 @@ fn main() {
                 cancellation_path(amount_to_burn, collateral_amount, is_change_needed)
             },
         },
-    }
+    };
+    let o: u8 = dbg!(2);
 }

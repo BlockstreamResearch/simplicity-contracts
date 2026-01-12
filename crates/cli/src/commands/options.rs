@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::Subcommand;
+use contracts::options::build_witness::ExtraInputs;
 use contracts::options::{OptionsArguments, finalize_options_transaction, get_options_program};
 use contracts::sdk::taproot_pubkey_gen::{TaprootPubkeyGen, get_random_seed};
 use std::str::FromStr;
@@ -75,6 +76,9 @@ pub enum Options {
         /// Account index that will pay for transaction fees and that owns a tokens to send
         #[arg(long = "account-index")]
         account_index: u32,
+        /// Transaction id (hex) and output index (vout) of the LBTC UTXO used to pay fees
+        #[arg(long = "fee-utxo")]
+        fee_utxo: Option<OutPoint>,
         /// Fee amount in satoshis (LBTC)
         #[arg(long = "fee-amount")]
         fee_amount: u64,
@@ -348,6 +352,7 @@ impl Options {
                 option_taproot_pubkey_gen,
                 collateral_amount,
                 account_index,
+                fee_utxo,
                 fee_amount,
                 broadcast,
             } => {
@@ -357,7 +362,7 @@ impl Options {
 
                 let option_arguments: OptionsArguments =
                     store.get_arguments(option_taproot_pubkey_gen)?;
-
+                
                 let taproot_pubkey_gen = TaprootPubkeyGen::build_from_str(
                     option_taproot_pubkey_gen,
                     &option_arguments,
@@ -368,6 +373,13 @@ impl Options {
                 let option_tx_out = fetch_utxo(*option_asset_utxo).await?;
                 let grantor_tx_out = fetch_utxo(*grantor_asset_utxo).await?;
                 let collateral_tx_out = fetch_utxo(*collateral_and_fee_utxo).await?;
+                
+                let fee_utxo = if let Some(outpoint) = *fee_utxo {
+                    let fee_tx_out = fetch_utxo(outpoint).await?;
+                    Some(&(outpoint, fee_tx_out.clone()))
+                } else {
+                    None
+                };
 
                 let option_tx_out_secrets =
                     option_tx_out.unblind(SECP256K1, blinder_keypair.secret_key())?;
@@ -387,16 +399,33 @@ impl Options {
                         grantor_tx_out_secrets,
                     ),
                     (*collateral_and_fee_utxo, collateral_tx_out.clone()),
-                    None,
+                    fee_utxo,
                     &option_arguments,
                     *collateral_amount,
                     *fee_amount,
                 )?;
 
                 let tx = pst.extract_tx()?;
+                let extra_inputs = (|| {
+                    // .ok() converts Result<T, E> to Option<T>
+                    // ? on an Option returns None immediately if it is None
+                    let final_option_tx_out_secrets = tx.output[0]
+                        .unblind(SECP256K1, blinder_keypair.secret_key())
+                        .ok()?;
+
+                    let final_grantor_tx_out_secrets = tx.output[1]
+                        .unblind(SECP256K1, blinder_keypair.secret_key())
+                        .ok()?;
+
+                    Some(ExtraInputs {
+                        option_tx_out_secrets: final_option_tx_out_secrets,
+                        grantor_tx_out_secrets: final_grantor_tx_out_secrets,
+                    })
+                })();
+
                 let utxos = vec![
-                    option_tx_out.clone(),
-                    grantor_tx_out.clone(),
+                    tx.output[0].clone(),  // option_tx_out
+                    tx.output[1].clone(),  // grantor_tx_out
                     collateral_tx_out.clone(),
                 ];
 
@@ -407,6 +436,7 @@ impl Options {
                     &utxos,
                     0,
                     option_branch,
+                    extra_inputs.as_ref(),
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
                 )?;
@@ -418,6 +448,7 @@ impl Options {
                     &utxos,
                     1,
                     option_branch,
+                    extra_inputs.as_ref(),
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
                 )?;
@@ -502,6 +533,7 @@ impl Options {
                     &utxos,
                     0,
                     option_branch,
+                    None,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
                 )?;
@@ -620,6 +652,7 @@ impl Options {
                     &utxos,
                     0,
                     option_branch,
+                    None,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
                 )?;
@@ -719,6 +752,7 @@ impl Options {
                     &utxos,
                     0,
                     option_branch,
+                    None,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
                 )?;
@@ -822,6 +856,7 @@ impl Options {
                     &utxos,
                     0,
                     option_branch,
+                    None,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
                 )?;

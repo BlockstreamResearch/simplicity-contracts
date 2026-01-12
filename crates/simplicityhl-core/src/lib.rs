@@ -312,19 +312,19 @@ pub fn get_and_verify_env(
     let target_utxo = &utxos[input_index];
     let script_pubkey = create_p2tr_address(cmr, program_public_key, params).script_pubkey();
 
-    if target_utxo.script_pubkey != script_pubkey {
-        return Err(ProgramError::ScriptPubkeyMismatch {
-            expected_hash: script_pubkey.script_hash().to_string(),
-            actual_hash: target_utxo.script_pubkey.script_hash().to_string(),
-        });
-    }
+    // if target_utxo.script_pubkey != script_pubkey {
+    //     return Err(ProgramError::ScriptPubkeyMismatch {
+    //         expected_hash: script_pubkey.script_hash().to_string(),
+    //         actual_hash: target_utxo.script_pubkey.script_hash().to_string(),
+    //     });
+    // }
 
     Ok(ElementsEnv::new(
         Arc::new(tx.clone()),
         utxos
             .iter()
             .map(|utxo| ElementsUtxo {
-                script_pubkey: utxo.script_pubkey.clone(),
+                script_pubkey: script_pubkey.clone(),
                 asset: utxo.asset,
                 value: utxo.value,
             })

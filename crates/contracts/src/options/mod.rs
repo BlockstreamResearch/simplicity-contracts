@@ -1,4 +1,4 @@
-use crate::options::build_witness::{OptionBranch, build_option_witness};
+use crate::options::build_witness::{ExtraInputs, OptionBranch, build_option_witness};
 
 use std::sync::Arc;
 
@@ -77,9 +77,10 @@ pub fn execute_options_program(
     compiled_program: &CompiledProgram,
     env: &ElementsEnv<Arc<Transaction>>,
     option_branch: OptionBranch,
+    extra_inputs: Option<&ExtraInputs>,
     runner_log_level: TrackerLogLevel,
 ) -> Result<Arc<RedeemNode<Elements>>, ProgramError> {
-    let witness_values = build_option_witness(option_branch, None);
+    let witness_values = build_option_witness(option_branch, extra_inputs);
 
     Ok(run_program(compiled_program, witness_values, env, runner_log_level)?.0)
 }
@@ -97,6 +98,7 @@ pub fn finalize_options_transaction(
     utxos: &[TxOut],
     input_index: usize,
     option_branch: OptionBranch,
+    extra_inputs: Option<&ExtraInputs>,
     params: &'static AddressParams,
     genesis_hash: elements::BlockHash,
 ) -> Result<Transaction, ProgramError> {
@@ -111,7 +113,7 @@ pub fn finalize_options_transaction(
     )?;
 
     let pruned =
-        execute_options_program(options_program, &env, option_branch, TrackerLogLevel::None)?;
+        execute_options_program(options_program, &env, option_branch, extra_inputs, TrackerLogLevel::Trace)?;
 
     let (simplicity_program_bytes, simplicity_witness_bytes) = pruned.to_vec_with_witness();
     let cmr = pruned.cmr();

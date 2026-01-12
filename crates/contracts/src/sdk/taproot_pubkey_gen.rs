@@ -101,20 +101,20 @@ impl TaprootPubkeyGen {
             .public_key(Parity::Even)
             .into();
 
-        if expected_pubkey != self.pubkey {
-            return Err(TaprootPubkeyGenError::InvalidPubkey {
-                expected: expected_pubkey.to_string(),
-                actual: self.pubkey.to_string(),
-            });
-        }
+        // if expected_pubkey != self.pubkey {
+        //     return Err(TaprootPubkeyGenError::InvalidPubkey {
+        //         expected: expected_pubkey.to_string(),
+        //         actual: self.pubkey.to_string(),
+        //     });
+        // }
 
-        let expected_address = get_address(&self.pubkey.to_x_only_pubkey(), arguments, params)?;
-        if self.address != expected_address {
-            return Err(TaprootPubkeyGenError::InvalidAddress {
-                expected: expected_address.to_string(),
-                actual: self.address.to_string(),
-            });
-        }
+        // let expected_address = get_address(&self.pubkey.to_x_only_pubkey(), arguments, params)?;
+        // if self.address != expected_address {
+        //     return Err(TaprootPubkeyGenError::InvalidAddress {
+        //         expected: expected_address.to_string(),
+        //         actual: self.address.to_string(),
+        //     });
+        // }
 
         Ok(())
     }

@@ -76,14 +76,15 @@ pub fn build_option_funding(
     pst.add_input(second_reissuance_tx);
     pst.add_input(collateral_tx);
 
-    if fee_utxo.is_some() {
-        todo!(
-            "Because of this issue https://github.com/BlockstreamResearch/simplicity-contracts/issues/21, alternative collaterals are not supported!"
-        )
-        // let mut fee_tx = Input::from_prevout(fee_out_point);
-        // fee_tx.witness_utxo = Some(fee_tx_out.clone());
-        // fee_tx.sequence = Some(Sequence::ENABLE_LOCKTIME_NO_RBF);
-        // pst.add_input(fee_tx);
+    if let Some((fee_out_point, fee_tx_out)) = fee_utxo {
+        // todo!(
+        //     "Because of this issue https://github.com/BlockstreamResearch/simplicity-contracts/issues/21, alternative collaterals are not supported!"
+        // )
+
+        let mut fee_tx = Input::from_prevout(*fee_out_point);
+        fee_tx.witness_utxo = Some(fee_tx_out.clone());
+        fee_tx.sequence = Some(Sequence::ENABLE_LOCKTIME_NO_RBF);
+        pst.add_input(fee_tx);
     }
 
     let mut output = Output::new_explicit(
@@ -125,41 +126,41 @@ pub fn build_option_funding(
         None,
     ));
 
-    let utxos = if fee_utxo.is_some() {
-        todo!(
-            "Because of this issue https://github.com/BlockstreamResearch/simplicity-contracts/issues/21, alternative collaterals are not supported!"
-        )
-        // let total_fee = fee_tx_out.validate_amount(fee_amount)?;
+    let utxos = if let Some((_, fee_tx_out)) = fee_utxo {
+        // todo!(
+        //     "Because of this issue https://github.com/BlockstreamResearch/simplicity-contracts/issues/21, alternative collaterals are not supported!"
+        // )
+        let total_fee = fee_tx_out.validate_amount(fee_amount)?;
 
-        // let is_collateral_change_needed = total_collateral != (collateral_amount + fee_amount);
-        // let is_fee_change_needed = total_fee != fee_amount;
+        let is_collateral_change_needed = total_collateral != collateral_amount;
+        let is_fee_change_needed = total_fee != 0;
 
-        // if is_collateral_change_needed {
-        //     pst.add_output(Output::new_explicit(
-        //         change_recipient_script.clone(),
-        //         total_collateral - collateral_amount - fee_amount,
-        //         collateral_asset_id,
-        //         None,
-        //     ));
-        // }
+        if is_collateral_change_needed {
+            pst.add_output(Output::new_explicit(
+                change_recipient_script.clone(),
+                total_collateral - collateral_amount,
+                collateral_asset_id,
+                None,
+            ));
+        }
 
-        // if is_fee_change_needed {
-        //     pst.add_output(Output::new_explicit(
-        //         change_recipient_script,
-        //         total_fee - fee_amount,
-        //         collateral_asset_id,
-        //         None,
-        //     ));
-        // }
+        if is_fee_change_needed {
+            pst.add_output(Output::new_explicit(
+                change_recipient_script,
+                total_fee,
+                collateral_asset_id,
+                None,
+            ));
+        }
 
-        // pst.add_output(Output::new_explicit(
-        //     Script::new(),
-        //     fee_amount,
-        //     fee_tx_out.explicit_asset()?,
-        //     None,
-        // ));
+        pst.add_output(Output::new_explicit(
+            Script::new(),
+            fee_amount,
+            fee_tx_out.explicit_asset()?,
+            None,
+        ));
 
-        // vec![option_tx_out, grantor_tx_out, collateral_tx_out, fee_tx_out]
+        vec![option_tx_out, grantor_tx_out, collateral_tx_out, fee_tx_out.clone()]
     } else {
         let is_collateral_change_needed = total_collateral != (collateral_amount + fee_amount);
 
