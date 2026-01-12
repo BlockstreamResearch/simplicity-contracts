@@ -526,7 +526,7 @@ impl Options {
                     (*collateral_utxo, collateral_tx_out.clone()),
                     (*option_asset_utxo, option_tx_out.clone()),
                     (*asset_utxo, asset_tx_out.clone()),
-                    (*fee_utxo, fee_tx_out.clone()),
+                    Some((*fee_utxo, fee_tx_out.clone())),
                     *amount_to_burn,
                     *fee_amount,
                     &option_arguments,
