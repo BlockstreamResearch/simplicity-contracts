@@ -64,7 +64,7 @@ pub fn build_option_funding(
     first_reissuance_tx.issuance_asset_entropy = Some(option_arguments.option_token_entropy());
     first_reissuance_tx.blinded_issuance = Some(0x00);
     first_reissuance_tx.issuance_blinding_nonce = Some(input_option_secrets.asset_bf.into_inner());
-    first_reissuance_tx.sequence = Some(Sequence::ENABLE_LOCKTIME_NO_RBF);
+    first_reissuance_tx.sequence = Some(Sequence::ZERO);
 
     let mut second_reissuance_tx = Input::from_prevout(grantor_out_point);
     second_reissuance_tx.witness_utxo = Some(grantor_tx_out.clone());
@@ -74,11 +74,11 @@ pub fn build_option_funding(
     second_reissuance_tx.blinded_issuance = Some(0x00);
     second_reissuance_tx.issuance_blinding_nonce =
         Some(input_grantor_secrets.asset_bf.into_inner());
-    second_reissuance_tx.sequence = Some(Sequence::ENABLE_LOCKTIME_NO_RBF);
+    second_reissuance_tx.sequence = Some(Sequence::ZERO);
 
     let mut collateral_tx = Input::from_prevout(collateral_out_point);
     collateral_tx.witness_utxo = Some(collateral_tx_out.clone());
-    collateral_tx.sequence = Some(Sequence::ENABLE_LOCKTIME_NO_RBF);
+    collateral_tx.sequence = Some(Sequence::ZERO);
 
     pst.add_input(first_reissuance_tx);
     pst.add_input(second_reissuance_tx);
@@ -87,7 +87,7 @@ pub fn build_option_funding(
     if let Some((fee_out_point, fee_tx_out)) = fee_utxo {
         let mut fee_tx = Input::from_prevout(*fee_out_point);
         fee_tx.witness_utxo = Some(fee_tx_out.clone());
-        fee_tx.sequence = Some(Sequence::ENABLE_LOCKTIME_NO_RBF);
+        fee_tx.sequence = Some(Sequence::ZERO);
         pst.add_input(fee_tx);
     }
 

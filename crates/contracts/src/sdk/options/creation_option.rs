@@ -62,7 +62,7 @@ pub fn build_option_creation(
     first_issuance_tx.issuance_inflation_keys = Some(1);
     first_issuance_tx.issuance_asset_entropy = Some(issuance_asset_entropy);
     first_issuance_tx.blinded_issuance = Some(0x00);
-    first_issuance_tx.sequence = Some(Sequence::ENABLE_LOCKTIME_NO_RBF);
+    first_issuance_tx.sequence = Some(Sequence::ZERO);
 
     let mut second_issuance_tx = Input::from_prevout(second_out_point);
     second_issuance_tx.witness_utxo = Some(second_tx_out.clone());
@@ -70,7 +70,7 @@ pub fn build_option_creation(
     second_issuance_tx.issuance_inflation_keys = Some(1);
     second_issuance_tx.issuance_asset_entropy = Some(issuance_asset_entropy);
     second_issuance_tx.blinded_issuance = Some(0x00);
-    second_issuance_tx.sequence = Some(Sequence::ENABLE_LOCKTIME_NO_RBF);
+    second_issuance_tx.sequence = Some(Sequence::ZERO);
 
     let (first_issuance_token, first_reissuance_asset) = first_issuance_tx.issuance_ids();
     let (second_issuance_token, second_reissuance_asset) = second_issuance_tx.issuance_ids();

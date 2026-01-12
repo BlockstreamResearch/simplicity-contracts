@@ -72,17 +72,17 @@ pub fn build_option_settlement(
 
     let mut settlement_input = Input::from_prevout(settlement_out_point);
     settlement_input.witness_utxo = Some(settlement_tx_out.clone());
-    settlement_input.sequence = Some(Sequence::ENABLE_LOCKTIME_NO_RBF);
+    settlement_input.sequence = Some(Sequence::ZERO);
     pst.add_input(settlement_input);
 
     let mut grantor_input = Input::from_prevout(grantor_out_point);
     grantor_input.witness_utxo = Some(grantor_tx_out.clone());
-    grantor_input.sequence = Some(Sequence::ENABLE_LOCKTIME_NO_RBF);
+    grantor_input.sequence = Some(Sequence::ZERO);
     pst.add_input(grantor_input);
 
     let mut fee_input = Input::from_prevout(fee_out_point);
     fee_input.witness_utxo = Some(fee_tx_out.clone());
-    fee_input.sequence = Some(Sequence::ENABLE_LOCKTIME_NO_RBF);
+    fee_input.sequence = Some(Sequence::ZERO);
     pst.add_input(fee_input);
 
     let is_settlement_change_needed = available_settlement_asset != asset_amount;
