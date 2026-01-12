@@ -585,7 +585,7 @@ mod options_tests {
                     witness: elements::TxOutWitness::default(),
                 },
             ),
-            (
+            Some((
                 OutPoint::default(),
                 TxOut {
                     asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
@@ -594,7 +594,7 @@ mod options_tests {
                     script_pubkey: Script::new(),
                     witness: elements::TxOutWitness::default(),
                 },
-            ),
+            )),
             option_amount_to_burn,
             50,
             &option_arguments,
