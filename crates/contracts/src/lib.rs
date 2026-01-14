@@ -18,7 +18,8 @@ pub mod bytes32_tr_storage;
 pub mod finance;
 #[cfg(feature = "simple-storage")]
 pub mod simple_storage;
-
+#[cfg(feature = "smt-storage")]
+pub mod smt_storage;
 #[cfg(feature = "finance-dcd")]
 pub use finance::dcd;
 #[cfg(feature = "finance-option-offer")]
