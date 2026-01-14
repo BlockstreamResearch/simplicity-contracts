@@ -1,7 +1,7 @@
 use crate::error::TransactionBuildError;
 use crate::sdk::validation::TxOutExt;
 
-use simplicityhl::elements::bitcoin::secp256k1;
+use crate::sdk::finalization::PartialPset;
 use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
 use simplicityhl::elements::{Address, OutPoint, TxOut};
 
@@ -17,16 +17,11 @@ pub fn transfer_asset(
     fee_utxo: (OutPoint, TxOut),
     to_address: &Address,
     send_amount: u64,
-    fee_amount: u64,
-) -> Result<PartiallySignedTransaction, TransactionBuildError> {
+) -> Result<PartialPset, TransactionBuildError> {
     let (asset_out_point, asset_tx_out) = asset_utxo;
     let (fee_out_point, fee_tx_out) = fee_utxo;
 
     let (asset_id, total_input_asset) = asset_tx_out.explicit()?;
-    let (fee_asset_id, total_lbtc_left) = (
-        fee_tx_out.explicit_asset()?,
-        fee_tx_out.validate_amount(fee_amount)?,
-    );
 
     if send_amount > total_input_asset {
         return Err(TransactionBuildError::SendAmountExceedsUtxo {
@@ -55,7 +50,6 @@ pub fn transfer_asset(
     ));
 
     let is_asset_change_needed = total_input_asset != send_amount;
-    let is_fee_change_needed = total_lbtc_left != 0;
 
     if is_asset_change_needed {
         pst.add_output(Output::new_explicit(
@@ -66,19 +60,9 @@ pub fn transfer_asset(
         ));
     }
 
-    if is_fee_change_needed {
-        pst.add_output(Output::new_explicit(
-            change_recipient_script,
-            total_lbtc_left,
-            fee_asset_id,
-            None,
-        ));
-    }
-
-    pst.add_output(Output::from_txout(TxOut::new_fee(fee_amount, fee_asset_id)));
-
-    pst.extract_tx()?
-        .verify_tx_amt_proofs(secp256k1::SECP256K1, &[asset_tx_out, fee_tx_out])?;
-
-    Ok(pst)
+    Ok(PartialPset::new(
+        pst,
+        change_recipient_script,
+        vec![asset_tx_out, fee_tx_out],
+    ))
 }

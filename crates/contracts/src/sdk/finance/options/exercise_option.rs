@@ -5,7 +5,7 @@ use crate::error::TransactionBuildError;
 
 use crate::sdk::validation::TxOutExt;
 
-use simplicityhl::elements::bitcoin::secp256k1;
+use crate::sdk::finalization::PartialPset;
 use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
 use simplicityhl::elements::{LockTime, OutPoint, Script, Sequence, TxOut};
 
@@ -29,9 +29,8 @@ pub fn build_option_exercise(
     asset_utxo: (OutPoint, TxOut),
     fee_utxo: Option<(OutPoint, TxOut)>,
     amount_to_burn: u64,
-    fee_amount: u64,
     option_arguments: &OptionsArguments,
-) -> Result<(PartiallySignedTransaction, OptionBranch), TransactionBuildError> {
+) -> Result<(PartialPset, OptionBranch), TransactionBuildError> {
     let (collateral_out_point, collateral_tx_out) = collateral_utxo;
     let (option_out_point, option_tx_out) = option_asset_utxo;
     let (asset_out_point, asset_tx_out) = asset_utxo;
@@ -71,21 +70,16 @@ pub fn build_option_exercise(
     asset_input.sequence = Some(Sequence::ZERO);
     pst.add_input(asset_input);
 
+    if asset_amount_to_pay > total_asset_amount {
+        return Err(TransactionBuildError::InsufficientSettlementAsset {
+            required: asset_amount_to_pay,
+            available: total_asset_amount,
+        });
+    }
+
     let has_separate_fee_utxo = fee_utxo.is_some();
-    let (change_recipient_script, fee_asset_id, total_lbtc_left, utxos_for_verification) =
+    let (change_recipient_script, utxos_for_verification) =
         if let Some((fee_out_point, fee_tx_out)) = fee_utxo {
-            let (fee_asset_id, total_lbtc_left) = (
-                fee_tx_out.explicit_asset()?,
-                fee_tx_out.validate_amount(fee_amount)?,
-            );
-
-            if asset_amount_to_pay > total_asset_amount {
-                return Err(TransactionBuildError::InsufficientSettlementAsset {
-                    required: asset_amount_to_pay,
-                    available: total_asset_amount,
-                });
-            }
-
             let change_recipient_script = fee_tx_out.script_pubkey.clone();
 
             let mut fee_input = Input::from_prevout(fee_out_point);
@@ -95,34 +89,19 @@ pub fn build_option_exercise(
 
             (
                 change_recipient_script,
-                fee_asset_id,
-                total_lbtc_left,
                 vec![collateral_tx_out, option_tx_out, asset_tx_out, fee_tx_out],
             )
         } else {
-            let total_required = asset_amount_to_pay + fee_amount;
-            if total_required > total_asset_amount {
-                return Err(TransactionBuildError::InsufficientSettlementAsset {
-                    required: total_required,
-                    available: total_asset_amount,
-                });
-            }
-
             let change_recipient_script = asset_tx_out.script_pubkey.clone();
-            let total_lbtc_left = total_asset_amount - asset_amount_to_pay - fee_amount;
 
             (
                 change_recipient_script,
-                settlement_asset_id,
-                total_lbtc_left,
                 vec![collateral_tx_out, option_tx_out, asset_tx_out],
             )
         };
 
     let is_collateral_change_needed = total_collateral != collateral_amount_to_get;
     let is_option_token_change_needed = total_option_token_amount != amount_to_burn;
-    let is_lbtc_change_needed = total_lbtc_left != 0;
-
     let is_asset_change_needed = has_separate_fee_utxo && total_asset_amount != asset_amount_to_pay;
 
     if is_collateral_change_needed {
@@ -166,34 +145,10 @@ pub fn build_option_exercise(
         ));
     }
 
-    if is_lbtc_change_needed {
-        pst.add_output(Output::new_explicit(
-            change_recipient_script.clone(),
-            total_lbtc_left,
-            fee_asset_id,
-            None,
-        ));
-    }
-
-    pst.add_output(Output::new_explicit(
-        change_recipient_script,
-        collateral_amount_to_get,
-        collateral_asset_id,
-        None,
-    ));
-
-    pst.add_output(Output::new_explicit(
-        Script::new(),
-        fee_amount,
-        fee_asset_id,
-        None,
-    ));
-
-    pst.extract_tx()?
-        .verify_tx_amt_proofs(secp256k1::SECP256K1, &utxos_for_verification)?;
+    let non_finalized_pset = PartialPset::new(pst, change_recipient_script, utxos_for_verification);
 
     Ok((
-        pst,
+        non_finalized_pset,
         OptionBranch::Exercise {
             is_change_needed: is_collateral_change_needed,
             amount_to_burn,

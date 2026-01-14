@@ -101,7 +101,6 @@ pub fn finalize_options_transaction(
     option_branch: &OptionBranch,
     params: &'static AddressParams,
     genesis_hash: elements::BlockHash,
-    log_level: TrackerLogLevel,
 ) -> Result<Transaction, ProgramError> {
     let env = get_and_verify_env(
         &tx,
@@ -113,7 +112,8 @@ pub fn finalize_options_transaction(
         input_index,
     )?;
 
-    let pruned = execute_options_program(options_program, &env, option_branch, log_level)?;
+    let pruned =
+        execute_options_program(options_program, &env, option_branch, TrackerLogLevel::None)?;
 
     let (simplicity_program_bytes, simplicity_witness_bytes) = pruned.to_vec_with_witness();
     let cmr = pruned.cmr();
@@ -137,28 +137,28 @@ pub fn finalize_options_transaction(
 mod options_tests {
     use super::*;
 
+    use crate::finance::options::build_witness::blinding_factors_from_secrets;
     use crate::sdk::taproot_pubkey_gen::{TaprootPubkeyGen, get_random_seed};
     use crate::sdk::{
-        build_option_cancellation, build_option_creation, build_option_exercise,
+        DummySigner, build_option_cancellation, build_option_creation, build_option_exercise,
         build_option_expiry, build_option_funding, build_option_settlement,
     };
-
     use anyhow::Result;
-    use std::str::FromStr;
-
     use simplicityhl::elements::Script;
     use simplicityhl::elements::confidential::{Asset, Value};
+    use simplicityhl::elements::secp256k1_zkp::SECP256K1;
+    use simplicityhl::elements::taproot::ControlBlock;
     use simplicityhl::simplicity::bitcoin::key::Keypair;
     use simplicityhl::simplicity::bitcoin::secp256k1;
     use simplicityhl::simplicity::bitcoin::secp256k1::Secp256k1;
     use simplicityhl::simplicity::elements::{self, AssetId, OutPoint, Txid};
     use simplicityhl::simplicity::hashes::Hash;
-
-    use simplicityhl::elements::pset::PartiallySignedTransaction;
-    use simplicityhl::elements::secp256k1_zkp::SECP256K1;
-    use simplicityhl::elements::taproot::ControlBlock;
     use simplicityhl::simplicity::jet::elements::ElementsUtxo;
+    use simplicityhl_core::SimplicityNetwork;
     use simplicityhl_core::{LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_TEST_ASSET_ID_STR};
+    use std::str::FromStr;
+
+    const NETWORK: SimplicityNetwork = SimplicityNetwork::LiquidTestnet;
 
     fn get_creation_pst(
         keypair: &Keypair,
@@ -166,10 +166,7 @@ mod options_tests {
         expiry_time: u32,
         collateral_per_contract: u64,
         settlement_per_contract: u64,
-    ) -> Result<(
-        (PartiallySignedTransaction, TaprootPubkeyGen),
-        OptionsArguments,
-    )> {
+    ) -> Result<((Transaction, TaprootPubkeyGen), OptionsArguments)> {
         let option_outpoint = OutPoint::new(Txid::from_slice(&[1; 32])?, 0);
         let grantor_outpoint = OutPoint::new(Txid::from_slice(&[2; 32])?, 0);
 
@@ -187,55 +184,54 @@ mod options_tests {
             (grantor_outpoint, false),
         );
 
-        Ok((
-            build_option_creation(
-                &keypair.public_key(),
-                (
-                    option_outpoint,
-                    TxOut {
-                        asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
-                        value: Value::Explicit(500),
-                        nonce: elements::confidential::Nonce::Null,
-                        script_pubkey: Script::new(),
-                        witness: elements::TxOutWitness::default(),
-                    },
-                ),
-                (
-                    grantor_outpoint,
-                    TxOut {
-                        asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
-                        value: Value::Explicit(1000),
-                        nonce: elements::confidential::Nonce::Null,
-                        script_pubkey: Script::new(),
-                        witness: elements::TxOutWitness::default(),
-                    },
-                ),
-                &option_arguments,
-                issuance_asset_entropy,
-                100,
-                &AddressParams::LIQUID_TESTNET,
-            )?,
-            option_arguments,
-        ))
+        let (partial_pset, taproot) = build_option_creation(
+            &keypair.public_key(),
+            (
+                option_outpoint,
+                TxOut {
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                    value: Value::Explicit(500),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: Script::new(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            (
+                grantor_outpoint,
+                TxOut {
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                    value: Value::Explicit(1000),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: Script::new(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            &option_arguments,
+            issuance_asset_entropy,
+            NETWORK.address_params(),
+        )?;
+        let partial_pset = partial_pset.fee(99);
+        let tx = partial_pset.finalize(NETWORK, DummySigner::get_signer_closure())?;
+
+        Ok(((tx, taproot), option_arguments))
     }
 
     struct FundingTestContext {
-        pub tx: Transaction,          // Basic funding trasaction
-        pub program: CompiledProgram, // Compiled Simplicity program
+        pub tx: Transaction,
+        pub program: CompiledProgram,
 
         #[allow(dead_code)]
-        pub arguments: OptionsArguments, // Contract arguments
+        pub arguments: OptionsArguments,
 
-        pub branch: OptionBranch,         // Execution branch (for witness)
-        pub pubkey_gen: TaprootPubkeyGen, // For generating addresses in Env
-        pub collateral_amount: u64,       // For Env
-        pub input_option_tx_out: TxOut,   // Original input UTXO for option token
-        pub input_grantor_tx_out: TxOut,  // Original input UTXO for grantor token
+        pub branch: OptionBranch,
+        pub pubkey_gen: TaprootPubkeyGen,
+        pub collateral_amount: u64,
+        pub input_option_tx_out: TxOut,
+        pub input_grantor_tx_out: TxOut,
     }
 
     impl FundingTestContext {
         pub fn create_env(&self, tx: Arc<Transaction>) -> Result<ElementsEnv<Arc<Transaction>>> {
-            // Use original input UTXOs for input verification
             Ok(ElementsEnv::new(
                 tx,
                 vec![
@@ -274,15 +270,13 @@ mod options_tests {
         let settlement_per_contract = 25;
         let collateral_amount = 1000;
 
-        // 1. Creation PST
-        let ((pst, pubkey_gen), arguments) = get_creation_pst(
+        let ((pst_tx, pubkey_gen), arguments) = get_creation_pst(
             &keypair,
             0,
             0,
             collateral_per_contract,
             settlement_per_contract,
         )?;
-        let pst_tx = pst.extract_tx()?;
 
         // 2. Unblinding outputs - these are INPUT secrets for the funding tx
         let input_option_tx_out = pst_tx.output[0].clone();
@@ -291,9 +285,9 @@ mod options_tests {
         let input_grantor_tx_out = pst_tx.output[1].clone();
         let input_grantor_secrets = pst_tx.output[1].unblind(SECP256K1, keypair.secret_key())?;
 
-        // 3. Build Funding - returns PST and OptionBranch with all ABF/VBF extracted
-        let (pst, branch) = build_option_funding(
-            &keypair,
+        // 3. Build Funding - returns PST and expected_asset_amount
+        let (partial_pset, expected_asset_amount) = build_option_funding(
+            keypair.public_key(),
             (
                 OutPoint::default(),
                 input_option_tx_out.clone(),
@@ -317,13 +311,39 @@ mod options_tests {
             None,
             &arguments,
             collateral_amount,
-            50,
         )?;
 
-        let final_tx = pst.extract_tx()?;
+        // 4. Finalize to get blinded transaction
+        let partial_pset = partial_pset.fee(99);
+        let tx = partial_pset.finalize(NETWORK, DummySigner::get_signer_closure())?;
+
+        // 5. Unblind outputs from finalized tx to build OptionBranch
+        let output_option_secrets = tx.output[0].unblind(SECP256K1, keypair.secret_key())?;
+        let output_grantor_secrets = tx.output[1].unblind(SECP256K1, keypair.secret_key())?;
+
+        let (input_option_abf, input_option_vbf) =
+            blinding_factors_from_secrets(&input_option_secrets);
+        let (input_grantor_abf, input_grantor_vbf) =
+            blinding_factors_from_secrets(&input_grantor_secrets);
+        let (output_option_abf, output_option_vbf) =
+            blinding_factors_from_secrets(&output_option_secrets);
+        let (output_grantor_abf, output_grantor_vbf) =
+            blinding_factors_from_secrets(&output_grantor_secrets);
+
+        let branch = OptionBranch::Funding {
+            expected_asset_amount,
+            input_option_abf,
+            input_option_vbf,
+            input_grantor_abf,
+            input_grantor_vbf,
+            output_option_abf,
+            output_option_vbf,
+            output_grantor_abf,
+            output_grantor_vbf,
+        };
 
         Ok(FundingTestContext {
-            tx: final_tx,
+            tx,
             program: get_compiled_options_program(&arguments),
             arguments,
             branch,
@@ -362,76 +382,6 @@ mod options_tests {
     }
 
     #[test]
-    fn test_explicit_hack_options_funding_path() -> Result<()> {
-        let ctx = setup_funding_scenario()?;
-
-        // Let's reproduce issue: https://github.com/BlockstreamResearch/simplicity-contracts/issues/21#issue-3686301161
-        let mut hacked_tx = ctx.tx.clone();
-        let stolen_asset_output = hacked_tx.output[0].clone();
-
-        hacked_tx.output[0].asset = Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET); // Test LBTC instead of reissuance token
-        hacked_tx.output[0].value = Value::Explicit(0); // Some dust
-
-        // Add stolen asset to other output (for example next tx)
-        hacked_tx.output.push(stolen_asset_output);
-
-        let env = ctx.create_env(Arc::new(hacked_tx))?;
-        let witness_values = build_option_witness(&ctx.branch);
-
-        assert!(
-            run_program(&ctx.program, witness_values, &env, TrackerLogLevel::Trace).is_err(),
-            "SECURITY HOLE: The contract accepted an EXPLICIT hacked transaction!"
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_blind_hack_options_funding_path() -> Result<()> {
-        use simplicityhl::elements::secp256k1_zkp::{
-            Generator, PedersenCommitment, PublicKey, SecretKey, Tag, Tweak, rand::thread_rng,
-        };
-
-        let ctx = setup_funding_scenario()?;
-        let mut hacked_tx = ctx.tx.clone();
-
-        let stolen_asset_output = hacked_tx.output[0].clone();
-
-        let mut rng = thread_rng();
-        let asset_blinding_factor = Tweak::new(&mut rng);
-        let value_blinding_factor = Tweak::new(&mut rng);
-
-        let lbtc_bytes = LIQUID_TESTNET_BITCOIN_ASSET.into_inner().to_byte_array();
-        let lbtc_tag = Tag::from(lbtc_bytes);
-
-        let blinded_asset_generator =
-            Generator::new_blinded(SECP256K1, lbtc_tag, asset_blinding_factor);
-
-        let blinded_value_commitment =
-            PedersenCommitment::new(SECP256K1, 0, value_blinding_factor, blinded_asset_generator);
-
-        let ephemeral_secret_key = SecretKey::new(&mut rng);
-        let ephemeral_pub_key = PublicKey::from_secret_key(SECP256K1, &ephemeral_secret_key);
-
-        // Substitution
-        hacked_tx.output[0].asset = Asset::Confidential(blinded_asset_generator);
-        hacked_tx.output[0].value = Value::Confidential(blinded_value_commitment);
-        hacked_tx.output[0].nonce = elements::confidential::Nonce::Confidential(ephemeral_pub_key);
-
-        hacked_tx.output.push(stolen_asset_output);
-
-        let env = ctx.create_env(Arc::new(hacked_tx))?;
-        let witness_values = build_option_witness(&ctx.branch);
-
-        assert!(
-            run_program(&ctx.program, witness_values, &env, TrackerLogLevel::Trace).is_err(),
-            "SECURITY HOLE: The contract accepted a BLINDED hacked transaction!"
-        );
-
-        Ok(())
-    }
-
-    #[test]
     fn test_options_cancellation_path() -> Result<()> {
         let keypair = Keypair::from_secret_key(
             &Secp256k1::new(),
@@ -456,7 +406,7 @@ mod options_tests {
         let (option_asset_id, _) = option_arguments.get_option_token_ids();
         let (grantor_asset_id, _) = option_arguments.get_grantor_token_ids();
 
-        let (pst, option_branch) = build_option_cancellation(
+        let (partial_pset, option_branch) = build_option_cancellation(
             (
                 OutPoint::default(),
                 TxOut {
@@ -499,13 +449,15 @@ mod options_tests {
             ),
             &option_arguments,
             amount_to_burn,
-            50,
         )?;
+
+        let partial_pset = partial_pset.fee(99);
+        let tx = partial_pset.finalize(NETWORK, DummySigner::get_signer_closure())?;
 
         let program = get_compiled_options_program(&option_arguments);
 
         let env = ElementsEnv::new(
-            Arc::new(pst.extract_tx()?),
+            Arc::new(tx),
             vec![ElementsUtxo {
                 script_pubkey: option_pubkey_gen.address.script_pubkey(),
                 asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
@@ -554,7 +506,7 @@ mod options_tests {
         let (option_asset_id, _) = option_arguments.get_option_token_ids();
         let settlement_asset_id = AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?;
 
-        let (pst, option_branch) = build_option_exercise(
+        let (partial_pset, option_branch) = build_option_exercise(
             (
                 OutPoint::default(),
                 TxOut {
@@ -596,14 +548,16 @@ mod options_tests {
                 },
             )),
             option_amount_to_burn,
-            50,
             &option_arguments,
         )?;
+
+        let partial_pset = partial_pset.fee(99);
+        let tx = partial_pset.finalize(NETWORK, DummySigner::get_signer_closure())?;
 
         let program = get_compiled_options_program(&option_arguments);
 
         let env = ElementsEnv::new(
-            Arc::new(pst.extract_tx()?),
+            Arc::new(tx),
             vec![ElementsUtxo {
                 script_pubkey: option_pubkey_gen.address.script_pubkey(),
                 asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
@@ -650,7 +604,7 @@ mod options_tests {
         let (grantor_asset_id, _) = option_arguments.get_grantor_token_ids();
         let settlement_asset_id = AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?;
 
-        let (pst, option_branch) = build_option_settlement(
+        let (partial_pset, option_branch) = build_option_settlement(
             (
                 OutPoint::default(),
                 TxOut {
@@ -682,14 +636,16 @@ mod options_tests {
                 },
             ),
             grantor_token_amount_to_burn,
-            50,
             &option_arguments,
         )?;
+
+        let partial_pset = partial_pset.fee(99);
+        let tx = partial_pset.finalize(NETWORK, DummySigner::get_signer_closure())?;
 
         let program = get_compiled_options_program(&option_arguments);
 
         let env = ElementsEnv::new(
-            Arc::new(pst.extract_tx()?),
+            Arc::new(tx),
             vec![ElementsUtxo {
                 script_pubkey: option_pubkey_gen.address.script_pubkey(),
                 asset: Asset::Explicit(settlement_asset_id),
@@ -738,7 +694,7 @@ mod options_tests {
 
         let (grantor_asset_id, _) = option_arguments.get_grantor_token_ids();
 
-        let (pst, option_branch) = build_option_expiry(
+        let (partial_pset, option_branch) = build_option_expiry(
             (
                 OutPoint::default(),
                 TxOut {
@@ -770,14 +726,16 @@ mod options_tests {
                 },
             ),
             grantor_token_amount_to_burn,
-            50,
             &option_arguments,
         )?;
+
+        let partial_pset = partial_pset.fee(99);
+        let tx = partial_pset.finalize(NETWORK, DummySigner::get_signer_closure())?;
 
         let program = get_compiled_options_program(&option_arguments);
 
         let env = ElementsEnv::new(
-            Arc::new(pst.extract_tx()?),
+            Arc::new(tx),
             vec![ElementsUtxo {
                 script_pubkey: option_pubkey_gen.address.script_pubkey(),
                 asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),

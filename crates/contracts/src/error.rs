@@ -1,3 +1,5 @@
+use simplicityhl::elements::AssetId;
+
 /// Errors from UTXO validation operations.
 #[derive(Debug, thiserror::Error)]
 pub enum ValidationError {
@@ -123,6 +125,27 @@ pub enum TransactionBuildError {
 
     #[error(transparent)]
     TaprootPubkeyGen(#[from] TaprootPubkeyGenError),
+
+    #[error("Wrong asset for paying fees, got: {got}, expected: {expected}")]
+    IncorrectFeeAsset { got: AssetId, expected: AssetId },
+
+    #[error(
+        "Insufficient funds: available: {available} units for asset '{asset_id}', has to be at least: {has_to_be}"
+    )]
+    InsufficientAssetAmount {
+        available: u64,
+        has_to_be: u64,
+        asset_id: AssetId,
+    },
+
+    #[error("Transaction dymmy signer signature error: {0}")]
+    PsetDummySign(simplicityhl_core::ProgramError),
+
+    #[error("Transaction signature error: {0}")]
+    PsetSign(simplicityhl_core::ProgramError),
+
+    #[error("Fee rate for building transaction missing")]
+    FeeRateIsEmpty,
 }
 
 /// Errors from extracting arguments from Arguments struct.

@@ -1,7 +1,7 @@
 use crate::error::TransactionBuildError;
 use crate::sdk::validation::TxOutExt;
 
-use simplicityhl::elements::bitcoin::secp256k1;
+use crate::sdk::finalization::PartialPset;
 use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
 use simplicityhl::elements::{OutPoint, TxOut};
 
@@ -15,18 +15,14 @@ use simplicityhl::elements::{OutPoint, TxOut};
 pub fn split_native_any(
     utxo: (OutPoint, TxOut),
     parts_to_split: u64,
-    fee_amount: u64,
-) -> Result<PartiallySignedTransaction, TransactionBuildError> {
+) -> Result<PartialPset, TransactionBuildError> {
     if parts_to_split == 0 {
         return Err(TransactionBuildError::InvalidSplitParts);
     }
 
     let (out_point, tx_out) = utxo;
 
-    let (asset_id, total_lbtc_left) = (
-        tx_out.explicit_asset()?,
-        tx_out.validate_amount(fee_amount)?,
-    );
+    let (policy_asset_id, total_policy_asset_left) = tx_out.explicit()?;
 
     let recipient_script = tx_out.script_pubkey.clone();
 
@@ -36,29 +32,16 @@ pub fn split_native_any(
     input.witness_utxo = Some(tx_out.clone());
     pst.add_input(input);
 
-    let split_amount = total_lbtc_left / parts_to_split;
-    let change_amount = total_lbtc_left - split_amount * (parts_to_split - 1);
+    let split_amount = total_policy_asset_left / parts_to_split;
 
     for _ in 0..(parts_to_split - 1) {
         pst.add_output(Output::new_explicit(
             recipient_script.clone(),
             split_amount,
-            asset_id,
+            policy_asset_id,
             None,
         ));
     }
 
-    pst.add_output(Output::new_explicit(
-        recipient_script,
-        change_amount,
-        asset_id,
-        None,
-    ));
-
-    pst.add_output(Output::from_txout(TxOut::new_fee(fee_amount, asset_id)));
-
-    pst.extract_tx()?
-        .verify_tx_amt_proofs(secp256k1::SECP256K1, &[tx_out])?;
-
-    Ok(pst)
+    Ok(PartialPset::new(pst, recipient_script, vec![tx_out]))
 }

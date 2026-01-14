@@ -7,6 +7,9 @@
 
 use simplicityhl::simplicity::elements;
 use simplicityhl::simplicity::hashes::{Hash, sha256};
+use std::str::FromStr;
+
+pub const PUBLIC_SECRET_BLINDER_KEY: [u8; 32] = [1; 32];
 
 /// Policy asset id (hex, BE) for Liquid mainnet.
 pub const LIQUID_POLICY_ASSET_STR: &str =
@@ -34,6 +37,16 @@ pub static LIQUID_TESTNET_BITCOIN_ASSET: std::sync::LazyLock<elements::AssetId> 
         ]))
     });
 
+/// Genesis block hash for Liquid mainnet.
+pub static LIQUID_MAINNET_GENESIS: std::sync::LazyLock<elements::BlockHash> =
+    std::sync::LazyLock::new(|| {
+        elements::BlockHash::from_byte_array([
+            0x03, 0x60, 0x20, 0x8a, 0x88, 0x96, 0x92, 0x37, 0x2c, 0x8d, 0x68, 0xb0, 0x84, 0xa6,
+            0x2e, 0xfd, 0xf6, 0x0e, 0xa1, 0xa3, 0x59, 0xa0, 0x4c, 0x94, 0xb2, 0x0d, 0x22, 0x36,
+            0x58, 0x27, 0x66, 0x14,
+        ])
+    });
+
 /// Genesis block hash for Liquid testnet.
 pub static LIQUID_TESTNET_GENESIS: std::sync::LazyLock<elements::BlockHash> =
     std::sync::LazyLock::new(|| {
@@ -44,4 +57,76 @@ pub static LIQUID_TESTNET_GENESIS: std::sync::LazyLock<elements::BlockHash> =
         ])
     });
 
-pub const PUBLIC_SECRET_BLINDER_KEY: [u8; 32] = [1; 32];
+/// Genesis block hash for Liquid regtest.
+pub static LIQUID_REGTEST_GENESIS: std::sync::LazyLock<elements::BlockHash> =
+    std::sync::LazyLock::new(|| {
+        elements::BlockHash::from_byte_array([
+            0x21, 0xca, 0xb1, 0xe5, 0xda, 0x47, 0x18, 0xea, 0x14, 0x0d, 0x97, 0x16, 0x93, 0x17,
+            0x02, 0x42, 0x2f, 0x0e, 0x6a, 0xd9, 0x15, 0xc8, 0xd9, 0xb5, 0x83, 0xca, 0xc2, 0x70,
+            0x6b, 0x2a, 0x90, 0x00,
+        ])
+    });
+
+/// The network of the elements blockchain.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SimplicityNetwork {
+    // Liquid mainnet policy asset
+    Liquid,
+    // Liquid testnet policy asset
+    LiquidTestnet,
+    /// Liquid regtest with a custom policy asset.
+    ElementsRegtest {
+        /// The policy asset to use for this regtest network.
+        /// You can use the default one using [`SimplicityNetwork::default_regtest()`].
+        policy_asset: elements::AssetId,
+    },
+}
+
+impl SimplicityNetwork {
+    /// Return the default policy asset for regtest network.
+    ///
+    /// # Panics
+    ///
+    /// Not panics as constants are defined correctly
+    #[must_use]
+    pub fn default_regtest() -> Self {
+        let policy_asset = elements::AssetId::from_str(LIQUID_DEFAULT_REGTEST_ASSET_STR).unwrap();
+        Self::ElementsRegtest { policy_asset }
+    }
+
+    /// Return the policy asset for specific network.
+    ///
+    /// # Panics
+    ///
+    /// Not panics as constants are defined correctly
+    #[must_use]
+    pub fn policy_asset(&self) -> elements::AssetId {
+        match self {
+            Self::Liquid => elements::AssetId::from_str(LIQUID_POLICY_ASSET_STR).unwrap(),
+            Self::LiquidTestnet => {
+                elements::AssetId::from_str(LIQUID_TESTNET_POLICY_ASSET_STR).unwrap()
+            }
+            Self::ElementsRegtest { policy_asset } => *policy_asset,
+        }
+    }
+
+    /// Return the genesis block hash for this network.
+    #[must_use]
+    pub fn genesis_block_hash(&self) -> elements::BlockHash {
+        match self {
+            Self::Liquid => *LIQUID_MAINNET_GENESIS,
+            Self::LiquidTestnet => *LIQUID_TESTNET_GENESIS,
+            Self::ElementsRegtest { .. } => *LIQUID_REGTEST_GENESIS,
+        }
+    }
+
+    /// Return the address parameters for this network to generate addresses compatible for this network.
+    #[must_use]
+    pub const fn address_params(&self) -> &'static elements::AddressParams {
+        match self {
+            Self::Liquid => &elements::AddressParams::LIQUID,
+            Self::LiquidTestnet => &elements::AddressParams::LIQUID_TESTNET,
+            Self::ElementsRegtest { .. } => &elements::AddressParams::ELEMENTS,
+        }
+    }
+}
