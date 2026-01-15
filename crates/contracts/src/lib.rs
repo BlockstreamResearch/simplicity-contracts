@@ -10,11 +10,18 @@ pub mod sdk;
 pub mod array_tr_storage;
 #[cfg(feature = "bytes32-tr-storage")]
 pub mod bytes32_tr_storage;
-#[cfg(feature = "dcd")]
-pub mod dual_currency_deposit;
-#[cfg(feature = "options")]
-pub mod options;
+#[cfg(any(
+    feature = "finance-dcd",
+    feature = "finance-option-offer",
+    feature = "finance-options"
+))]
+pub mod finance;
 #[cfg(feature = "simple-storage")]
 pub mod simple_storage;
-#[cfg(feature = "swap-with-change")]
-pub mod swap_with_change;
+
+#[cfg(feature = "finance-dcd")]
+pub use finance::dcd;
+#[cfg(feature = "finance-option-offer")]
+pub use finance::option_offer;
+#[cfg(feature = "finance-options")]
+pub use finance::options;

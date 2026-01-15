@@ -1,5 +1,5 @@
-use crate::options::OptionsArguments;
-use crate::options::build_witness::{OptionBranch, blinding_factors_from_secrets};
+use crate::finance::options::OptionsArguments;
+use crate::finance::options::build_witness::{OptionBranch, blinding_factors_from_secrets};
 
 use crate::error::TransactionBuildError;
 

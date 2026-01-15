@@ -139,7 +139,7 @@ pub enum FromArgumentsError {
 }
 
 /// Errors from DCD ratio calculations.
-#[cfg(feature = "dcd")]
+#[cfg(feature = "finance-dcd")]
 #[derive(Debug, thiserror::Error)]
 pub enum DCDRatioError {
     #[error("Arithmetic overflow: {operation}")]
