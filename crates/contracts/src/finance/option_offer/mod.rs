@@ -1,4 +1,4 @@
-use crate::option_offer::build_witness::{OptionOfferBranch, build_option_offer_witness};
+use crate::finance::option_offer::build_witness::{OptionOfferBranch, build_option_offer_witness};
 
 use std::sync::Arc;
 

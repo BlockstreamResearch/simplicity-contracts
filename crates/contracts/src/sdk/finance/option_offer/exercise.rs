@@ -1,5 +1,5 @@
-use crate::option_offer::OptionOfferArguments;
-use crate::option_offer::build_witness::OptionOfferBranch;
+use crate::finance::option_offer::OptionOfferArguments;
+use crate::finance::option_offer::build_witness::OptionOfferBranch;
 
 use crate::error::TransactionBuildError;
 

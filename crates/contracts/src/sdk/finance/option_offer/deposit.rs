@@ -1,5 +1,5 @@
 use crate::error::TransactionBuildError;
-use crate::option_offer::{OptionOfferArguments, get_option_offer_address};
+use crate::finance::option_offer::{OptionOfferArguments, get_option_offer_address};
 use crate::sdk::taproot_pubkey_gen::TaprootPubkeyGen;
 use crate::sdk::validation::TxOutExt;
 

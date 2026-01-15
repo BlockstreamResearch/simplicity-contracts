@@ -10,14 +10,14 @@ keywords = ["simplicity", "liquid", "bitcoin", "elements", "contracts"]
 categories = ["cryptography::cryptocurrencies"]
 
 [features]
-default = ["sdk-basic", "options", "dcd", "simple-storage", "bytes32-tr-storage", "array-tr-storage", "option-offer"]
+default = ["sdk-basic", "finance-options", "finance-dcd", "finance-option-offer", "simple-storage", "bytes32-tr-storage", "array-tr-storage"]
 sdk-basic = []
-options = []
-dcd = []
+finance-options = []
+finance-dcd = []
+finance-option-offer = []
 simple-storage = []
 bytes32-tr-storage = []
 array-tr-storage = []
-option-offer = []
 
 [lints]
 workspace = true

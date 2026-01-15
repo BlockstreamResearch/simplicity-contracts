@@ -197,8 +197,8 @@ mod dcd_merge_tests {
     use std::sync::Arc;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use crate::dual_currency_deposit::build_arguments::DCDRatioArguments;
-    use crate::dual_currency_deposit::build_witness::build_dcd_witness;
+    use crate::finance::dcd::build_arguments::DCDRatioArguments;
+    use crate::finance::dcd::build_witness::build_dcd_witness;
     use anyhow::Result;
     use simplicityhl::elements::secp256k1_zkp::Secp256k1;
     use simplicityhl::elements::taproot::ControlBlock;

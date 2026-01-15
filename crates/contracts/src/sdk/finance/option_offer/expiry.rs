@@ -1,4 +1,4 @@
-use crate::option_offer::OptionOfferArguments;
+use crate::finance::option_offer::OptionOfferArguments;
 
 use crate::error::TransactionBuildError;
 

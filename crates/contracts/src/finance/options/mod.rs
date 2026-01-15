@@ -1,6 +1,6 @@
 #![allow(clippy::similar_names)]
 
-use crate::options::build_witness::{OptionBranch, build_option_witness};
+use crate::finance::options::build_witness::{OptionBranch, build_option_witness};
 
 use std::sync::Arc;
 
