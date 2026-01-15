@@ -72,12 +72,13 @@ pub fn execute_storage_program(
     keypair: &Keypair,
     compiled_program: &CompiledProgram,
     env: &ElementsEnv<Arc<Transaction>>,
+    log_level: TrackerLogLevel,
 ) -> Result<Arc<RedeemNode<Elements>>, ProgramError> {
     let sighash_all = secp256k1::Message::from_digest(env.c_tx_env().sighash_all().to_byte_array());
 
     let signature = keypair.sign_schnorr(sighash_all);
     let witness_values = build_storage_witness(new_value, &signature);
-    Ok(run_program(compiled_program, witness_values, env, TrackerLogLevel::None)?.0)
+    Ok(run_program(compiled_program, witness_values, env, log_level)?.0)
 }
 
 #[cfg(test)]
@@ -165,7 +166,8 @@ mod simple_storage_tests {
         );
 
         assert!(
-            execute_storage_program(new_value, &keypair, &program, &env).is_ok(),
+            execute_storage_program(new_value, &keypair, &program, &env, TrackerLogLevel::None)
+                .is_ok(),
             "expected success mint path"
         );
 
@@ -232,7 +234,8 @@ mod simple_storage_tests {
         );
 
         assert!(
-            execute_storage_program(new_value, &keypair, &program, &env).is_ok(),
+            execute_storage_program(new_value, &keypair, &program, &env, TrackerLogLevel::None)
+                .is_ok(),
             "expected success burn path"
         );
 

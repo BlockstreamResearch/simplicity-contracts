@@ -106,6 +106,7 @@ pub fn finalize_option_offer_transaction(
     branch: &OptionOfferBranch,
     params: &'static AddressParams,
     genesis_hash: elements::BlockHash,
+    log_level: TrackerLogLevel,
 ) -> Result<Transaction, ProgramError> {
     let env = get_and_verify_env(
         &tx,
@@ -117,8 +118,7 @@ pub fn finalize_option_offer_transaction(
         input_index,
     )?;
 
-    let pruned =
-        execute_option_offer_program(contract_program, &env, branch, TrackerLogLevel::None)?;
+    let pruned = execute_option_offer_program(contract_program, &env, branch, log_level)?;
 
     let (simplicity_program_bytes, simplicity_witness_bytes) = pruned.to_vec_with_witness();
     let cmr = pruned.cmr();

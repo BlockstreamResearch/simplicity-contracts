@@ -12,6 +12,7 @@ use simplicityhl::elements::secp256k1_zkp::SECP256K1;
 use simplicityhl::elements::{AddressParams, OutPoint};
 use simplicityhl::simplicity::elements::AssetId;
 use simplicityhl::simplicity::hex::DisplayHex;
+use simplicityhl::tracker::TrackerLogLevel;
 
 use crate::explorer::{broadcast_tx, fetch_utxo};
 use crate::modules::store::Store;
@@ -314,6 +315,7 @@ impl Options {
                     0,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
+                    TrackerLogLevel::None,
                 )?;
 
                 let signature_1 = create_p2pk_signature(
@@ -332,6 +334,7 @@ impl Options {
                     1,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
+                    TrackerLogLevel::None,
                 )?;
 
                 println!("options_taproot_pubkey_gen: {options_taproot_pubkey_gen}");
@@ -432,6 +435,7 @@ impl Options {
                     &option_branch,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
+                    TrackerLogLevel::None,
                 )?;
 
                 let tx = finalize_options_transaction(
@@ -443,6 +447,7 @@ impl Options {
                     &option_branch,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
+                    TrackerLogLevel::None,
                 )?;
 
                 let x_only_public_key = keypair.x_only_public_key().0;
@@ -462,6 +467,7 @@ impl Options {
                     2,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
+                    TrackerLogLevel::None,
                 )?;
 
                 let tx = if fee_utxo.is_some() {
@@ -481,6 +487,7 @@ impl Options {
                         3,
                         &AddressParams::LIQUID_TESTNET,
                         *LIQUID_TESTNET_GENESIS,
+                        TrackerLogLevel::None,
                     )?
                 } else {
                     tx
@@ -549,6 +556,7 @@ impl Options {
                     &option_branch,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
+                    TrackerLogLevel::None,
                 )?;
 
                 let x_only_public_key = keypair.x_only_public_key().0;
@@ -569,6 +577,7 @@ impl Options {
                     1,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
+                    TrackerLogLevel::None,
                 )?;
 
                 let signature_2 = create_p2pk_signature(
@@ -587,6 +596,7 @@ impl Options {
                     2,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
+                    TrackerLogLevel::None,
                 )?;
 
                 let signature_3 = create_p2pk_signature(
@@ -605,6 +615,7 @@ impl Options {
                     3,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
+                    TrackerLogLevel::None,
                 )?;
 
                 if *broadcast {
@@ -667,6 +678,7 @@ impl Options {
                     &option_branch,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
+                    TrackerLogLevel::None,
                 )?;
 
                 let x_only_public_key = keypair.x_only_public_key().0;
@@ -687,6 +699,7 @@ impl Options {
                     1,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
+                    TrackerLogLevel::None,
                 )?;
 
                 let signature_2 = create_p2pk_signature(
@@ -705,6 +718,7 @@ impl Options {
                     2,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
+                    TrackerLogLevel::None,
                 )?;
 
                 if *broadcast {
@@ -766,6 +780,7 @@ impl Options {
                     &option_branch,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
+                    TrackerLogLevel::None,
                 )?;
 
                 let x_only_public_key = keypair.x_only_public_key().0;
@@ -786,6 +801,7 @@ impl Options {
                     1,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
+                    TrackerLogLevel::None,
                 )?;
 
                 let signature_2 = create_p2pk_signature(
@@ -804,6 +820,7 @@ impl Options {
                     2,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
+                    TrackerLogLevel::None,
                 )?;
 
                 if *broadcast {
@@ -869,6 +886,7 @@ impl Options {
                     &option_branch,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
+                    TrackerLogLevel::None,
                 )?;
 
                 let x_only_public_key = keypair.x_only_public_key().0;
@@ -889,6 +907,7 @@ impl Options {
                     1,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
+                    TrackerLogLevel::None,
                 )?;
 
                 let signature_2 = create_p2pk_signature(
@@ -907,6 +926,7 @@ impl Options {
                     2,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
+                    TrackerLogLevel::None,
                 )?;
 
                 let signature_3 = create_p2pk_signature(
@@ -925,6 +945,7 @@ impl Options {
                     3,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
+                    TrackerLogLevel::None,
                 )?;
 
                 if *broadcast {

@@ -53,9 +53,10 @@ pub fn execute_array_tr_storage_program(
     storage: [u8; MAX_VAL],
     compiled_program: &CompiledProgram,
     env: &ElementsEnv<Arc<Transaction>>,
+    log_level: TrackerLogLevel,
 ) -> Result<Arc<RedeemNode<Elements>>, ProgramError> {
     let witness_values = build_array_tr_storage_witness(storage);
-    Ok(run_program(compiled_program, witness_values, env, TrackerLogLevel::None)?.0)
+    Ok(run_program(compiled_program, witness_values, env, log_level)?.0)
 }
 
 /// The unspendable internal key specified in BIP-0341.
@@ -177,7 +178,8 @@ mod array_tr_storage_tests {
         );
 
         assert!(
-            execute_array_tr_storage_program(old_storage, &program, &env).is_ok(),
+            execute_array_tr_storage_program(old_storage, &program, &env, TrackerLogLevel::None)
+                .is_ok(),
             "expected success mint path"
         );
 
