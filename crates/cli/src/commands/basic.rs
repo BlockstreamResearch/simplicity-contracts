@@ -11,6 +11,7 @@ use simplicityhl::elements::secp256k1_zkp::SECP256K1;
 use simplicityhl::elements::{AssetId, ContractHash};
 use simplicityhl::simplicity::elements::{Address, AddressParams, OutPoint};
 use simplicityhl::simplicity::hex::DisplayHex;
+use simplicityhl::tracker::TrackerLogLevel;
 use simplicityhl_core::{
     LIQUID_TESTNET_GENESIS, create_p2pk_signature, derive_public_blinder_key,
     finalize_p2pk_transaction, get_p2pk_address, hash_script,
@@ -199,6 +200,7 @@ impl Basic {
                     0,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
+                    TrackerLogLevel::None,
                 )?;
 
                 if *broadcast {
@@ -247,6 +249,7 @@ impl Basic {
                     0,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
+                    TrackerLogLevel::None,
                 )?;
 
                 if *broadcast {
@@ -299,6 +302,7 @@ impl Basic {
                     0,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
+                    TrackerLogLevel::None,
                 )?;
 
                 let signature_1 = create_p2pk_signature(
@@ -317,6 +321,7 @@ impl Basic {
                     1,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
+                    TrackerLogLevel::None,
                 )?;
 
                 if *broadcast {
@@ -383,6 +388,7 @@ impl Basic {
                     0,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
+                    TrackerLogLevel::None,
                 )?;
 
                 println!(
@@ -466,6 +472,7 @@ impl Basic {
                     0,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
+                    TrackerLogLevel::None,
                 )?;
 
                 let signature_1 = create_p2pk_signature(
@@ -484,6 +491,7 @@ impl Basic {
                     1,
                     &AddressParams::LIQUID_TESTNET,
                     *LIQUID_TESTNET_GENESIS,
+                    TrackerLogLevel::None,
                 )?;
 
                 println!("Asset id: {asset_id}, Reissuance id: {reissuance_asset_id}");

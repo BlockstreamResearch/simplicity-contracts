@@ -50,9 +50,10 @@ pub fn execute_bytes32_tr_program(
     state: [u8; 32],
     compiled_program: &CompiledProgram,
     env: &ElementsEnv<Arc<Transaction>>,
+    log_level: TrackerLogLevel,
 ) -> Result<Arc<RedeemNode<Elements>>, ProgramError> {
     let witness_values = build_bytes32_tr_witness(state);
-    Ok(run_program(compiled_program, witness_values, env, TrackerLogLevel::None)?.0)
+    Ok(run_program(compiled_program, witness_values, env, log_level)?.0)
 }
 
 /// The unspendable internal key specified in BIP-0341.
@@ -177,7 +178,7 @@ mod bytes32_tr_tests {
         );
 
         assert!(
-            execute_bytes32_tr_program(old_state, &program, &env).is_ok(),
+            execute_bytes32_tr_program(old_state, &program, &env, TrackerLogLevel::None).is_ok(),
             "expected success mint path"
         );
 

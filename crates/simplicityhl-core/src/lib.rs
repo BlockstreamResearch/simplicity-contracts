@@ -188,7 +188,7 @@ pub fn create_p2pk_signature(
 /// Use [`create_p2pk_signature`] to create the signature if you have access to the secret key:
 /// ```ignore
 /// let signature = create_p2pk_signature(&tx, &utxos, &keypair, input_index, params, genesis_hash)?;
-/// let tx = finalize_p2pk_transaction(tx, &utxos, &public_key, &signature, input_index, params, genesis_hash)?;
+/// let tx = finalize_p2pk_transaction(tx, &utxos, &public_key, &signature, input_index, params, genesis_hash, TrackerLogLevel::None)?;
 /// ```
 ///
 /// Preconditions:
@@ -196,6 +196,7 @@ pub fn create_p2pk_signature(
 ///
 /// # Errors
 /// Returns error if program compilation, execution, or environment verification fails.
+#[allow(clippy::too_many_arguments)]
 pub fn finalize_p2pk_transaction(
     mut tx: Transaction,
     utxos: &[TxOut],
@@ -204,6 +205,7 @@ pub fn finalize_p2pk_transaction(
     input_index: usize,
     params: &'static AddressParams,
     genesis_hash: elements::BlockHash,
+    log_level: TrackerLogLevel,
 ) -> Result<Transaction, ProgramError> {
     let p2pk_program = get_p2pk_program(x_only_public_key)?;
 
@@ -217,12 +219,7 @@ pub fn finalize_p2pk_transaction(
         input_index,
     )?;
 
-    let pruned = execute_p2pk_program(
-        &p2pk_program,
-        schnorr_signature,
-        &env,
-        TrackerLogLevel::None,
-    )?;
+    let pruned = execute_p2pk_program(&p2pk_program, schnorr_signature, &env, log_level)?;
 
     let (simplicity_program_bytes, simplicity_witness_bytes) = pruned.to_vec_with_witness();
     let cmr = pruned.cmr();
@@ -256,6 +253,7 @@ pub fn finalize_transaction(
     witness_values: WitnessValues,
     params: &'static AddressParams,
     genesis_hash: elements::BlockHash,
+    log_level: TrackerLogLevel,
 ) -> Result<Transaction, ProgramError> {
     let env = get_and_verify_env(
         &tx,
@@ -267,7 +265,7 @@ pub fn finalize_transaction(
         input_index,
     )?;
 
-    let pruned = run_program(program, witness_values, &env, TrackerLogLevel::None)?.0;
+    let pruned = run_program(program, witness_values, &env, log_level)?.0;
 
     let (simplicity_program_bytes, simplicity_witness_bytes) = pruned.to_vec_with_witness();
     let cmr = pruned.cmr();

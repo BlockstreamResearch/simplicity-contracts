@@ -119,6 +119,7 @@ pub fn finalize_dcd_transaction_on_liquid_testnet(
     token_branch: TokenBranch,
     branch: &DcdBranch,
     merge_branch: MergeBranch,
+    log_level: TrackerLogLevel,
 ) -> Result<Transaction, ProgramError> {
     let cmr = dcd_program.commit().cmr();
 
@@ -159,7 +160,7 @@ pub fn finalize_dcd_transaction_on_liquid_testnet(
         token_branch,
         branch,
         merge_branch,
-        TrackerLogLevel::None,
+        log_level,
     )?;
 
     let (simplicity_program_bytes, simplicity_witness_bytes) = pruned.to_vec_with_witness();
