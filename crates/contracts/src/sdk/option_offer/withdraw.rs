@@ -1,4 +1,4 @@
-use crate::swap_with_change::SwapWithChangeArguments;
+use crate::option_offer::OptionOfferArguments;
 
 use crate::error::TransactionBuildError;
 use crate::sdk::validation::TxOutExt;
@@ -14,7 +14,10 @@ use simplicityhl::elements::{OutPoint, Script, TxOut};
 /// # Layout
 ///
 /// - Input[0]: Settlement asset from covenant
+/// - Input[1]: Fee
 /// - Output[0]: Settlement asset → user (full amount)
+/// - Output[1]: Fee change (if any)
+/// - Output[2]: Fee
 ///
 /// # Errors
 ///
@@ -22,11 +25,11 @@ use simplicityhl::elements::{OutPoint, Script, TxOut};
 /// - The UTXO asset or amount validation fails (amounts and assets must be explicit)
 /// - Settlement asset doesn't match expected
 /// - Transaction extraction or amount proof verification fails
-pub fn build_swap_withdraw(
+pub fn build_option_offer_withdraw(
     settlement_covenant_utxo: (OutPoint, TxOut),
     fee_utxo: (OutPoint, TxOut),
     fee_amount: u64,
-    arguments: &SwapWithChangeArguments,
+    arguments: &OptionOfferArguments,
     user_recipient_script: Script,
 ) -> Result<PartiallySignedTransaction, TransactionBuildError> {
     let (settlement_outpoint, settlement_tx_out) = settlement_covenant_utxo;
