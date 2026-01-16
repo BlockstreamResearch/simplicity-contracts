@@ -290,7 +290,7 @@ dependencies = [
  "hex",
  "minreq",
  "simplicityhl",
- "simplicityhl-core 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "simplicityhl-core",
  "sled",
  "thiserror",
  "tokio",
@@ -352,7 +352,7 @@ dependencies = [
  "ring",
  "sha2",
  "simplicityhl",
- "simplicityhl-core 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "simplicityhl-core",
  "thiserror",
 ]
 
@@ -1146,19 +1146,6 @@ dependencies = [
 [[package]]
 name = "simplicityhl-core"
 version = "0.4.0"
-dependencies = [
- "bincode",
- "hex",
- "sha2",
- "simplicityhl",
- "thiserror",
-]
-
-[[package]]
-name = "simplicityhl-core"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b070859177993c1375a0e313ad8727707f6245d97f3ea2175f131ae4aa9b0d5"
 dependencies = [
  "bincode",
  "hex",

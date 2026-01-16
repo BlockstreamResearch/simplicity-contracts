@@ -45,3 +45,8 @@ pub static LIQUID_TESTNET_GENESIS: std::sync::LazyLock<elements::BlockHash> =
     });
 
 pub const PUBLIC_SECRET_BLINDER_KEY: [u8; 32] = [1; 32];
+
+/// `PLACEHOLDER_ISSUANCE_VALUE` exists because an issuance token doesn't require
+///  to have a unique `value` field for blinding.
+/// For token issuance, the exact value inserted is irrelevant.
+pub const PLACEHOLDER_ISSUANCE_VALUE: u64 = 0;
