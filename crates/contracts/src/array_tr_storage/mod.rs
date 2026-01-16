@@ -91,7 +91,13 @@ pub fn array_tr_storage_taproot_spend_info(
     let (script, version) = array_tr_storage_script_ver(cmr);
     let state_hash = compute_tapdata_tagged_hash_of_the_state(state);
 
-    // Build taproot tree with hidden leaf
+    // Build taproot tree with hidden leaf.
+    // Here, 'depth refers to the level at which the script and hash are transferred.
+    // At depth 0, this will take the place of the root, meaning it will be impossible to place both
+    // the `script` and the `state_hash`. At depth 2 or higher, additional nods are required,
+    // which complicates the structure. Therefore, a value of 1 was chosen, where the `script` and
+    // the `state_hash` values are leaves of the root.
+    // `add_hidden`` in this context allows you to insert the hash as is, unlike add_leaf_with_ver, which hashes under the hood `script`.
     let builder = TaprootBuilder::new()
         .add_leaf_with_ver(1, script, version)
         .expect("tap tree should be valid")

@@ -5,7 +5,9 @@ use simplicityhl::types::UIntType;
 use simplicityhl::value::{UIntValue, ValueConstructible};
 use simplicityhl::{WitnessValues, str::WitnessName};
 
-// The storage is represented by the 3 u256 "slots", on every transaction all values should be provided in the witness...
+// Storage is represented as 3 u256 slots.
+// This is a constant because Simplicity cannot initialise an array using 'param'.
+// The value 3 enables us to demonstrate the efficiency of storage with a small number of elements.
 pub const MAX_VAL: usize = 3;
 
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq)]
@@ -29,6 +31,10 @@ impl State {
             .collect()
     }
 
+    /// This function implements simple, arbitrary logic,
+    /// namely changing a specific u256 element in the array by index.
+    /// In this case, the last qword is changed to `num`, representing the final eight bytes written as `24..`.
+    ///
     /// # Errors
     /// Returns an error if `index` is out of bounds.
     pub fn set_num_to_last_qword(&mut self, index: usize, num: u64) -> Result<(), &'static str> {
