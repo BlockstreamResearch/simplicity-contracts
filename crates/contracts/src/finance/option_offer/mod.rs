@@ -158,8 +158,8 @@ mod option_offer_tests {
     };
 
     use crate::sdk::{
-        build_option_offer_deposit, build_option_offer_exercise, build_option_offer_expiry,
-        build_option_offer_withdraw,
+        DummySigner, build_option_offer_deposit, build_option_offer_exercise,
+        build_option_offer_expiry, build_option_offer_withdraw,
     };
 
     const NETWORK: SimplicityNetwork = SimplicityNetwork::LiquidTestnet;
@@ -192,7 +192,7 @@ mod option_offer_tests {
         let premium_deposit_amount = collateral_deposit_amount * args.premium_per_collateral();
         let fee_amount = 500u64;
 
-        let (pst, _) = build_option_offer_deposit(
+        let (partial_pset, _) = build_option_offer_deposit(
             (
                 OutPoint::new(Txid::from_slice(&[1; 32])?, 0),
                 TxOut {
@@ -224,12 +224,12 @@ mod option_offer_tests {
                 },
             ),
             collateral_deposit_amount,
-            fee_amount,
             &args,
             NETWORK.address_params(),
         )?;
 
-        let tx = pst.extract_tx()?;
+        let partial_pset = partial_pset.fee(99);
+        let tx = partial_pset.finalize(NETWORK, DummySigner::get_signer_closure())?;
 
         assert_eq!(
             tx.output[0].asset,
@@ -275,7 +275,7 @@ mod option_offer_tests {
         let settlement_required = collateral_to_receive * args.collateral_per_contract();
         let fee_amount = 500u64;
 
-        let (pst, branch) = build_option_offer_exercise(
+        let (partial_pset, branch) = build_option_offer_exercise(
             (
                 OutPoint::new(Txid::from_slice(&[1; 32])?, 0),
                 TxOut {
@@ -317,12 +317,12 @@ mod option_offer_tests {
                 },
             ),
             collateral_to_receive,
-            fee_amount,
             &args,
             change_recipient.script_pubkey(),
         )?;
 
-        let tx = pst.extract_tx()?;
+        let partial_pset = partial_pset.fee(99);
+        let tx = partial_pset.finalize(NETWORK, DummySigner::get_signer_closure())?;
 
         let env = ElementsEnv::new(
             Arc::new(tx),
@@ -380,7 +380,7 @@ mod option_offer_tests {
         let settlement_required = collateral_to_receive * args.collateral_per_contract();
         let fee_amount = 500u64;
 
-        let (pst, branch) = build_option_offer_exercise(
+        let (partial_pset, branch) = build_option_offer_exercise(
             (
                 OutPoint::new(Txid::from_slice(&[1; 32])?, 0),
                 TxOut {
@@ -422,12 +422,12 @@ mod option_offer_tests {
                 },
             ),
             collateral_to_receive,
-            fee_amount,
             &args,
             change_recipient.script_pubkey(),
         )?;
 
-        let tx = pst.extract_tx()?;
+        let partial_pset = partial_pset.fee(99);
+        let tx = partial_pset.finalize(NETWORK, DummySigner::get_signer_closure())?;
 
         let env = ElementsEnv::new(
             Arc::new(tx),
@@ -482,7 +482,7 @@ mod option_offer_tests {
         let settlement_amount = 50000u64;
         let fee_amount = 500u64;
 
-        let pst = build_option_offer_withdraw(
+        let partial_pset = build_option_offer_withdraw(
             (
                 OutPoint::new(Txid::from_slice(&[1; 32])?, 0),
                 TxOut {
@@ -503,12 +503,12 @@ mod option_offer_tests {
                     witness: elements::TxOutWitness::default(),
                 },
             ),
-            fee_amount,
             &args,
             change_recipient.script_pubkey(),
         )?;
 
-        let tx = pst.extract_tx()?;
+        let partial_pset = partial_pset.fee(99);
+        let tx = partial_pset.finalize(NETWORK, DummySigner::get_signer_closure())?;
 
         let utxos = vec![
             TxOut {
@@ -578,7 +578,7 @@ mod option_offer_tests {
         let premium_amount = collateral_amount * args.premium_per_collateral();
         let fee_amount = 500u64;
 
-        let pst = build_option_offer_expiry(
+        let partial_pset = build_option_offer_expiry(
             (
                 OutPoint::new(Txid::from_slice(&[1; 32])?, 0),
                 TxOut {
@@ -609,12 +609,12 @@ mod option_offer_tests {
                     witness: elements::TxOutWitness::default(),
                 },
             ),
-            fee_amount,
             &args,
             change_recipient.script_pubkey(),
         )?;
 
-        let tx = pst.extract_tx()?;
+        let partial_pset = partial_pset.fee(99);
+        let tx = partial_pset.finalize(NETWORK, DummySigner::get_signer_closure())?;
 
         let utxos = vec![
             TxOut {

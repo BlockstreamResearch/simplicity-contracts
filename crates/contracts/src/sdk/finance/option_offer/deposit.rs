@@ -1,11 +1,11 @@
 use crate::error::TransactionBuildError;
 use crate::finance::option_offer::{OptionOfferArguments, get_option_offer_address};
+use crate::sdk::finalization::PartialPset;
 use crate::sdk::taproot_pubkey_gen::TaprootPubkeyGen;
 use crate::sdk::validation::TxOutExt;
 
-use simplicityhl::elements::bitcoin::secp256k1;
 use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
-use simplicityhl::elements::{AddressParams, OutPoint, Script, TxOut};
+use simplicityhl::elements::{AddressParams, OutPoint, TxOut};
 
 /// Build PSET for user to deposit collateral and premium into the option offer covenant.
 ///
@@ -36,18 +36,13 @@ pub fn build_option_offer_deposit(
     premium_utxo: (OutPoint, TxOut),
     fee_utxo: (OutPoint, TxOut),
     collateral_deposit_amount: u64,
-    fee_amount: u64,
     arguments: &OptionOfferArguments,
     address_params: &'static AddressParams,
-) -> Result<(PartiallySignedTransaction, TaprootPubkeyGen), TransactionBuildError> {
+) -> Result<(PartialPset, TaprootPubkeyGen), TransactionBuildError> {
     let (collateral_outpoint, collateral_tx_out) = collateral_utxo;
     let (premium_outpoint, premium_tx_out) = premium_utxo;
     let (fee_outpoint, fee_tx_out) = fee_utxo;
 
-    let (fee_asset_id, fee_change) = (
-        fee_tx_out.explicit_asset()?,
-        fee_tx_out.validate_amount(fee_amount)?,
-    );
     let (collateral_asset_id, total_collateral) = collateral_tx_out.explicit()?;
     let (premium_asset_id, total_premium) = premium_tx_out.explicit()?;
 
@@ -88,7 +83,7 @@ pub fn build_option_offer_deposit(
         });
     }
 
-    let change_recipient_script = collateral_tx_out.script_pubkey.clone();
+    let change_recipient_script = fee_tx_out.script_pubkey.clone();
 
     let option_offer_taproot_pubkey_gen =
         TaprootPubkeyGen::from(arguments, address_params, &get_option_offer_address)?;
@@ -109,7 +104,6 @@ pub fn build_option_offer_deposit(
 
     let is_collateral_change_needed = total_collateral != collateral_deposit_amount;
     let is_premium_change_needed = total_premium != premium_deposit_amount;
-    let is_fee_change_needed = fee_change != 0;
 
     pst.add_output(Output::new_explicit(
         option_offer_taproot_pubkey_gen.address.script_pubkey(),
@@ -143,26 +137,11 @@ pub fn build_option_offer_deposit(
         ));
     }
 
-    if is_fee_change_needed {
-        pst.add_output(Output::new_explicit(
-            change_recipient_script,
-            fee_change,
-            fee_asset_id,
-            None,
-        ));
-    }
+    let non_finalized_pset = PartialPset::new(
+        pst,
+        change_recipient_script,
+        vec![collateral_tx_out, premium_tx_out, fee_tx_out],
+    );
 
-    pst.add_output(Output::new_explicit(
-        Script::new(),
-        fee_amount,
-        fee_asset_id,
-        None,
-    ));
-
-    pst.extract_tx()?.verify_tx_amt_proofs(
-        secp256k1::SECP256K1,
-        &[collateral_tx_out, premium_tx_out, fee_tx_out],
-    )?;
-
-    Ok((pst, option_offer_taproot_pubkey_gen))
+    Ok((non_finalized_pset, option_offer_taproot_pubkey_gen))
 }

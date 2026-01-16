@@ -9,19 +9,20 @@ use clap::Subcommand;
 use contracts::options::{OptionsArguments, finalize_options_transaction, get_options_program};
 use contracts::sdk::taproot_pubkey_gen::{TaprootPubkeyGen, get_random_seed};
 
+use crate::commands::NETWORK;
+use crate::explorer::{broadcast_tx, fetch_utxo};
+use crate::modules::store::Store;
+use crate::modules::utils::derive_keypair;
+use contracts::sdk::{DEFAULT_TARGET_BLOCKS, SyncFeeFetcher};
 use simplicityhl::elements::OutPoint;
 use simplicityhl::elements::pset::serialize::Serialize;
 use simplicityhl::elements::secp256k1_zkp::SECP256K1;
 use simplicityhl::simplicity::elements::AssetId;
 use simplicityhl::simplicity::hex::DisplayHex;
 use simplicityhl::tracker::TrackerLogLevel;
-
-use crate::commands::NETWORK;
-use crate::explorer::{broadcast_tx, fetch_utxo};
-use crate::modules::store::Store;
-use crate::modules::utils::derive_keypair;
 use simplicityhl_core::{
-    Encodable, create_p2pk_signature, derive_public_blinder_key, finalize_p2pk_transaction,
+    Encodable, SimplicityNetwork, create_p2pk_signature, derive_public_blinder_key,
+    finalize_p2pk_transaction,
 };
 
 /// Options contract utilities
@@ -58,7 +59,7 @@ pub enum Options {
         account_index: u32,
         /// Fee amount in satoshis (LBTC)
         #[arg(long = "fee-amount")]
-        fee_amount: u64,
+        fee_amount: Option<u64>,
         /// When set, broadcast the built transaction via Esplora and print txid
         #[arg(long = "broadcast")]
         broadcast: bool,
@@ -88,7 +89,7 @@ pub enum Options {
         fee_utxo: Option<OutPoint>,
         /// Fee amount in satoshis (LBTC)
         #[arg(long = "fee-amount")]
-        fee_amount: u64,
+        fee_amount: Option<u64>,
         /// When set, broadcast the built transaction via Esplora and print txid
         #[arg(long = "broadcast")]
         broadcast: bool,
@@ -115,7 +116,7 @@ pub enum Options {
         amount_to_burn: u64,
         /// Fee amount in satoshis (LBTC) to pay (deducted from collateral input)
         #[arg(long = "fee-amount")]
-        fee_amount: u64,
+        fee_amount: Option<u64>,
         /// Account index that will pay for transaction fees and that owns a tokens to send
         #[arg(long = "account-index")]
         account_index: u32,
@@ -142,7 +143,7 @@ pub enum Options {
         grantor_token_amount_to_burn: u64,
         /// Fee amount in satoshis (LBTC) to pay
         #[arg(long = "fee-amount")]
-        fee_amount: u64,
+        fee_amount: Option<u64>,
         /// Account index that will pay for transaction fees and that owns a tokens to send
         #[arg(long = "account-index")]
         account_index: u32,
@@ -169,7 +170,7 @@ pub enum Options {
         grantor_token_amount_to_burn: u64,
         /// Fee amount in satoshis (LBTC) to pay (deducted from collateral input)
         #[arg(long = "fee-amount")]
-        fee_amount: u64,
+        fee_amount: Option<u64>,
         /// Account index that will pay for transaction fees and that owns a tokens to send
         #[arg(long = "account-index")]
         account_index: u32,
@@ -199,7 +200,7 @@ pub enum Options {
         amount_to_burn: u64,
         /// Fee amount in satoshis (LBTC) to pay (deducted from collateral input)
         #[arg(long = "fee-amount")]
-        fee_amount: u64,
+        fee_amount: Option<u64>,
         /// Account index that will pay for transaction fees and that owns a tokens to send
         #[arg(long = "account-index")]
         account_index: u32,
@@ -287,57 +288,67 @@ impl Options {
                     (*second_fee_utxo, false),
                 );
 
-                let (pst, options_taproot_pubkey_gen) = contracts::sdk::build_option_creation(
-                    &blinder_keypair.public_key(),
-                    (*first_fee_utxo, first_tx_out.clone()),
-                    (*second_fee_utxo, second_tx_out.clone()),
-                    &option_arguments,
-                    issuance_asset_entropy,
-                    *fee_amount,
-                    NETWORK.address_params(),
-                )?;
+                let (partial_pset, options_taproot_pubkey_gen) =
+                    contracts::sdk::build_option_creation(
+                        &blinder_keypair.public_key(),
+                        (*first_fee_utxo, first_tx_out.clone()),
+                        (*second_fee_utxo, second_tx_out.clone()),
+                        &option_arguments,
+                        issuance_asset_entropy,
+                        NETWORK.address_params(),
+                    )?;
 
-                let tx = pst.extract_tx()?;
-                let utxos = vec![first_tx_out.clone(), second_tx_out.clone()];
-                let x_only_public_key = keypair.x_only_public_key().0;
+                let fee_rate =
+                    contracts::sdk::EsploraFeeFetcher::get_fee_rate(DEFAULT_TARGET_BLOCKS)?;
+                let mut partial_pset = partial_pset.fee_rate(fee_rate);
+                if let Some(fee_amount) = *fee_amount {
+                    partial_pset = partial_pset.fee(fee_amount);
+                }
 
-                let signature_0 = create_p2pk_signature(
-                    &tx,
-                    &utxos,
-                    &keypair,
-                    0,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                )?;
-                let tx = finalize_p2pk_transaction(
-                    tx,
-                    &utxos,
-                    &x_only_public_key,
-                    &signature_0,
-                    0,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                    TrackerLogLevel::None,
-                )?;
+                let tx =
+                    partial_pset.finalize(NETWORK, |network: SimplicityNetwork, tx, utxos| {
+                        let x_only_public_key = keypair.x_only_public_key().0;
+                        let address_params = network.address_params();
+                        let genesis_block_hash = network.genesis_block_hash();
 
-                let signature_1 = create_p2pk_signature(
-                    &tx,
-                    &utxos,
-                    &keypair,
-                    1,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                )?;
-                let tx = finalize_p2pk_transaction(
-                    tx,
-                    &utxos,
-                    &x_only_public_key,
-                    &signature_1,
-                    1,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                    TrackerLogLevel::None,
-                )?;
+                        let signature_0 = create_p2pk_signature(
+                            &tx,
+                            utxos,
+                            &keypair,
+                            0,
+                            address_params,
+                            genesis_block_hash,
+                        )?;
+                        let tx = finalize_p2pk_transaction(
+                            tx,
+                            utxos,
+                            &x_only_public_key,
+                            &signature_0,
+                            0,
+                            address_params,
+                            genesis_block_hash,
+                            TrackerLogLevel::None,
+                        )?;
+
+                        let signature_1 = create_p2pk_signature(
+                            &tx,
+                            utxos,
+                            &keypair,
+                            1,
+                            address_params,
+                            genesis_block_hash,
+                        )?;
+                        finalize_p2pk_transaction(
+                            tx,
+                            utxos,
+                            &x_only_public_key,
+                            &signature_1,
+                            1,
+                            address_params,
+                            genesis_block_hash,
+                            TrackerLogLevel::None,
+                        )
+                    })?;
 
                 println!("options_taproot_pubkey_gen: {options_taproot_pubkey_gen}");
 
@@ -397,7 +408,7 @@ impl Options {
                 let input_grantor_secrets =
                     grantor_tx_out.unblind(SECP256K1, blinder_keypair.secret_key())?;
 
-                let (pst, option_branch) = contracts::sdk::build_option_funding(
+                let (partial_pset, option_branch) = contracts::sdk::build_option_funding(
                     &blinder_keypair,
                     (
                         *option_asset_utxo,
@@ -413,10 +424,14 @@ impl Options {
                     fee_utxo,
                     &option_arguments,
                     *collateral_amount,
-                    *fee_amount,
                 )?;
 
-                let tx = pst.extract_tx()?;
+                let fee_rate =
+                    contracts::sdk::EsploraFeeFetcher::get_fee_rate(DEFAULT_TARGET_BLOCKS)?;
+                let mut partial_pset = partial_pset.fee_rate(fee_rate);
+                if let Some(fee_amount) = *fee_amount {
+                    partial_pset = partial_pset.fee(fee_amount);
+                }
 
                 let mut utxos = vec![
                     option_tx_out.clone(),
@@ -428,72 +443,78 @@ impl Options {
                     utxos.push(fee_tx_out.clone());
                 }
 
-                let tx = finalize_options_transaction(
-                    tx,
-                    &taproot_pubkey_gen.get_x_only_pubkey(),
-                    &get_options_program(&option_arguments)?,
-                    &utxos,
-                    0,
-                    &option_branch,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                    TrackerLogLevel::None,
-                )?;
+                let tx =
+                    partial_pset.finalize(NETWORK, |network: SimplicityNetwork, tx, utxos| {
+                        let address_params = network.address_params();
+                        let genesis_block_hash = network.genesis_block_hash();
 
-                let tx = finalize_options_transaction(
-                    tx,
-                    &taproot_pubkey_gen.get_x_only_pubkey(),
-                    &get_options_program(&option_arguments)?,
-                    &utxos,
-                    1,
-                    &option_branch,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                    TrackerLogLevel::None,
-                )?;
+                        let tx = finalize_options_transaction(
+                            tx,
+                            &taproot_pubkey_gen.get_x_only_pubkey(),
+                            &get_options_program(&option_arguments)?,
+                            utxos,
+                            0,
+                            &option_branch,
+                            address_params,
+                            genesis_block_hash,
+                            TrackerLogLevel::None,
+                        )?;
 
-                let x_only_public_key = keypair.x_only_public_key().0;
-                let signature = create_p2pk_signature(
-                    &tx,
-                    &utxos,
-                    &keypair,
-                    2,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                )?;
-                let tx = finalize_p2pk_transaction(
-                    tx,
-                    &utxos,
-                    &x_only_public_key,
-                    &signature,
-                    2,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                    TrackerLogLevel::None,
-                )?;
+                        let tx = finalize_options_transaction(
+                            tx,
+                            &taproot_pubkey_gen.get_x_only_pubkey(),
+                            &get_options_program(&option_arguments)?,
+                            utxos,
+                            1,
+                            &option_branch,
+                            address_params,
+                            genesis_block_hash,
+                            TrackerLogLevel::None,
+                        )?;
 
-                let tx = if fee_utxo.is_some() {
-                    let signature = create_p2pk_signature(
-                        &tx,
-                        &utxos,
-                        &keypair,
-                        3,
-                        NETWORK.address_params(),
-                        NETWORK.genesis_block_hash(),
-                    )?;
-                    finalize_p2pk_transaction(
-                        tx,
-                        &utxos,
-                        &x_only_public_key,
-                        &signature,
-                        3,
-                        NETWORK.address_params(),
-                        NETWORK.genesis_block_hash(),
-                        TrackerLogLevel::None,
-                    )?
-                } else {
-                    tx
-                };
+                        let x_only_public_key = keypair.x_only_public_key().0;
+                        let signature = create_p2pk_signature(
+                            &tx,
+                            utxos,
+                            &keypair,
+                            2,
+                            address_params,
+                            genesis_block_hash,
+                        )?;
+                        let tx = finalize_p2pk_transaction(
+                            tx,
+                            utxos,
+                            &x_only_public_key,
+                            &signature,
+                            2,
+                            address_params,
+                            genesis_block_hash,
+                            TrackerLogLevel::None,
+                        )?;
+
+                        if utxos.len() == 4 {
+                            let signature = create_p2pk_signature(
+                                &tx,
+                                utxos,
+                                &keypair,
+                                3,
+                                address_params,
+                                genesis_block_hash,
+                            )?;
+                            finalize_p2pk_transaction(
+                                tx,
+                                utxos,
+                                &x_only_public_key,
+                                &signature,
+                                3,
+                                address_params,
+                                genesis_block_hash,
+                                TrackerLogLevel::None,
+                            )
+                        } else {
+                            Ok(tx)
+                        }
+                    })?;
 
                 if *broadcast {
                     println!("Broadcasted txid: {}", broadcast_tx(&tx).await?);
@@ -531,94 +552,98 @@ impl Options {
                 let asset_tx_out = fetch_utxo(*asset_utxo).await?;
                 let fee_tx_out = fetch_utxo(*fee_utxo).await?;
 
-                let (pst, option_branch) = contracts::sdk::build_option_exercise(
+                let (partial_pset, option_branch) = contracts::sdk::build_option_exercise(
                     (*collateral_utxo, collateral_tx_out.clone()),
                     (*option_asset_utxo, option_tx_out.clone()),
                     (*asset_utxo, asset_tx_out.clone()),
                     Some((*fee_utxo, fee_tx_out.clone())),
                     *amount_to_burn,
-                    *fee_amount,
                     &option_arguments,
                 )?;
 
-                let tx = pst.extract_tx()?;
-                let utxos = vec![
-                    collateral_tx_out.clone(),
-                    option_tx_out.clone(),
-                    asset_tx_out.clone(),
-                    fee_tx_out.clone(),
-                ];
+                let fee_rate =
+                    contracts::sdk::EsploraFeeFetcher::get_fee_rate(DEFAULT_TARGET_BLOCKS)?;
+                let mut partial_pset = partial_pset.fee_rate(fee_rate);
+                if let Some(fee_amount) = *fee_amount {
+                    partial_pset = partial_pset.fee(fee_amount);
+                }
 
-                let tx = finalize_options_transaction(
-                    tx,
-                    &taproot_pubkey_gen.get_x_only_pubkey(),
-                    &get_options_program(&option_arguments)?,
-                    &utxos,
-                    0,
-                    &option_branch,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                    TrackerLogLevel::None,
-                )?;
+                let tx =
+                    partial_pset.finalize(NETWORK, |network: SimplicityNetwork, tx, utxos| {
+                        let address_params = network.address_params();
+                        let genesis_block_hash = network.genesis_block_hash();
 
-                let x_only_public_key = keypair.x_only_public_key().0;
+                        let tx = finalize_options_transaction(
+                            tx,
+                            &taproot_pubkey_gen.get_x_only_pubkey(),
+                            &get_options_program(&option_arguments)?,
+                            utxos,
+                            0,
+                            &option_branch,
+                            address_params,
+                            genesis_block_hash,
+                            TrackerLogLevel::None,
+                        )?;
 
-                let signature_1 = create_p2pk_signature(
-                    &tx,
-                    &utxos,
-                    &keypair,
-                    1,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                )?;
-                let tx = finalize_p2pk_transaction(
-                    tx,
-                    &utxos,
-                    &x_only_public_key,
-                    &signature_1,
-                    1,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                    TrackerLogLevel::None,
-                )?;
+                        let x_only_public_key = keypair.x_only_public_key().0;
 
-                let signature_2 = create_p2pk_signature(
-                    &tx,
-                    &utxos,
-                    &keypair,
-                    2,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                )?;
-                let tx = finalize_p2pk_transaction(
-                    tx,
-                    &utxos,
-                    &x_only_public_key,
-                    &signature_2,
-                    2,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                    TrackerLogLevel::None,
-                )?;
+                        let signature_1 = create_p2pk_signature(
+                            &tx,
+                            utxos,
+                            &keypair,
+                            1,
+                            address_params,
+                            genesis_block_hash,
+                        )?;
+                        let tx = finalize_p2pk_transaction(
+                            tx,
+                            utxos,
+                            &x_only_public_key,
+                            &signature_1,
+                            1,
+                            address_params,
+                            genesis_block_hash,
+                            TrackerLogLevel::None,
+                        )?;
 
-                let signature_3 = create_p2pk_signature(
-                    &tx,
-                    &utxos,
-                    &keypair,
-                    3,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                )?;
-                let tx = finalize_p2pk_transaction(
-                    tx,
-                    &utxos,
-                    &x_only_public_key,
-                    &signature_3,
-                    3,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                    TrackerLogLevel::None,
-                )?;
+                        let signature_2 = create_p2pk_signature(
+                            &tx,
+                            utxos,
+                            &keypair,
+                            2,
+                            address_params,
+                            genesis_block_hash,
+                        )?;
+                        let tx = finalize_p2pk_transaction(
+                            tx,
+                            utxos,
+                            &x_only_public_key,
+                            &signature_2,
+                            2,
+                            address_params,
+                            genesis_block_hash,
+                            TrackerLogLevel::None,
+                        )?;
+
+                        let signature_3 = create_p2pk_signature(
+                            &tx,
+                            utxos,
+                            &keypair,
+                            3,
+                            address_params,
+                            genesis_block_hash,
+                        )?;
+                        finalize_p2pk_transaction(
+                            tx,
+                            utxos,
+                            &x_only_public_key,
+                            &signature_3,
+                            3,
+                            address_params,
+                            genesis_block_hash,
+                            TrackerLogLevel::None,
+                        )
+                    })?;
 
                 if *broadcast {
                     println!("Broadcasted txid: {}", broadcast_tx(&tx).await?);
@@ -655,73 +680,78 @@ impl Options {
                 let grantor_tx_out = fetch_utxo(*grantor_asset_utxo).await?;
                 let fee_tx_out = fetch_utxo(*fee_utxo).await?;
 
-                let (pst, option_branch) = contracts::sdk::build_option_settlement(
+                let (partial_pset, option_branch) = contracts::sdk::build_option_settlement(
                     (*settlement_asset_utxo, settlement_tx_out.clone()),
                     (*grantor_asset_utxo, grantor_tx_out.clone()),
                     (*fee_utxo, fee_tx_out.clone()),
                     *grantor_token_amount_to_burn,
-                    *fee_amount,
                     &option_arguments,
                 )?;
 
-                let tx = pst.extract_tx()?;
-                let utxos = vec![
-                    settlement_tx_out.clone(),
-                    grantor_tx_out.clone(),
-                    fee_tx_out.clone(),
-                ];
+                let fee_rate =
+                    contracts::sdk::EsploraFeeFetcher::get_fee_rate(DEFAULT_TARGET_BLOCKS)?;
+                let mut partial_pset = partial_pset.fee_rate(fee_rate);
+                if let Some(fee_amount) = *fee_amount {
+                    partial_pset = partial_pset.fee(fee_amount);
+                }
 
-                let tx = finalize_options_transaction(
-                    tx,
-                    &taproot_pubkey_gen.get_x_only_pubkey(),
-                    &get_options_program(&option_arguments)?,
-                    &utxos,
-                    0,
-                    &option_branch,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                    TrackerLogLevel::None,
-                )?;
+                let tx =
+                    partial_pset.finalize(NETWORK, |network: SimplicityNetwork, tx, utxos| {
+                        let address_params = network.address_params();
+                        let genesis_block_hash = network.genesis_block_hash();
 
-                let x_only_public_key = keypair.x_only_public_key().0;
+                        let tx = finalize_options_transaction(
+                            tx,
+                            &taproot_pubkey_gen.get_x_only_pubkey(),
+                            &get_options_program(&option_arguments)?,
+                            utxos,
+                            0,
+                            &option_branch,
+                            address_params,
+                            genesis_block_hash,
+                            TrackerLogLevel::None,
+                        )?;
 
-                let signature_1 = create_p2pk_signature(
-                    &tx,
-                    &utxos,
-                    &keypair,
-                    1,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                )?;
-                let tx = finalize_p2pk_transaction(
-                    tx,
-                    &utxos,
-                    &x_only_public_key,
-                    &signature_1,
-                    1,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                    TrackerLogLevel::None,
-                )?;
+                        let x_only_public_key = keypair.x_only_public_key().0;
 
-                let signature_2 = create_p2pk_signature(
-                    &tx,
-                    &utxos,
-                    &keypair,
-                    2,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                )?;
-                let tx = finalize_p2pk_transaction(
-                    tx,
-                    &utxos,
-                    &x_only_public_key,
-                    &signature_2,
-                    2,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                    TrackerLogLevel::None,
-                )?;
+                        let signature_1 = create_p2pk_signature(
+                            &tx,
+                            utxos,
+                            &keypair,
+                            1,
+                            address_params,
+                            genesis_block_hash,
+                        )?;
+                        let tx = finalize_p2pk_transaction(
+                            tx,
+                            utxos,
+                            &x_only_public_key,
+                            &signature_1,
+                            1,
+                            address_params,
+                            genesis_block_hash,
+                            TrackerLogLevel::None,
+                        )?;
+
+                        let signature_2 = create_p2pk_signature(
+                            &tx,
+                            utxos,
+                            &keypair,
+                            2,
+                            address_params,
+                            genesis_block_hash,
+                        )?;
+                        finalize_p2pk_transaction(
+                            tx,
+                            utxos,
+                            &x_only_public_key,
+                            &signature_2,
+                            2,
+                            address_params,
+                            genesis_block_hash,
+                            TrackerLogLevel::None,
+                        )
+                    })?;
 
                 if *broadcast {
                     println!("Broadcasted txid: {}", broadcast_tx(&tx).await?);
@@ -757,73 +787,78 @@ impl Options {
                 let grantor_tx_out = fetch_utxo(*grantor_asset_utxo).await?;
                 let fee_tx_out = fetch_utxo(*fee_utxo).await?;
 
-                let (pst, option_branch) = contracts::sdk::build_option_expiry(
+                let (partial_pset, option_branch) = contracts::sdk::build_option_expiry(
                     (*collateral_utxo, collateral_tx_out.clone()),
                     (*grantor_asset_utxo, grantor_tx_out.clone()),
                     (*fee_utxo, fee_tx_out.clone()),
                     *grantor_token_amount_to_burn,
-                    *fee_amount,
                     &option_arguments,
                 )?;
 
-                let tx = pst.extract_tx()?;
-                let utxos = vec![
-                    collateral_tx_out.clone(),
-                    grantor_tx_out.clone(),
-                    fee_tx_out.clone(),
-                ];
+                let fee_rate =
+                    contracts::sdk::EsploraFeeFetcher::get_fee_rate(DEFAULT_TARGET_BLOCKS)?;
+                let mut partial_pset = partial_pset.fee_rate(fee_rate);
+                if let Some(fee_amount) = *fee_amount {
+                    partial_pset = partial_pset.fee(fee_amount);
+                }
 
-                let tx = finalize_options_transaction(
-                    tx,
-                    &taproot_pubkey_gen.get_x_only_pubkey(),
-                    &get_options_program(&option_arguments)?,
-                    &utxos,
-                    0,
-                    &option_branch,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                    TrackerLogLevel::None,
-                )?;
+                let tx =
+                    partial_pset.finalize(NETWORK, |network: SimplicityNetwork, tx, utxos| {
+                        let address_params = network.address_params();
+                        let genesis_block_hash = network.genesis_block_hash();
 
-                let x_only_public_key = keypair.x_only_public_key().0;
+                        let tx = finalize_options_transaction(
+                            tx,
+                            &taproot_pubkey_gen.get_x_only_pubkey(),
+                            &get_options_program(&option_arguments)?,
+                            utxos,
+                            0,
+                            &option_branch,
+                            address_params,
+                            genesis_block_hash,
+                            TrackerLogLevel::None,
+                        )?;
 
-                let signature_1 = create_p2pk_signature(
-                    &tx,
-                    &utxos,
-                    &keypair,
-                    1,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                )?;
-                let tx = finalize_p2pk_transaction(
-                    tx,
-                    &utxos,
-                    &x_only_public_key,
-                    &signature_1,
-                    1,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                    TrackerLogLevel::None,
-                )?;
+                        let x_only_public_key = keypair.x_only_public_key().0;
 
-                let signature_2 = create_p2pk_signature(
-                    &tx,
-                    &utxos,
-                    &keypair,
-                    2,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                )?;
-                let tx = finalize_p2pk_transaction(
-                    tx,
-                    &utxos,
-                    &x_only_public_key,
-                    &signature_2,
-                    2,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                    TrackerLogLevel::None,
-                )?;
+                        let signature_1 = create_p2pk_signature(
+                            &tx,
+                            utxos,
+                            &keypair,
+                            1,
+                            address_params,
+                            genesis_block_hash,
+                        )?;
+                        let tx = finalize_p2pk_transaction(
+                            tx,
+                            utxos,
+                            &x_only_public_key,
+                            &signature_1,
+                            1,
+                            address_params,
+                            genesis_block_hash,
+                            TrackerLogLevel::None,
+                        )?;
+
+                        let signature_2 = create_p2pk_signature(
+                            &tx,
+                            utxos,
+                            &keypair,
+                            2,
+                            address_params,
+                            genesis_block_hash,
+                        )?;
+                        finalize_p2pk_transaction(
+                            tx,
+                            utxos,
+                            &x_only_public_key,
+                            &signature_2,
+                            2,
+                            address_params,
+                            genesis_block_hash,
+                            TrackerLogLevel::None,
+                        )
+                    })?;
 
                 if *broadcast {
                     println!("Broadcasted txid: {}", broadcast_tx(&tx).await?);
@@ -861,94 +896,98 @@ impl Options {
                 let grantor_tx_out = fetch_utxo(*grantor_asset_utxo).await?;
                 let fee_tx_out = fetch_utxo(*fee_utxo).await?;
 
-                let (pst, option_branch) = contracts::sdk::build_option_cancellation(
+                let (partial_pset, option_branch) = contracts::sdk::build_option_cancellation(
                     (*collateral_utxo, collateral_tx_out.clone()),
                     (*option_asset_utxo, option_tx_out.clone()),
                     (*grantor_asset_utxo, grantor_tx_out.clone()),
                     (*fee_utxo, fee_tx_out.clone()),
                     &option_arguments,
                     *amount_to_burn,
-                    *fee_amount,
                 )?;
 
-                let tx = pst.extract_tx()?;
-                let utxos = vec![
-                    collateral_tx_out.clone(),
-                    option_tx_out.clone(),
-                    grantor_tx_out.clone(),
-                    fee_tx_out.clone(),
-                ];
+                let fee_rate =
+                    contracts::sdk::EsploraFeeFetcher::get_fee_rate(DEFAULT_TARGET_BLOCKS)?;
+                let mut partial_pset = partial_pset.fee_rate(fee_rate);
+                if let Some(fee_amount) = *fee_amount {
+                    partial_pset = partial_pset.fee(fee_amount);
+                }
 
-                let tx = finalize_options_transaction(
-                    tx,
-                    &taproot_pubkey_gen.get_x_only_pubkey(),
-                    &get_options_program(&option_arguments)?,
-                    &utxos,
-                    0,
-                    &option_branch,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                    TrackerLogLevel::None,
-                )?;
+                let tx =
+                    partial_pset.finalize(NETWORK, |network: SimplicityNetwork, tx, utxos| {
+                        let address_params = network.address_params();
+                        let genesis_block_hash = network.genesis_block_hash();
 
-                let x_only_public_key = keypair.x_only_public_key().0;
+                        let tx = finalize_options_transaction(
+                            tx,
+                            &taproot_pubkey_gen.get_x_only_pubkey(),
+                            &get_options_program(&option_arguments)?,
+                            utxos,
+                            0,
+                            &option_branch,
+                            address_params,
+                            genesis_block_hash,
+                            TrackerLogLevel::None,
+                        )?;
 
-                let signature_1 = create_p2pk_signature(
-                    &tx,
-                    &utxos,
-                    &keypair,
-                    1,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                )?;
-                let tx = finalize_p2pk_transaction(
-                    tx,
-                    &utxos,
-                    &x_only_public_key,
-                    &signature_1,
-                    1,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                    TrackerLogLevel::None,
-                )?;
+                        let x_only_public_key = keypair.x_only_public_key().0;
 
-                let signature_2 = create_p2pk_signature(
-                    &tx,
-                    &utxos,
-                    &keypair,
-                    2,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                )?;
-                let tx = finalize_p2pk_transaction(
-                    tx,
-                    &utxos,
-                    &x_only_public_key,
-                    &signature_2,
-                    2,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                    TrackerLogLevel::None,
-                )?;
+                        let signature_1 = create_p2pk_signature(
+                            &tx,
+                            utxos,
+                            &keypair,
+                            1,
+                            address_params,
+                            genesis_block_hash,
+                        )?;
+                        let tx = finalize_p2pk_transaction(
+                            tx,
+                            utxos,
+                            &x_only_public_key,
+                            &signature_1,
+                            1,
+                            address_params,
+                            genesis_block_hash,
+                            TrackerLogLevel::None,
+                        )?;
 
-                let signature_3 = create_p2pk_signature(
-                    &tx,
-                    &utxos,
-                    &keypair,
-                    3,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                )?;
-                let tx = finalize_p2pk_transaction(
-                    tx,
-                    &utxos,
-                    &x_only_public_key,
-                    &signature_3,
-                    3,
-                    NETWORK.address_params(),
-                    NETWORK.genesis_block_hash(),
-                    TrackerLogLevel::None,
-                )?;
+                        let signature_2 = create_p2pk_signature(
+                            &tx,
+                            utxos,
+                            &keypair,
+                            2,
+                            address_params,
+                            genesis_block_hash,
+                        )?;
+                        let tx = finalize_p2pk_transaction(
+                            tx,
+                            utxos,
+                            &x_only_public_key,
+                            &signature_2,
+                            2,
+                            address_params,
+                            genesis_block_hash,
+                            TrackerLogLevel::None,
+                        )?;
+
+                        let signature_3 = create_p2pk_signature(
+                            &tx,
+                            utxos,
+                            &keypair,
+                            3,
+                            address_params,
+                            genesis_block_hash,
+                        )?;
+                        finalize_p2pk_transaction(
+                            tx,
+                            utxos,
+                            &x_only_public_key,
+                            &signature_3,
+                            3,
+                            address_params,
+                            genesis_block_hash,
+                            TrackerLogLevel::None,
+                        )
+                    })?;
 
                 if *broadcast {
                     println!("Broadcasted txid: {}", broadcast_tx(&tx).await?);
