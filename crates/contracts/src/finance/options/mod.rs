@@ -158,7 +158,11 @@ mod options_tests {
     use simplicityhl::elements::secp256k1_zkp::SECP256K1;
     use simplicityhl::elements::taproot::ControlBlock;
     use simplicityhl::simplicity::jet::elements::ElementsUtxo;
-    use simplicityhl_core::{LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_TEST_ASSET_ID_STR};
+    use simplicityhl_core::{
+        LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_TEST_ASSET_ID_STR, SimplicityNetwork,
+    };
+
+    const NETWORK: SimplicityNetwork = SimplicityNetwork::LiquidTestnet;
 
     fn get_creation_pst(
         keypair: &Keypair,
@@ -193,7 +197,7 @@ mod options_tests {
                 (
                     option_outpoint,
                     TxOut {
-                        asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                        asset: Asset::Explicit(NETWORK.policy_asset()),
                         value: Value::Explicit(500),
                         nonce: elements::confidential::Nonce::Null,
                         script_pubkey: Script::new(),
@@ -203,7 +207,7 @@ mod options_tests {
                 (
                     grantor_outpoint,
                     TxOut {
-                        asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                        asset: Asset::Explicit(NETWORK.policy_asset()),
                         value: Value::Explicit(1000),
                         nonce: elements::confidential::Nonce::Null,
                         script_pubkey: Script::new(),
@@ -213,7 +217,7 @@ mod options_tests {
                 &option_arguments,
                 issuance_asset_entropy,
                 100,
-                &AddressParams::LIQUID_TESTNET,
+                NETWORK.address_params(),
             )?,
             option_arguments,
         ))
@@ -490,7 +494,7 @@ mod options_tests {
             (
                 OutPoint::default(),
                 TxOut {
-                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(NETWORK.policy_asset()),
                     value: Value::Explicit(100),
                     nonce: elements::confidential::Nonce::Null,
                     script_pubkey: Script::new(),
@@ -588,7 +592,7 @@ mod options_tests {
             Some((
                 OutPoint::default(),
                 TxOut {
-                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(NETWORK.policy_asset()),
                     value: Value::Explicit(100),
                     nonce: elements::confidential::Nonce::Null,
                     script_pubkey: Script::new(),
@@ -674,7 +678,7 @@ mod options_tests {
             (
                 OutPoint::default(),
                 TxOut {
-                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(NETWORK.policy_asset()),
                     value: Value::Explicit(100),
                     nonce: elements::confidential::Nonce::Null,
                     script_pubkey: Script::new(),
@@ -762,7 +766,7 @@ mod options_tests {
             (
                 OutPoint::default(),
                 TxOut {
-                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(NETWORK.policy_asset()),
                     value: Value::Explicit(100),
                     nonce: elements::confidential::Nonce::Null,
                     script_pubkey: Script::new(),

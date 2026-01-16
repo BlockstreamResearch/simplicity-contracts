@@ -3,18 +3,21 @@ use crate::modules::utils::derive_keypair;
 
 use anyhow::anyhow;
 
+use crate::commands::NETWORK;
 use crate::explorer::{broadcast_tx, fetch_utxo};
+
 use clap::Subcommand;
 use simplicityhl::elements::hashes::{Hash, sha256};
 use simplicityhl::elements::pset::serialize::Serialize;
 use simplicityhl::elements::secp256k1_zkp::SECP256K1;
 use simplicityhl::elements::{AssetId, ContractHash};
-use simplicityhl::simplicity::elements::{Address, AddressParams, OutPoint};
+use simplicityhl::simplicity::elements::{Address, OutPoint};
 use simplicityhl::simplicity::hex::DisplayHex;
+
 use simplicityhl::tracker::TrackerLogLevel;
 use simplicityhl_core::{
-    LIQUID_TESTNET_GENESIS, create_p2pk_signature, derive_public_blinder_key,
-    finalize_p2pk_transaction, get_p2pk_address, hash_script,
+    create_p2pk_signature, derive_public_blinder_key, finalize_p2pk_transaction, get_p2pk_address,
+    hash_script,
 };
 
 #[derive(Subcommand, Debug)]
@@ -149,7 +152,7 @@ impl Basic {
                 let keypair = derive_keypair(*index);
 
                 let public_key = keypair.x_only_public_key().0;
-                let address = get_p2pk_address(&public_key, &AddressParams::LIQUID_TESTNET)?;
+                let address = get_p2pk_address(&public_key, NETWORK.address_params())?;
 
                 let mut script_hash: [u8; 32] = hash_script(&address.script_pubkey());
                 script_hash.reverse();
@@ -188,8 +191,8 @@ impl Basic {
                     utxos,
                     &keypair,
                     0,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK.address_params(),
+                    NETWORK.genesis_block_hash(),
                 )?;
 
                 let tx = finalize_p2pk_transaction(
@@ -198,8 +201,8 @@ impl Basic {
                     &x_only_public_key,
                     &signature,
                     0,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK.address_params(),
+                    NETWORK.genesis_block_hash(),
                     TrackerLogLevel::None,
                 )?;
 
@@ -237,8 +240,8 @@ impl Basic {
                     utxos,
                     &keypair,
                     0,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK.address_params(),
+                    NETWORK.genesis_block_hash(),
                 )?;
 
                 let tx = finalize_p2pk_transaction(
@@ -247,8 +250,8 @@ impl Basic {
                     &x_only_public_key,
                     &signature,
                     0,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK.address_params(),
+                    NETWORK.genesis_block_hash(),
                     TrackerLogLevel::None,
                 )?;
 
@@ -291,8 +294,8 @@ impl Basic {
                     &utxos,
                     &keypair,
                     0,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK.address_params(),
+                    NETWORK.genesis_block_hash(),
                 )?;
                 let tx = finalize_p2pk_transaction(
                     tx,
@@ -300,8 +303,8 @@ impl Basic {
                     &x_only_public_key,
                     &signature_0,
                     0,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK.address_params(),
+                    NETWORK.genesis_block_hash(),
                     TrackerLogLevel::None,
                 )?;
 
@@ -310,8 +313,8 @@ impl Basic {
                     &utxos,
                     &keypair,
                     1,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK.address_params(),
+                    NETWORK.genesis_block_hash(),
                 )?;
                 let tx = finalize_p2pk_transaction(
                     tx,
@@ -319,8 +322,8 @@ impl Basic {
                     &x_only_public_key,
                     &signature_1,
                     1,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK.address_params(),
+                    NETWORK.genesis_block_hash(),
                     TrackerLogLevel::None,
                 )?;
 
@@ -376,8 +379,8 @@ impl Basic {
                     utxos,
                     &keypair,
                     0,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK.address_params(),
+                    NETWORK.genesis_block_hash(),
                 )?;
 
                 let tx = finalize_p2pk_transaction(
@@ -386,8 +389,8 @@ impl Basic {
                     &x_only_public_key,
                     &signature,
                     0,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK.address_params(),
+                    NETWORK.genesis_block_hash(),
                     TrackerLogLevel::None,
                 )?;
 
@@ -461,8 +464,8 @@ impl Basic {
                     &utxos,
                     &keypair,
                     0,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK.address_params(),
+                    NETWORK.genesis_block_hash(),
                 )?;
                 let tx = finalize_p2pk_transaction(
                     tx,
@@ -470,8 +473,8 @@ impl Basic {
                     &x_only_public_key,
                     &signature_0,
                     0,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK.address_params(),
+                    NETWORK.genesis_block_hash(),
                     TrackerLogLevel::None,
                 )?;
 
@@ -480,8 +483,8 @@ impl Basic {
                     &utxos,
                     &keypair,
                     1,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK.address_params(),
+                    NETWORK.genesis_block_hash(),
                 )?;
                 let tx = finalize_p2pk_transaction(
                     tx,
@@ -489,8 +492,8 @@ impl Basic {
                     &x_only_public_key,
                     &signature_1,
                     1,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK.address_params(),
+                    NETWORK.genesis_block_hash(),
                     TrackerLogLevel::None,
                 )?;
 
