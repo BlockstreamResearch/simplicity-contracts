@@ -7,11 +7,12 @@ use crate::sdk::validation::TxOutExt;
 
 use std::collections::HashMap;
 
+use crate::sdk::PartialPset;
 use simplicityhl::elements::bitcoin::secp256k1::Keypair;
 use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
 use simplicityhl::elements::secp256k1_zkp::SECP256K1;
 use simplicityhl::elements::secp256k1_zkp::rand::thread_rng;
-use simplicityhl::elements::{OutPoint, Script, Sequence, TxOut, TxOutSecrets};
+use simplicityhl::elements::{OutPoint, Sequence, TxOut, TxOutSecrets};
 
 /// Fund an option contract by depositing collateral and reissuing tokens.
 ///
@@ -36,8 +37,7 @@ pub fn build_option_funding(
     fee_utxo: Option<&(OutPoint, TxOut)>,
     option_arguments: &OptionsArguments,
     collateral_amount: u64,
-    fee_amount: u64,
-) -> Result<(PartiallySignedTransaction, OptionBranch), TransactionBuildError> {
+) -> Result<(PartialPset, OptionBranch), TransactionBuildError> {
     let blinding_key = blinding_keypair.public_key();
 
     let (option_out_point, option_tx_out, input_option_secrets) = option_asset_utxo;
@@ -131,10 +131,7 @@ pub fn build_option_funding(
     ));
 
     let utxos = if let Some((_, fee_tx_out)) = fee_utxo {
-        let total_fee = fee_tx_out.validate_amount(fee_amount)?;
-
         let is_collateral_change_needed = total_collateral != collateral_amount;
-        let is_fee_change_needed = total_fee != 0;
 
         if is_collateral_change_needed {
             pst.add_output(Output::new_explicit(
@@ -145,22 +142,6 @@ pub fn build_option_funding(
             ));
         }
 
-        if is_fee_change_needed {
-            pst.add_output(Output::new_explicit(
-                change_recipient_script,
-                total_fee,
-                fee_tx_out.explicit_asset()?,
-                None,
-            ));
-        }
-
-        pst.add_output(Output::new_explicit(
-            Script::new(),
-            fee_amount,
-            fee_tx_out.explicit_asset()?,
-            None,
-        ));
-
         vec![
             option_tx_out,
             grantor_tx_out,
@@ -168,24 +149,6 @@ pub fn build_option_funding(
             fee_tx_out.clone(),
         ]
     } else {
-        let is_collateral_change_needed = total_collateral != (collateral_amount + fee_amount);
-
-        if is_collateral_change_needed {
-            pst.add_output(Output::new_explicit(
-                change_recipient_script,
-                total_collateral - collateral_amount - fee_amount,
-                collateral_asset_id,
-                None,
-            ));
-        }
-
-        pst.add_output(Output::new_explicit(
-            Script::new(),
-            fee_amount,
-            collateral_asset_id,
-            None,
-        ));
-
         vec![option_tx_out, grantor_tx_out, collateral_tx_out]
     };
 
@@ -225,5 +188,8 @@ pub fn build_option_funding(
         output_grantor_vbf,
     };
 
-    Ok((pst, option_branch))
+    let non_finalized_pset =
+        PartialPset::new(pst, change_recipient_script, utxos).inp_tx_out_secrets(inp_tx_out_sec);
+
+    Ok((non_finalized_pset, option_branch))
 }

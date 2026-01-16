@@ -89,9 +89,12 @@ mod tests {
     use simplicityhl::elements::hashes::Hash;
     use simplicityhl_core::{
         Encodable, LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_TEST_ASSET_ID_STR,
+        SimplicityNetwork,
     };
 
     use super::*;
+
+    const NETWORK: SimplicityNetwork = SimplicityNetwork::LiquidTestnet;
 
     fn load_mock() -> Store {
         Store {
@@ -119,7 +122,7 @@ mod tests {
         );
 
         let options_taproot_pubkey_gen =
-            TaprootPubkeyGen::from(&args, &AddressParams::LIQUID_TESTNET, &get_options_address)?;
+            TaprootPubkeyGen::from(&args, NETWORK.address_params(), &get_options_address)?;
 
         Ok((args, options_taproot_pubkey_gen))
     }
@@ -133,7 +136,7 @@ mod tests {
         store.import_arguments(
             &options_taproot_pubkey_gen.to_string(),
             &args.to_hex()?,
-            &AddressParams::LIQUID_TESTNET,
+            NETWORK.address_params(),
             &get_options_address,
         )?;
 
@@ -154,7 +157,7 @@ mod tests {
         store.import_arguments(
             &options_taproot_pubkey_gen.to_string(),
             &args.to_hex()?,
-            &AddressParams::LIQUID_TESTNET,
+            NETWORK.address_params(),
             &get_options_address,
         )?;
 
@@ -174,7 +177,7 @@ mod tests {
         store.import_arguments(
             &options_taproot_pubkey_gen.to_string(),
             &args.to_hex()?,
-            &AddressParams::LIQUID_TESTNET,
+            NETWORK.address_params(),
             &get_options_address,
         )?;
 

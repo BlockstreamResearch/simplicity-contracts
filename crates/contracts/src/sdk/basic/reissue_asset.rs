@@ -1,13 +1,11 @@
 use crate::error::TransactionBuildError;
-use crate::sdk::validation::TxOutExt;
 
 use std::collections::HashMap;
 
-use simplicityhl::elements::bitcoin::secp256k1;
+use crate::sdk::finalization::PartialPset;
 use simplicityhl::elements::hashes::sha256::Midstate;
 use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
 use simplicityhl::elements::secp256k1_zkp::PublicKey;
-use simplicityhl::elements::secp256k1_zkp::rand::thread_rng;
 use simplicityhl::elements::{AssetId, OutPoint, TxOut, TxOutSecrets};
 
 /// Reissue an existing asset by spending its reissuance token.
@@ -25,16 +23,10 @@ pub fn reissue_asset(
     reissue_utxo_secrets: TxOutSecrets,
     fee_utxo: (OutPoint, TxOut),
     reissue_amount: u64,
-    fee_amount: u64,
     asset_entropy: Midstate,
-) -> Result<PartiallySignedTransaction, TransactionBuildError> {
+) -> Result<PartialPset, TransactionBuildError> {
     let (reissue_out_point, reissue_tx_out) = reissue_utxo;
     let (fee_out_point, fee_tx_out) = fee_utxo;
-
-    let (fee_asset_id, total_lbtc_left) = (
-        fee_tx_out.explicit_asset()?,
-        fee_tx_out.validate_amount(fee_amount)?,
-    );
 
     let change_recipient_script = fee_tx_out.script_pubkey.clone();
 
@@ -88,19 +80,10 @@ pub fn reissue_asset(
         None,
     ));
 
-    pst.add_output(Output::new_explicit(
+    Ok(PartialPset::new(
+        pst,
         change_recipient_script,
-        total_lbtc_left,
-        fee_asset_id,
-        None,
-    ));
-
-    pst.add_output(Output::from_txout(TxOut::new_fee(fee_amount, fee_asset_id)));
-
-    pst.blind_last(&mut thread_rng(), secp256k1::SECP256K1, &inp_txout_sec)?;
-
-    pst.extract_tx()?
-        .verify_tx_amt_proofs(secp256k1::SECP256K1, &[reissue_tx_out, fee_tx_out])?;
-
-    Ok(pst)
+        vec![reissue_tx_out, fee_tx_out],
+    )
+    .inp_tx_out_secrets(inp_txout_sec))
 }

@@ -27,8 +27,7 @@ use simplicityhl::simplicity::jet::elements::{ElementsEnv, ElementsUtxo};
 use simplicityhl::tracker::TrackerLogLevel;
 use simplicityhl::{CompiledProgram, TemplateProgram};
 use simplicityhl_core::{
-    LIQUID_TESTNET_GENESIS, ProgramError, control_block, create_p2tr_address, load_program,
-    run_program,
+    ProgramError, SimplicityNetwork, control_block, create_p2tr_address, load_program, run_program,
 };
 
 mod build_arguments;
@@ -121,6 +120,7 @@ pub fn finalize_dcd_transaction_on_liquid_testnet(
     merge_branch: MergeBranch,
     log_level: TrackerLogLevel,
 ) -> Result<Transaction, ProgramError> {
+    let network = SimplicityNetwork::LiquidTestnet;
     let cmr = dcd_program.commit().cmr();
 
     assert!(
@@ -130,7 +130,7 @@ pub fn finalize_dcd_transaction_on_liquid_testnet(
 
     let target_utxo = &utxos[input_index as usize];
     let script_pubkey =
-        create_p2tr_address(cmr, dcd_public_key, &AddressParams::LIQUID_TESTNET).script_pubkey();
+        create_p2tr_address(cmr, dcd_public_key, network.address_params()).script_pubkey();
 
     assert_eq!(
         target_utxo.script_pubkey, script_pubkey,
@@ -151,7 +151,7 @@ pub fn finalize_dcd_transaction_on_liquid_testnet(
         cmr,
         control_block(cmr, *dcd_public_key),
         None,
-        *LIQUID_TESTNET_GENESIS,
+        network.genesis_block_hash(),
     );
 
     let pruned = execute_dcd_program(
@@ -207,14 +207,14 @@ mod dcd_merge_tests {
     use simplicityhl::simplicity::bitcoin::secp256k1;
     use simplicityhl::simplicity::elements::confidential::{Asset, Value};
     use simplicityhl::simplicity::elements::pset::{Input, Output, PartiallySignedTransaction};
-    use simplicityhl::simplicity::elements::{
-        self, AddressParams, AssetId, OutPoint, Script, Txid,
-    };
+    use simplicityhl::simplicity::elements::{self, AssetId, OutPoint, Script, Txid};
     use simplicityhl::simplicity::jet::elements::{ElementsEnv, ElementsUtxo};
     use simplicityhl_core::{
-        LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_TEST_ASSET_ID_STR, get_new_asset_entropy,
-        get_p2pk_address, hash_script,
+        LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_TEST_ASSET_ID_STR, SimplicityNetwork,
+        get_new_asset_entropy, get_p2pk_address, hash_script,
     };
+
+    const NETWORK: SimplicityNetwork = SimplicityNetwork::LiquidTestnet;
 
     #[test]
     fn test_dcd_maker_funding_path() -> Result<()> {
@@ -264,7 +264,7 @@ mod dcd_merge_tests {
         let dcd_address = get_dcd_address(
             &keypair.x_only_public_key().0,
             &dcd_arguments,
-            &AddressParams::LIQUID_TESTNET,
+            NETWORK.address_params(),
         )?;
 
         let mut pst = PartiallySignedTransaction::new_v2();
@@ -481,7 +481,7 @@ mod dcd_merge_tests {
         let dcd_address = get_dcd_address(
             &keypair.x_only_public_key().0,
             &dcd_arguments,
-            &AddressParams::LIQUID_TESTNET,
+            NETWORK.address_params(),
         )?;
 
         let mut pst = PartiallySignedTransaction::new_v2();
@@ -607,7 +607,7 @@ mod dcd_merge_tests {
         let dcd_address = get_dcd_address(
             &keypair.x_only_public_key().0,
             &dcd_arguments,
-            &AddressParams::LIQUID_TESTNET,
+            NETWORK.address_params(),
         )?;
 
         let mut pst = PartiallySignedTransaction::new_v2();
@@ -739,7 +739,7 @@ mod dcd_merge_tests {
         let dcd_address = get_dcd_address(
             &keypair.x_only_public_key().0,
             &dcd_arguments,
-            &AddressParams::LIQUID_TESTNET,
+            NETWORK.address_params(),
         )?;
 
         let mut pst = PartiallySignedTransaction::new_v2();
@@ -869,7 +869,7 @@ mod dcd_merge_tests {
         let dcd_address = get_dcd_address(
             &keypair.x_only_public_key().0,
             &dcd_arguments,
-            &AddressParams::LIQUID_TESTNET,
+            NETWORK.address_params(),
         )?;
 
         let mut pst = PartiallySignedTransaction::new_v2();
@@ -1000,7 +1000,7 @@ mod dcd_merge_tests {
         let dcd_address = get_dcd_address(
             &keypair.x_only_public_key().0,
             &dcd_arguments,
-            &AddressParams::LIQUID_TESTNET,
+            NETWORK.address_params(),
         )?;
 
         let mut pst = PartiallySignedTransaction::new_v2();
@@ -1139,7 +1139,7 @@ mod dcd_merge_tests {
         let dcd_address = get_dcd_address(
             &keypair.x_only_public_key().0,
             &dcd_arguments,
-            &AddressParams::LIQUID_TESTNET,
+            NETWORK.address_params(),
         )?;
 
         let mut pst = PartiallySignedTransaction::new_v2();
@@ -1278,7 +1278,7 @@ mod dcd_merge_tests {
         let dcd_address = get_dcd_address(
             &keypair.x_only_public_key().0,
             &dcd_arguments,
-            &AddressParams::LIQUID_TESTNET,
+            NETWORK.address_params(),
         )?;
 
         let mut pst = PartiallySignedTransaction::new_v2();
@@ -1383,10 +1383,8 @@ mod dcd_merge_tests {
         let ratio_args =
             DCDRatioArguments::build_from(1000, incentive_basis_points, strike_price, 10)?;
 
-        let fee_recipient = get_p2pk_address(
-            &oracle_kp.x_only_public_key().0,
-            &AddressParams::LIQUID_TESTNET,
-        )?;
+        let fee_recipient =
+            get_p2pk_address(&oracle_kp.x_only_public_key().0, NETWORK.address_params())?;
 
         let mut fee_script_hash: [u8; 32] = hash_script(&fee_recipient.script_pubkey());
         fee_script_hash.reverse();
@@ -1418,7 +1416,7 @@ mod dcd_merge_tests {
         let dcd_address = get_dcd_address(
             &keypair.x_only_public_key().0,
             &dcd_arguments,
-            &AddressParams::LIQUID_TESTNET,
+            NETWORK.address_params(),
         )?;
 
         let amount_to_get = ratio_args.total_collateral_amount();
@@ -1547,7 +1545,7 @@ mod dcd_merge_tests {
         let dcd_address = get_dcd_address(
             &keypair.x_only_public_key().0,
             &dcd_arguments,
-            &AddressParams::LIQUID_TESTNET,
+            NETWORK.address_params(),
         )?;
 
         let mut pst = PartiallySignedTransaction::new_v2();
@@ -1677,7 +1675,7 @@ mod dcd_merge_tests {
         let dcd_address = get_dcd_address(
             &keypair.x_only_public_key().0,
             &dcd_arguments,
-            &AddressParams::LIQUID_TESTNET,
+            NETWORK.address_params(),
         )?;
 
         let mut pst = PartiallySignedTransaction::new_v2();
@@ -1795,7 +1793,7 @@ mod dcd_merge_tests {
         let dcd_address = get_dcd_address(
             &keypair.x_only_public_key().0,
             &dcd_arguments,
-            &AddressParams::LIQUID_TESTNET,
+            NETWORK.address_params(),
         )?;
 
         let mut pst = PartiallySignedTransaction::new_v2();
@@ -1922,7 +1920,7 @@ mod dcd_merge_tests {
         let dcd_address = get_dcd_address(
             &keypair.x_only_public_key().0,
             &dcd_arguments,
-            &AddressParams::LIQUID_TESTNET,
+            NETWORK.address_params(),
         )?;
 
         let mut pst = PartiallySignedTransaction::new_v2();
