@@ -9,14 +9,12 @@ use simplicityhl::simplicity::jet::Elements;
 use simplicityhl::simplicity::jet::elements::ElementsEnv;
 use simplicityhl::simplicity::{Cmr, RedeemNode, leaf_version};
 use simplicityhl::tracker::TrackerLogLevel;
-use simplicityhl::{CompiledProgram, TemplateProgram};
+use simplicityhl::{Arguments, CompiledProgram, TemplateProgram};
 use simplicityhl_core::{ProgramError, run_program};
 
-mod build_arguments;
 mod build_witness;
 
-pub use build_arguments::{UnlimitedStorageArguments, build_array_tr_storage_arguments};
-pub use build_witness::{MAX_VAL, build_array_tr_storage_witness};
+pub use build_witness::{State, build_array_tr_storage_witness};
 
 pub const ARRAY_TR_STORAGE_SOURCE: &str = include_str!("source_simf/array_tr_storage.simf");
 
@@ -37,12 +35,10 @@ pub fn get_array_tr_storage_template_program() -> TemplateProgram {
 ///
 /// Panics if program instantiation fails.
 #[must_use]
-pub fn get_array_tr_storage_compiled_program(args: &UnlimitedStorageArguments) -> CompiledProgram {
+pub fn get_array_tr_storage_compiled_program() -> CompiledProgram {
     let program = get_array_tr_storage_template_program();
 
-    program
-        .instantiate(build_array_tr_storage_arguments(args), true)
-        .unwrap()
+    program.instantiate(Arguments::default(), true).unwrap()
 }
 
 /// Execute storage program with new state.
@@ -50,35 +46,31 @@ pub fn get_array_tr_storage_compiled_program(args: &UnlimitedStorageArguments) -
 /// # Errors
 /// Returns error if program execution fails.
 pub fn execute_array_tr_storage_program(
-    storage: [u8; MAX_VAL],
+    state: &State,
+    changed_index: u16,
     compiled_program: &CompiledProgram,
     env: &ElementsEnv<Arc<Transaction>>,
-    log_level: TrackerLogLevel,
+    runner_log_level: TrackerLogLevel,
 ) -> Result<Arc<RedeemNode<Elements>>, ProgramError> {
-    let witness_values = build_array_tr_storage_witness(storage);
-    Ok(run_program(compiled_program, witness_values, env, log_level)?.0)
+    let witness_values = build_array_tr_storage_witness(state, changed_index);
+    Ok(run_program(compiled_program, witness_values, env, runner_log_level)?.0)
 }
 
-/// The unspendable internal key specified in BIP-0341.
-///
-/// # Panics
-///
-/// This function **panics** if the hard-coded 32-byte slice is not a valid
-/// x-only public key. The panic originates from
-/// `secp256k1::XOnlyPublicKey::from_slice(...).expect(...)`.
-/// The unspendable internal key specified in BIP-0341.
-#[rustfmt::skip] // mangles byte vectors
-#[must_use]
-pub fn unlimited_storage_unspendable_internal_key() -> secp256k1::XOnlyPublicKey {
-	secp256k1::XOnlyPublicKey::from_slice(&[
-		0x50, 0x92, 0x9b, 0x74, 0xc1, 0xa0, 0x49, 0x54, 0xb7, 0x8b, 0x4b, 0x60, 0x35, 0xe9, 0x7a, 0x5e,
-		0x07, 0x8a, 0x5a, 0x0f, 0x28, 0xec, 0x96, 0xd5, 0x47, 0xbf, 0xee, 0x9a, 0xce, 0x80, 0x3a, 0xc0, 
-	])
-	.expect("key should be valid")
-}
-
-fn unlimited_storage_script_ver(cmr: Cmr) -> (Script, LeafVersion) {
+fn array_tr_storage_script_ver(cmr: Cmr) -> (Script, LeafVersion) {
     (Script::from(cmr.as_ref().to_vec()), leaf_version())
+}
+
+#[must_use]
+pub fn compute_tapdata_tagged_hash_of_the_state(state: &State) -> sha256::Hash {
+    let tag = sha256::Hash::hash(b"TapData");
+    let mut eng = sha256::Hash::engine();
+    eng.input(tag.as_byte_array());
+    eng.input(tag.as_byte_array());
+
+    for item in state.limbs {
+        eng.input(&item);
+    }
+    sha256::Hash::from_engine(eng)
 }
 
 /// Given a Simplicity CMR and an internal key, computes the [`TaprootSpendInfo`]
@@ -91,27 +83,25 @@ fn unlimited_storage_script_ver(cmr: Cmr) -> (Script, LeafVersion) {
 /// finalizing the builder fails. Those panics come from the `.expect(...)`
 /// calls on the builder methods.
 #[must_use]
-pub fn unlimited_storage_taproot_spend_info(
+pub fn array_tr_storage_taproot_spend_info(
     internal_key: secp256k1::XOnlyPublicKey,
-    storage: &[u8; MAX_VAL],
-    len: usize,
+    state: &State,
     cmr: Cmr,
 ) -> TaprootSpendInfo {
-    let (script, version) = unlimited_storage_script_ver(cmr);
+    let (script, version) = array_tr_storage_script_ver(cmr);
+    let state_hash = compute_tapdata_tagged_hash_of_the_state(state);
 
-    // Compute TapData-tagged hash of the state
-    let tag = sha256::Hash::hash(b"TapData");
-    let mut eng = sha256::Hash::engine();
-    eng.input(tag.as_byte_array());
-    eng.input(tag.as_byte_array());
-    eng.input(&storage[..len]);
-    let storage_hash = sha256::Hash::from_engine(eng);
-
-    // Build taproot tree with hidden leaf
+    // Build taproot tree with hidden leaf.
+    // Here, 'depth refers to the level at which the script and hash are transferred.
+    // At depth 0, this will take the place of the root, meaning it will be impossible to place both
+    // the `script` and the `state_hash`. At depth 2 or higher, additional nods are required,
+    // which complicates the structure. Therefore, a value of 1 was chosen, where the `script` and
+    // the `state_hash` values are leaves of the root.
+    // `add_hidden`` in this context allows you to insert the hash as is, unlike add_leaf_with_ver, which hashes under the hood `script`.
     let builder = TaprootBuilder::new()
         .add_leaf_with_ver(1, script, version)
         .expect("tap tree should be valid")
-        .add_hidden(1, storage_hash)
+        .add_hidden(1, state_hash)
         .expect("tap tree should be valid");
 
     builder
@@ -131,42 +121,60 @@ mod array_tr_storage_tests {
     use simplicityhl::simplicity::elements::taproot::ControlBlock;
     use simplicityhl::simplicity::jet::elements::{ElementsEnv, ElementsUtxo};
 
+    #[rustfmt::skip] // mangles byte vectors
+    fn array_tr_storage_unspendable_internal_key() -> secp256k1::XOnlyPublicKey {
+    	secp256k1::XOnlyPublicKey::from_slice(&[
+    		0x50, 0x92, 0x9b, 0x74, 0xc1, 0xa0, 0x49, 0x54, 0xb7, 0x8b, 0x4b, 0x60, 0x35, 0xe9, 0x7a, 0x5e,
+    		0x07, 0x8a, 0x5a, 0x0f, 0x28, 0xec, 0x96, 0xd5, 0x47, 0xbf, 0xee, 0x9a, 0xce, 0x80, 0x3a, 0xc0, 
+    	])
+    	.expect("key should be valid")
+    }
+
     #[test]
     fn test_array_tr_storage_mint_path() -> Result<()> {
-        let mut old_storage = [0u8; MAX_VAL];
-        old_storage[3] = 0xff;
+        let old_state = State::new();
 
-        let array_tr_storage_arguments = UnlimitedStorageArguments::new(5);
+        let mut new_state = old_state.clone();
+        let changed_index = 2;
+        new_state
+            .set_num_to_last_qword(changed_index, 20)
+            .expect("Failed to set number");
 
-        let program = get_array_tr_storage_compiled_program(&array_tr_storage_arguments);
+        let program = get_array_tr_storage_compiled_program();
         let cmr = program.commit().cmr();
 
-        let spend_info = unlimited_storage_taproot_spend_info(
-            unlimited_storage_unspendable_internal_key(),
-            &old_storage,
-            array_tr_storage_arguments.len() as usize,
+        let old_spend_info = array_tr_storage_taproot_spend_info(
+            array_tr_storage_unspendable_internal_key(),
+            &old_state,
             cmr,
         );
-        let script_pubkey = Script::new_v1_p2tr_tweaked(spend_info.output_key());
+        let old_script_pubkey = Script::new_v1_p2tr_tweaked(old_spend_info.output_key());
+
+        let new_spend_info = array_tr_storage_taproot_spend_info(
+            array_tr_storage_unspendable_internal_key(),
+            &new_state,
+            cmr,
+        );
+        let new_script_pubkey = Script::new_v1_p2tr_tweaked(new_spend_info.output_key());
 
         let mut pst = PartiallySignedTransaction::new_v2();
-        let outpoint = OutPoint::new(Txid::from_slice(&[0; 32])?, 0);
-        pst.add_input(Input::from_prevout(outpoint));
+        let outpoint0 = OutPoint::new(Txid::from_slice(&[0; 32])?, 0);
+        pst.add_input(Input::from_prevout(outpoint0));
         pst.add_output(Output::new_explicit(
-            script_pubkey.clone(),
+            new_script_pubkey.clone(),
             0,
             AssetId::default(),
             None,
         ));
 
-        let control_block = spend_info
-            .control_block(&unlimited_storage_script_ver(cmr))
+        let control_block = old_spend_info
+            .control_block(&array_tr_storage_script_ver(cmr))
             .expect("must get control block");
 
         let env = ElementsEnv::new(
             Arc::new(pst.extract_tx()?),
             vec![ElementsUtxo {
-                script_pubkey,
+                script_pubkey: old_script_pubkey,
                 asset: Asset::default(),
                 value: Value::default(),
             }],
@@ -178,8 +186,14 @@ mod array_tr_storage_tests {
         );
 
         assert!(
-            execute_array_tr_storage_program(old_storage, &program, &env, TrackerLogLevel::None)
-                .is_ok(),
+            execute_array_tr_storage_program(
+                &old_state,
+                u16::try_from(changed_index)?,
+                &program,
+                &env,
+                TrackerLogLevel::Trace,
+            )
+            .is_ok(),
             "expected success mint path"
         );
 
