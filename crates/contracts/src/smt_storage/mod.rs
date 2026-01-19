@@ -13,8 +13,10 @@ use simplicityhl::{Arguments, CompiledProgram, TemplateProgram};
 use simplicityhl_core::{ProgramError, run_program};
 
 mod build_witness;
+mod smt;
 
 pub use build_witness::{DEPTH, SMTWitness, build_smt_storage_witness, u256};
+pub use smt::SparseMerkleTree;
 
 pub const SMT_STORAGE_SOURCE: &str = include_str!("source_simf/smt_storage.simf");
 
@@ -69,7 +71,10 @@ fn smt_storage_script_ver(cmr: Cmr) -> (Script, LeafVersion) {
 /// All hashing operations (`sha256::Hash::engine`, `input`, `from_engine`) are
 /// infallible, and iterating over the state limbs is safe.
 #[must_use]
-pub fn compute_tapdata_tagged_hash_of_the_state(leaf: &u256, path: &[bool; DEPTH]) -> sha256::Hash {
+pub fn compute_tapdata_tagged_hash_of_the_state(
+    leaf: &u256,
+    path: &[(u256, bool); DEPTH],
+) -> sha256::Hash {
     let tag = sha256::Hash::hash(b"TapData");
     let mut eng = sha256::Hash::engine();
     eng.input(tag.as_byte_array());
@@ -78,19 +83,15 @@ pub fn compute_tapdata_tagged_hash_of_the_state(leaf: &u256, path: &[bool; DEPTH
 
     let mut current_hash = sha256::Hash::from_engine(eng);
 
-    // Change to valid tree hashes
-    let dummy_hash = [0u8; 32];
-
-    for is_right_direction in path {
+    for (hash, is_right_direction) in path {
         let mut eng = sha256::Hash::engine();
-        dbg!(*is_right_direction);
 
         if *is_right_direction {
-            eng.input(&dummy_hash);
+            eng.input(hash);
             eng.input(&current_hash.to_byte_array());
         } else {
             eng.input(&current_hash.to_byte_array());
-            eng.input(&dummy_hash);
+            eng.input(hash);
         }
 
         current_hash = sha256::Hash::from_engine(eng);
@@ -111,7 +112,7 @@ pub fn compute_tapdata_tagged_hash_of_the_state(leaf: &u256, path: &[bool; DEPTH
 pub fn smt_storage_taproot_spend_info(
     internal_key: secp256k1::XOnlyPublicKey,
     leaf: &u256,
-    path: &[bool; DEPTH],
+    path: &[(u256, bool); DEPTH],
     cmr: Cmr,
 ) -> TaprootSpendInfo {
     let (script, version) = smt_storage_script_ver(cmr);
@@ -133,6 +134,7 @@ pub fn smt_storage_taproot_spend_info(
 mod smt_storage_tests {
     use super::*;
     use anyhow::Result;
+    use rand::Rng as _;
     use std::sync::Arc;
 
     use simplicityhl::elements::confidential::{Asset, Value};
@@ -150,26 +152,47 @@ mod smt_storage_tests {
     	.expect("key should be valid")
     }
 
+    fn add_elements(smt: &mut SparseMerkleTree, num: u64) -> (u256, [u256; DEPTH], [bool; DEPTH]) {
+        let mut rng = rand::rng();
+
+        let mut leaf = [0u8; 32];
+        let mut merkle_hashes = [[0u8; 32]; DEPTH];
+        let mut path = [false; DEPTH];
+
+        for _ in 0..num {
+            leaf = rng.random();
+            path = std::array::from_fn(|_| rng.random());
+            merkle_hashes = smt.update(&leaf, path);
+        }
+
+        (leaf, merkle_hashes, path)
+    }
+
     #[test]
     fn test_smt_storage_mint_path() -> Result<()> {
-        let old_leaf = [0u8; 32];
-        let mut path = [true; DEPTH];
-        path[1] = false;
-        path[4] = false;
+        let mut smt = SparseMerkleTree::new();
+        let (old_leaf, merkle_hashes, path) = add_elements(&mut smt, 30);
 
-        let merkle_data = path.map(|is_right| ([0u8; 32], is_right));
+        let merkle_data =
+            std::array::from_fn(|i| (merkle_hashes[DEPTH - i - 1], path[DEPTH - i - 1]));
+
         let witness = SMTWitness::new(&old_leaf, &merkle_data);
 
+        // Set last leaf qword to 1
         let mut new_leaf = old_leaf;
+        for byte in new_leaf.iter_mut().skip(24) {
+            *byte = 0;
+        }
         new_leaf[31] = 1;
+        smt.update(&new_leaf, path);
 
         let program = get_smt_storage_compiled_program();
         let cmr = program.commit().cmr();
 
-        let old_spend_info = smt_storage_taproot_spend_info(
+        let old_spend_info: TaprootSpendInfo = smt_storage_taproot_spend_info(
             smt_storage_unspendable_internal_key(),
             &old_leaf,
-            &path,
+            &merkle_data,
             cmr,
         );
         let old_script_pubkey = Script::new_v1_p2tr_tweaked(old_spend_info.output_key());
@@ -177,7 +200,7 @@ mod smt_storage_tests {
         let new_spend_info = smt_storage_taproot_spend_info(
             smt_storage_unspendable_internal_key(),
             &new_leaf,
-            &path,
+            &merkle_data,
             cmr,
         );
         let new_script_pubkey = Script::new_v1_p2tr_tweaked(new_spend_info.output_key());
