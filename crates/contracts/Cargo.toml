@@ -40,3 +40,4 @@ simplicityhl-core = { workspace = true }
 
 [dev-dependencies]
 anyhow = "1"
+rand = "0.9.2"
