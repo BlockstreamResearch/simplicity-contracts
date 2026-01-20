@@ -1,3 +1,5 @@
+#![allow(clippy::similar_names)]
+
 use std::str::FromStr;
 
 use anyhow::Result;
@@ -7,19 +9,19 @@ use clap::Subcommand;
 use contracts::options::{OptionsArguments, finalize_options_transaction, get_options_program};
 use contracts::sdk::taproot_pubkey_gen::{TaprootPubkeyGen, get_random_seed};
 
+use simplicityhl::elements::OutPoint;
 use simplicityhl::elements::pset::serialize::Serialize;
 use simplicityhl::elements::secp256k1_zkp::SECP256K1;
-use simplicityhl::elements::{AddressParams, OutPoint};
 use simplicityhl::simplicity::elements::AssetId;
 use simplicityhl::simplicity::hex::DisplayHex;
 use simplicityhl::tracker::TrackerLogLevel;
 
+use crate::commands::NETWORK;
 use crate::explorer::{broadcast_tx, fetch_utxo};
 use crate::modules::store::Store;
 use crate::modules::utils::derive_keypair;
 use simplicityhl_core::{
-    Encodable, LIQUID_TESTNET_GENESIS, create_p2pk_signature, derive_public_blinder_key,
-    finalize_p2pk_transaction,
+    Encodable, create_p2pk_signature, derive_public_blinder_key, finalize_p2pk_transaction,
 };
 
 /// Options contract utilities
@@ -236,7 +238,7 @@ impl Options {
             } => Store::load()?.import_arguments(
                 option_taproot_pubkey_gen,
                 encoded_options_arguments,
-                &AddressParams::LIQUID_TESTNET,
+                NETWORK,
                 &contracts::options::get_options_address,
             ),
             Self::Export {
@@ -292,48 +294,32 @@ impl Options {
                     &option_arguments,
                     issuance_asset_entropy,
                     *fee_amount,
-                    &AddressParams::LIQUID_TESTNET,
+                    NETWORK,
                 )?;
 
                 let tx = pst.extract_tx()?;
                 let utxos = vec![first_tx_out.clone(), second_tx_out.clone()];
                 let x_only_public_key = keypair.x_only_public_key().0;
 
-                let signature_0 = create_p2pk_signature(
-                    &tx,
-                    &utxos,
-                    &keypair,
-                    0,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
-                )?;
+                let signature_0 = create_p2pk_signature(&tx, &utxos, &keypair, 0, NETWORK)?;
                 let tx = finalize_p2pk_transaction(
                     tx,
                     &utxos,
                     &x_only_public_key,
                     &signature_0,
                     0,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK,
                     TrackerLogLevel::None,
                 )?;
 
-                let signature_1 = create_p2pk_signature(
-                    &tx,
-                    &utxos,
-                    &keypair,
-                    1,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
-                )?;
+                let signature_1 = create_p2pk_signature(&tx, &utxos, &keypair, 1, NETWORK)?;
                 let tx = finalize_p2pk_transaction(
                     tx,
                     &utxos,
                     &x_only_public_key,
                     &signature_1,
                     1,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK,
                     TrackerLogLevel::None,
                 )?;
 
@@ -342,7 +328,7 @@ impl Options {
                 store.import_arguments(
                     &options_taproot_pubkey_gen.to_string(),
                     &option_arguments.to_hex()?,
-                    &AddressParams::LIQUID_TESTNET,
+                    NETWORK,
                     &contracts::options::get_options_address,
                 )?;
 
@@ -375,7 +361,7 @@ impl Options {
                 let taproot_pubkey_gen = TaprootPubkeyGen::build_from_str(
                     option_taproot_pubkey_gen,
                     &option_arguments,
-                    &AddressParams::LIQUID_TESTNET,
+                    NETWORK,
                     &contracts::options::get_options_address,
                 )?;
 
@@ -433,8 +419,7 @@ impl Options {
                     &utxos,
                     0,
                     &option_branch,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK,
                     TrackerLogLevel::None,
                 )?;
 
@@ -445,48 +430,31 @@ impl Options {
                     &utxos,
                     1,
                     &option_branch,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK,
                     TrackerLogLevel::None,
                 )?;
 
                 let x_only_public_key = keypair.x_only_public_key().0;
-                let signature = create_p2pk_signature(
-                    &tx,
-                    &utxos,
-                    &keypair,
-                    2,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
-                )?;
+                let signature = create_p2pk_signature(&tx, &utxos, &keypair, 2, NETWORK)?;
                 let tx = finalize_p2pk_transaction(
                     tx,
                     &utxos,
                     &x_only_public_key,
                     &signature,
                     2,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK,
                     TrackerLogLevel::None,
                 )?;
 
                 let tx = if fee_utxo.is_some() {
-                    let signature = create_p2pk_signature(
-                        &tx,
-                        &utxos,
-                        &keypair,
-                        3,
-                        &AddressParams::LIQUID_TESTNET,
-                        *LIQUID_TESTNET_GENESIS,
-                    )?;
+                    let signature = create_p2pk_signature(&tx, &utxos, &keypair, 3, NETWORK)?;
                     finalize_p2pk_transaction(
                         tx,
                         &utxos,
                         &x_only_public_key,
                         &signature,
                         3,
-                        &AddressParams::LIQUID_TESTNET,
-                        *LIQUID_TESTNET_GENESIS,
+                        NETWORK,
                         TrackerLogLevel::None,
                     )?
                 } else {
@@ -520,7 +488,7 @@ impl Options {
                 let taproot_pubkey_gen = TaprootPubkeyGen::build_from_str(
                     option_taproot_pubkey_gen,
                     &option_arguments,
-                    &AddressParams::LIQUID_TESTNET,
+                    NETWORK,
                     &contracts::options::get_options_address,
                 )?;
 
@@ -554,67 +522,42 @@ impl Options {
                     &utxos,
                     0,
                     &option_branch,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK,
                     TrackerLogLevel::None,
                 )?;
 
                 let x_only_public_key = keypair.x_only_public_key().0;
 
-                let signature_1 = create_p2pk_signature(
-                    &tx,
-                    &utxos,
-                    &keypair,
-                    1,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
-                )?;
+                let signature_1 = create_p2pk_signature(&tx, &utxos, &keypair, 1, NETWORK)?;
                 let tx = finalize_p2pk_transaction(
                     tx,
                     &utxos,
                     &x_only_public_key,
                     &signature_1,
                     1,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK,
                     TrackerLogLevel::None,
                 )?;
 
-                let signature_2 = create_p2pk_signature(
-                    &tx,
-                    &utxos,
-                    &keypair,
-                    2,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
-                )?;
+                let signature_2 = create_p2pk_signature(&tx, &utxos, &keypair, 2, NETWORK)?;
                 let tx = finalize_p2pk_transaction(
                     tx,
                     &utxos,
                     &x_only_public_key,
                     &signature_2,
                     2,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK,
                     TrackerLogLevel::None,
                 )?;
 
-                let signature_3 = create_p2pk_signature(
-                    &tx,
-                    &utxos,
-                    &keypair,
-                    3,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
-                )?;
+                let signature_3 = create_p2pk_signature(&tx, &utxos, &keypair, 3, NETWORK)?;
                 let tx = finalize_p2pk_transaction(
                     tx,
                     &utxos,
                     &x_only_public_key,
                     &signature_3,
                     3,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK,
                     TrackerLogLevel::None,
                 )?;
 
@@ -645,7 +588,7 @@ impl Options {
                 let taproot_pubkey_gen = TaprootPubkeyGen::build_from_str(
                     option_taproot_pubkey_gen,
                     &option_arguments,
-                    &AddressParams::LIQUID_TESTNET,
+                    NETWORK,
                     &contracts::options::get_options_address,
                 )?;
 
@@ -676,48 +619,31 @@ impl Options {
                     &utxos,
                     0,
                     &option_branch,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK,
                     TrackerLogLevel::None,
                 )?;
 
                 let x_only_public_key = keypair.x_only_public_key().0;
 
-                let signature_1 = create_p2pk_signature(
-                    &tx,
-                    &utxos,
-                    &keypair,
-                    1,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
-                )?;
+                let signature_1 = create_p2pk_signature(&tx, &utxos, &keypair, 1, NETWORK)?;
                 let tx = finalize_p2pk_transaction(
                     tx,
                     &utxos,
                     &x_only_public_key,
                     &signature_1,
                     1,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK,
                     TrackerLogLevel::None,
                 )?;
 
-                let signature_2 = create_p2pk_signature(
-                    &tx,
-                    &utxos,
-                    &keypair,
-                    2,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
-                )?;
+                let signature_2 = create_p2pk_signature(&tx, &utxos, &keypair, 2, NETWORK)?;
                 let tx = finalize_p2pk_transaction(
                     tx,
                     &utxos,
                     &x_only_public_key,
                     &signature_2,
                     2,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK,
                     TrackerLogLevel::None,
                 )?;
 
@@ -747,7 +673,7 @@ impl Options {
                 let taproot_pubkey_gen = TaprootPubkeyGen::build_from_str(
                     option_taproot_pubkey_gen,
                     &option_arguments,
-                    &AddressParams::LIQUID_TESTNET,
+                    NETWORK,
                     &contracts::options::get_options_address,
                 )?;
 
@@ -778,48 +704,31 @@ impl Options {
                     &utxos,
                     0,
                     &option_branch,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK,
                     TrackerLogLevel::None,
                 )?;
 
                 let x_only_public_key = keypair.x_only_public_key().0;
 
-                let signature_1 = create_p2pk_signature(
-                    &tx,
-                    &utxos,
-                    &keypair,
-                    1,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
-                )?;
+                let signature_1 = create_p2pk_signature(&tx, &utxos, &keypair, 1, NETWORK)?;
                 let tx = finalize_p2pk_transaction(
                     tx,
                     &utxos,
                     &x_only_public_key,
                     &signature_1,
                     1,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK,
                     TrackerLogLevel::None,
                 )?;
 
-                let signature_2 = create_p2pk_signature(
-                    &tx,
-                    &utxos,
-                    &keypair,
-                    2,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
-                )?;
+                let signature_2 = create_p2pk_signature(&tx, &utxos, &keypair, 2, NETWORK)?;
                 let tx = finalize_p2pk_transaction(
                     tx,
                     &utxos,
                     &x_only_public_key,
                     &signature_2,
                     2,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK,
                     TrackerLogLevel::None,
                 )?;
 
@@ -850,7 +759,7 @@ impl Options {
                 let taproot_pubkey_gen = TaprootPubkeyGen::build_from_str(
                     option_taproot_pubkey_gen,
                     &option_arguments,
-                    &AddressParams::LIQUID_TESTNET,
+                    NETWORK,
                     &contracts::options::get_options_address,
                 )?;
 
@@ -884,67 +793,42 @@ impl Options {
                     &utxos,
                     0,
                     &option_branch,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK,
                     TrackerLogLevel::None,
                 )?;
 
                 let x_only_public_key = keypair.x_only_public_key().0;
 
-                let signature_1 = create_p2pk_signature(
-                    &tx,
-                    &utxos,
-                    &keypair,
-                    1,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
-                )?;
+                let signature_1 = create_p2pk_signature(&tx, &utxos, &keypair, 1, NETWORK)?;
                 let tx = finalize_p2pk_transaction(
                     tx,
                     &utxos,
                     &x_only_public_key,
                     &signature_1,
                     1,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK,
                     TrackerLogLevel::None,
                 )?;
 
-                let signature_2 = create_p2pk_signature(
-                    &tx,
-                    &utxos,
-                    &keypair,
-                    2,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
-                )?;
+                let signature_2 = create_p2pk_signature(&tx, &utxos, &keypair, 2, NETWORK)?;
                 let tx = finalize_p2pk_transaction(
                     tx,
                     &utxos,
                     &x_only_public_key,
                     &signature_2,
                     2,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK,
                     TrackerLogLevel::None,
                 )?;
 
-                let signature_3 = create_p2pk_signature(
-                    &tx,
-                    &utxos,
-                    &keypair,
-                    3,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
-                )?;
+                let signature_3 = create_p2pk_signature(&tx, &utxos, &keypair, 3, NETWORK)?;
                 let tx = finalize_p2pk_transaction(
                     tx,
                     &utxos,
                     &x_only_public_key,
                     &signature_3,
                     3,
-                    &AddressParams::LIQUID_TESTNET,
-                    *LIQUID_TESTNET_GENESIS,
+                    NETWORK,
                     TrackerLogLevel::None,
                 )?;
 

@@ -14,7 +14,8 @@ use simplicityhl::elements::bitcoin::secp256k1;
 use simplicityhl::elements::confidential::{AssetBlindingFactor, ValueBlindingFactor};
 use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
 use simplicityhl::elements::secp256k1_zkp::rand::thread_rng;
-use simplicityhl::elements::{AddressParams, OutPoint, Script, Sequence, TxOut, TxOutSecrets};
+use simplicityhl::elements::{OutPoint, Script, Sequence, TxOut, TxOutSecrets};
+use simplicityhl_core::SimplicityNetwork;
 
 /// Create a new option contract with option and grantor token issuance.
 ///
@@ -33,7 +34,7 @@ pub fn build_option_creation(
     option_arguments: &OptionsArguments,
     issuance_asset_entropy: [u8; 32],
     fee_amount: u64,
-    address_params: &'static AddressParams,
+    network: SimplicityNetwork,
 ) -> Result<(PartiallySignedTransaction, TaprootPubkeyGen), TransactionBuildError> {
     let (first_out_point, first_tx_out) = first_fee_utxo;
     let (second_out_point, second_tx_out) = second_fee_utxo;
@@ -96,7 +97,7 @@ pub fn build_option_creation(
     }
 
     let options_taproot_pubkey_gen =
-        TaprootPubkeyGen::from(option_arguments, address_params, &get_options_address)?;
+        TaprootPubkeyGen::from(option_arguments, network, &get_options_address)?;
 
     let mut pst = PartiallySignedTransaction::new_v2();
 

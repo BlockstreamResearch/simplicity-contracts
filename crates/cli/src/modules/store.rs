@@ -1,9 +1,9 @@
 use contracts::sdk::taproot_pubkey_gen::TaprootPubkeyGen;
 
-use simplicityhl_core::{Encodable, ProgramError};
+use simplicityhl_core::{Encodable, ProgramError, SimplicityNetwork};
 
 use simplicityhl::simplicity::bitcoin::XOnlyPublicKey;
-use simplicityhl::simplicity::elements::{Address, AddressParams};
+use simplicityhl::simplicity::elements::Address;
 
 #[derive(Clone, Debug)]
 pub struct Store {
@@ -29,12 +29,8 @@ impl Store {
         &self,
         taproot_pubkey_gen: &str,
         encoded_data: &str,
-        params: &'static AddressParams,
-        get_address: &impl Fn(
-            &XOnlyPublicKey,
-            &A,
-            &'static AddressParams,
-        ) -> Result<Address, ProgramError>,
+        network: SimplicityNetwork,
+        get_address: &impl Fn(&XOnlyPublicKey, &A, SimplicityNetwork) -> Result<Address, ProgramError>,
     ) -> anyhow::Result<()>
     where
         A: Encodable + simplicityhl_core::encoding::Decode<()>,
@@ -43,7 +39,7 @@ impl Store {
 
         let arguments = Encodable::decode(&decoded_data)?;
         let _ =
-            TaprootPubkeyGen::build_from_str(taproot_pubkey_gen, &arguments, params, get_address)?;
+            TaprootPubkeyGen::build_from_str(taproot_pubkey_gen, &arguments, network, get_address)?;
 
         self.store.insert(taproot_pubkey_gen, decoded_data)?;
 
@@ -89,9 +85,12 @@ mod tests {
     use simplicityhl::elements::hashes::Hash;
     use simplicityhl_core::{
         Encodable, LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_TEST_ASSET_ID_STR,
+        SimplicityNetwork,
     };
 
     use super::*;
+
+    const NETWORK: SimplicityNetwork = SimplicityNetwork::LiquidTestnet;
 
     fn load_mock() -> Store {
         Store {
@@ -119,7 +118,7 @@ mod tests {
         );
 
         let options_taproot_pubkey_gen =
-            TaprootPubkeyGen::from(&args, &AddressParams::LIQUID_TESTNET, &get_options_address)?;
+            TaprootPubkeyGen::from(&args, NETWORK, &get_options_address)?;
 
         Ok((args, options_taproot_pubkey_gen))
     }
@@ -133,7 +132,7 @@ mod tests {
         store.import_arguments(
             &options_taproot_pubkey_gen.to_string(),
             &args.to_hex()?,
-            &AddressParams::LIQUID_TESTNET,
+            NETWORK,
             &get_options_address,
         )?;
 
@@ -154,7 +153,7 @@ mod tests {
         store.import_arguments(
             &options_taproot_pubkey_gen.to_string(),
             &args.to_hex()?,
-            &AddressParams::LIQUID_TESTNET,
+            NETWORK,
             &get_options_address,
         )?;
 
@@ -174,7 +173,7 @@ mod tests {
         store.import_arguments(
             &options_taproot_pubkey_gen.to_string(),
             &args.to_hex()?,
-            &AddressParams::LIQUID_TESTNET,
+            NETWORK,
             &get_options_address,
         )?;
 

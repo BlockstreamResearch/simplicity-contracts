@@ -5,10 +5,11 @@ use crate::finance::options::build_witness::{OptionBranch, build_option_witness}
 use std::sync::Arc;
 
 use simplicityhl_core::{
-    ProgramError, control_block, create_p2tr_address, get_and_verify_env, load_program, run_program,
+    ProgramError, SimplicityNetwork, control_block, create_p2tr_address, get_and_verify_env,
+    load_program, run_program,
 };
 
-use simplicityhl::elements::{self, Address, AddressParams, Transaction, TxInWitness, TxOut};
+use simplicityhl::elements::{Address, Transaction, TxInWitness, TxOut};
 
 use simplicityhl::simplicity::RedeemNode;
 use simplicityhl::simplicity::jet::Elements;
@@ -41,12 +42,12 @@ pub fn get_options_template_program() -> TemplateProgram {
 pub fn get_options_address(
     x_only_public_key: &XOnlyPublicKey,
     arguments: &OptionsArguments,
-    params: &'static AddressParams,
+    network: SimplicityNetwork,
 ) -> Result<Address, ProgramError> {
     Ok(create_p2tr_address(
         get_options_program(arguments)?.commit().cmr(),
         x_only_public_key,
-        params,
+        network.address_params(),
     ))
 }
 
@@ -99,8 +100,7 @@ pub fn finalize_options_transaction(
     utxos: &[TxOut],
     input_index: usize,
     option_branch: &OptionBranch,
-    params: &'static AddressParams,
-    genesis_hash: elements::BlockHash,
+    network: SimplicityNetwork,
     log_level: TrackerLogLevel,
 ) -> Result<Transaction, ProgramError> {
     let env = get_and_verify_env(
@@ -108,8 +108,7 @@ pub fn finalize_options_transaction(
         options_program,
         options_public_key,
         utxos,
-        params,
-        genesis_hash,
+        network,
         input_index,
     )?;
 
@@ -158,7 +157,11 @@ mod options_tests {
     use simplicityhl::elements::secp256k1_zkp::SECP256K1;
     use simplicityhl::elements::taproot::ControlBlock;
     use simplicityhl::simplicity::jet::elements::ElementsUtxo;
-    use simplicityhl_core::{LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_TEST_ASSET_ID_STR};
+    use simplicityhl_core::{
+        LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_TEST_ASSET_ID_STR, SimplicityNetwork,
+    };
+
+    const NETWORK: SimplicityNetwork = SimplicityNetwork::LiquidTestnet;
 
     fn get_creation_pst(
         keypair: &Keypair,
@@ -193,7 +196,7 @@ mod options_tests {
                 (
                     option_outpoint,
                     TxOut {
-                        asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                        asset: Asset::Explicit(NETWORK.policy_asset()),
                         value: Value::Explicit(500),
                         nonce: elements::confidential::Nonce::Null,
                         script_pubkey: Script::new(),
@@ -203,7 +206,7 @@ mod options_tests {
                 (
                     grantor_outpoint,
                     TxOut {
-                        asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                        asset: Asset::Explicit(NETWORK.policy_asset()),
                         value: Value::Explicit(1000),
                         nonce: elements::confidential::Nonce::Null,
                         script_pubkey: Script::new(),
@@ -213,7 +216,7 @@ mod options_tests {
                 &option_arguments,
                 issuance_asset_entropy,
                 100,
-                &AddressParams::LIQUID_TESTNET,
+                NETWORK,
             )?,
             option_arguments,
         ))
@@ -490,7 +493,7 @@ mod options_tests {
             (
                 OutPoint::default(),
                 TxOut {
-                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(NETWORK.policy_asset()),
                     value: Value::Explicit(100),
                     nonce: elements::confidential::Nonce::Null,
                     script_pubkey: Script::new(),
@@ -588,7 +591,7 @@ mod options_tests {
             Some((
                 OutPoint::default(),
                 TxOut {
-                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(NETWORK.policy_asset()),
                     value: Value::Explicit(100),
                     nonce: elements::confidential::Nonce::Null,
                     script_pubkey: Script::new(),
@@ -674,7 +677,7 @@ mod options_tests {
             (
                 OutPoint::default(),
                 TxOut {
-                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(NETWORK.policy_asset()),
                     value: Value::Explicit(100),
                     nonce: elements::confidential::Nonce::Null,
                     script_pubkey: Script::new(),
@@ -762,7 +765,7 @@ mod options_tests {
             (
                 OutPoint::default(),
                 TxOut {
-                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(NETWORK.policy_asset()),
                     value: Value::Explicit(100),
                     nonce: elements::confidential::Nonce::Null,
                     script_pubkey: Script::new(),

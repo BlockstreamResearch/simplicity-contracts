@@ -97,7 +97,9 @@ mod simple_storage_tests {
     use simplicityhl::simplicity::elements::taproot::ControlBlock;
     use simplicityhl::simplicity::jet::elements::ElementsEnv;
 
-    use simplicityhl_core::LIQUID_TESTNET_BITCOIN_ASSET;
+    use simplicityhl_core::SimplicityNetwork;
+
+    const NETWORK: SimplicityNetwork = SimplicityNetwork::LiquidTestnet;
 
     #[test]
     fn test_simple_storage_mint_path() -> Result<()> {
@@ -112,13 +114,13 @@ mod simple_storage_tests {
 
         let storage_arguments = StorageArguments::new(
             keypair.x_only_public_key().0.serialize(),
-            LIQUID_TESTNET_BITCOIN_ASSET.to_string(),
+            NETWORK.policy_asset().to_string(),
         );
 
         let storage_address = get_storage_address(
             &keypair.x_only_public_key().0,
             &storage_arguments,
-            &elements::AddressParams::LIQUID_TESTNET,
+            NETWORK.address_params(),
         )?;
 
         let mut pst = PartiallySignedTransaction::new_v2();
@@ -131,7 +133,7 @@ mod simple_storage_tests {
         pst.add_output(Output::new_explicit(
             storage_address.script_pubkey(),
             new_value,
-            *LIQUID_TESTNET_BITCOIN_ASSET,
+            NETWORK.policy_asset(),
             None,
         ));
 
@@ -149,7 +151,7 @@ mod simple_storage_tests {
             vec![
                 simplicityhl::simplicity::jet::elements::ElementsUtxo {
                     script_pubkey: storage_address.script_pubkey(),
-                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(NETWORK.policy_asset()),
                     value: Value::Explicit(old_value),
                 },
                 simplicityhl::simplicity::jet::elements::ElementsUtxo {
@@ -187,13 +189,13 @@ mod simple_storage_tests {
 
         let storage_arguments = StorageArguments::new(
             keypair.x_only_public_key().0.serialize(),
-            LIQUID_TESTNET_BITCOIN_ASSET.to_string(),
+            NETWORK.policy_asset().to_string(),
         );
 
         let storage_address = get_storage_address(
             &keypair.x_only_public_key().0,
             &storage_arguments,
-            &elements::AddressParams::LIQUID_TESTNET,
+            NETWORK.address_params(),
         )?;
 
         let mut pst = PartiallySignedTransaction::new_v2();
@@ -205,7 +207,7 @@ mod simple_storage_tests {
         pst.add_output(Output::new_explicit(
             storage_address.script_pubkey(),
             new_value,
-            *LIQUID_TESTNET_BITCOIN_ASSET,
+            NETWORK.policy_asset(),
             None,
         ));
 
@@ -213,7 +215,7 @@ mod simple_storage_tests {
         pst.add_output(Output::new_explicit(
             Script::new_op_return(b"burn"),
             old_value - new_value,
-            *LIQUID_TESTNET_BITCOIN_ASSET,
+            NETWORK.policy_asset(),
             None,
         ));
 
@@ -223,7 +225,7 @@ mod simple_storage_tests {
             Arc::new(pst.extract_tx()?),
             vec![simplicityhl::simplicity::jet::elements::ElementsUtxo {
                 script_pubkey: storage_address.script_pubkey(),
-                asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                asset: Asset::Explicit(NETWORK.policy_asset()),
                 value: Value::Explicit(old_value),
             }],
             0,
