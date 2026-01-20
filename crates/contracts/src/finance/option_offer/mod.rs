@@ -3,10 +3,11 @@ use crate::finance::option_offer::build_witness::{OptionOfferBranch, build_optio
 use std::sync::Arc;
 
 use simplicityhl_core::{
-    ProgramError, control_block, create_p2tr_address, get_and_verify_env, load_program, run_program,
+    ProgramError, SimplicityNetwork, control_block, create_p2tr_address, get_and_verify_env,
+    load_program, run_program,
 };
 
-use simplicityhl::elements::{self, Address, AddressParams, Transaction, TxInWitness, TxOut};
+use simplicityhl::elements::{Address, Transaction, TxInWitness, TxOut};
 
 use simplicityhl::simplicity::RedeemNode;
 use simplicityhl::simplicity::jet::Elements;
@@ -41,12 +42,12 @@ pub fn get_option_offer_template_program() -> TemplateProgram {
 pub fn get_option_offer_address(
     x_only_public_key: &XOnlyPublicKey,
     arguments: &OptionOfferArguments,
-    params: &'static AddressParams,
+    network: SimplicityNetwork,
 ) -> Result<Address, ProgramError> {
     Ok(create_p2tr_address(
         get_option_offer_program(arguments)?.commit().cmr(),
         x_only_public_key,
-        params,
+        network.address_params(),
     ))
 }
 
@@ -104,8 +105,7 @@ pub fn finalize_option_offer_transaction(
     utxos: &[TxOut],
     input_index: usize,
     branch: &OptionOfferBranch,
-    params: &'static AddressParams,
-    genesis_hash: elements::BlockHash,
+    network: SimplicityNetwork,
     log_level: TrackerLogLevel,
 ) -> Result<Transaction, ProgramError> {
     let env = get_and_verify_env(
@@ -113,8 +113,7 @@ pub fn finalize_option_offer_transaction(
         contract_program,
         contract_public_key,
         utxos,
-        params,
-        genesis_hash,
+        network,
         input_index,
     )?;
 
@@ -154,13 +153,15 @@ mod option_offer_tests {
     use simplicityhl::elements::{AssetId, Script};
     use simplicityhl::simplicity::jet::elements::ElementsUtxo;
     use simplicityhl_core::{
-        LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_GENESIS, get_and_verify_env, get_p2pk_address,
+        LIQUID_TESTNET_BITCOIN_ASSET, SimplicityNetwork, get_and_verify_env, get_p2pk_address,
     };
 
     use crate::sdk::{
         build_option_offer_deposit, build_option_offer_exercise, build_option_offer_expiry,
         build_option_offer_withdraw,
     };
+
+    const NETWORK: SimplicityNetwork = SimplicityNetwork::LiquidTestnet;
 
     fn get_test_arguments(
         x_only_public_key: &XOnlyPublicKey,
@@ -214,7 +215,7 @@ mod option_offer_tests {
             (
                 OutPoint::new(Txid::from_slice(&[3; 32])?, 0),
                 TxOut {
-                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(NETWORK.policy_asset()),
                     value: Value::Explicit(fee_amount + 100),
                     nonce: elements::confidential::Nonce::Null,
                     script_pubkey: Script::new(),
@@ -224,7 +225,7 @@ mod option_offer_tests {
             collateral_deposit_amount,
             fee_amount,
             &args,
-            &AddressParams::LIQUID_TESTNET,
+            NETWORK,
         )?;
 
         let tx = pst.extract_tx()?;
@@ -258,16 +259,10 @@ mod option_offer_tests {
 
         let program = get_compiled_option_offer_program(&args);
 
-        let covenant_address = get_option_offer_address(
-            &keypair.x_only_public_key().0,
-            &args,
-            &AddressParams::LIQUID_TESTNET,
-        )?;
+        let covenant_address =
+            get_option_offer_address(&keypair.x_only_public_key().0, &args, NETWORK)?;
 
-        let change_recipient = get_p2pk_address(
-            &keypair.x_only_public_key().0,
-            &AddressParams::LIQUID_TESTNET,
-        )?;
+        let change_recipient = get_p2pk_address(&keypair.x_only_public_key().0, NETWORK)?;
 
         let input_collateral_amount = 1000u64;
         let input_premium_amount = input_collateral_amount * args.premium_per_collateral();
@@ -309,7 +304,7 @@ mod option_offer_tests {
             (
                 OutPoint::new(Txid::from_slice(&[4; 32])?, 0),
                 TxOut {
-                    asset: Asset::Explicit(args.get_settlement_asset_id()),
+                    asset: Asset::Explicit(NETWORK.policy_asset()),
                     value: Value::Explicit(fee_amount),
                     nonce: elements::confidential::Nonce::Null,
                     script_pubkey: Script::new(),
@@ -365,16 +360,10 @@ mod option_offer_tests {
         let args = get_test_arguments(&keypair.x_only_public_key().0, 1_700_000_000);
         let program = get_compiled_option_offer_program(&args);
 
-        let change_recipient = get_p2pk_address(
-            &keypair.x_only_public_key().0,
-            &AddressParams::LIQUID_TESTNET,
-        )?;
+        let change_recipient = get_p2pk_address(&keypair.x_only_public_key().0, NETWORK)?;
 
-        let covenant_address = get_option_offer_address(
-            &keypair.x_only_public_key().0,
-            &args,
-            &AddressParams::LIQUID_TESTNET,
-        )?;
+        let covenant_address =
+            get_option_offer_address(&keypair.x_only_public_key().0, &args, NETWORK)?;
 
         let input_collateral_amount = 1000u64;
         let input_premium_amount = input_collateral_amount * args.premium_per_collateral();
@@ -416,7 +405,7 @@ mod option_offer_tests {
             (
                 OutPoint::new(Txid::from_slice(&[4; 32])?, 0),
                 TxOut {
-                    asset: Asset::Explicit(args.get_settlement_asset_id()),
+                    asset: Asset::Explicit(NETWORK.policy_asset()),
                     value: Value::Explicit(fee_amount),
                     nonce: elements::confidential::Nonce::Null,
                     script_pubkey: Script::new(),
@@ -472,16 +461,10 @@ mod option_offer_tests {
         let args = get_test_arguments(&keypair.x_only_public_key().0, 1_700_000_000);
         let program = get_compiled_option_offer_program(&args);
 
-        let change_recipient = get_p2pk_address(
-            &keypair.x_only_public_key().0,
-            &AddressParams::LIQUID_TESTNET,
-        )?;
+        let change_recipient = get_p2pk_address(&keypair.x_only_public_key().0, NETWORK)?;
 
-        let covenant_address = get_option_offer_address(
-            &keypair.x_only_public_key().0,
-            &args,
-            &AddressParams::LIQUID_TESTNET,
-        )?;
+        let covenant_address =
+            get_option_offer_address(&keypair.x_only_public_key().0, &args, NETWORK)?;
 
         let settlement_amount = 50000u64;
         let fee_amount = 500u64;
@@ -500,7 +483,7 @@ mod option_offer_tests {
             (
                 OutPoint::new(Txid::from_slice(&[2; 32])?, 0),
                 TxOut {
-                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(NETWORK.policy_asset()),
                     value: Value::Explicit(fee_amount),
                     nonce: elements::confidential::Nonce::Null,
                     script_pubkey: Script::new(),
@@ -523,7 +506,7 @@ mod option_offer_tests {
                 witness: elements::TxOutWitness::default(),
             },
             TxOut {
-                asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                asset: Asset::Explicit(NETWORK.policy_asset()),
                 value: Value::Explicit(fee_amount),
                 nonce: elements::confidential::Nonce::Null,
                 script_pubkey: Script::new(),
@@ -536,8 +519,7 @@ mod option_offer_tests {
             &program,
             &keypair.x_only_public_key().0,
             &utxos,
-            &AddressParams::LIQUID_TESTNET,
-            *LIQUID_TESTNET_GENESIS,
+            NETWORK,
             0,
         )?;
 
@@ -569,16 +551,10 @@ mod option_offer_tests {
         let args = get_test_arguments(&keypair.x_only_public_key().0, 1_700_000_000);
         let program = get_compiled_option_offer_program(&args);
 
-        let change_recipient = get_p2pk_address(
-            &keypair.x_only_public_key().0,
-            &AddressParams::LIQUID_TESTNET,
-        )?;
+        let change_recipient = get_p2pk_address(&keypair.x_only_public_key().0, NETWORK)?;
 
-        let covenant_address = get_option_offer_address(
-            &keypair.x_only_public_key().0,
-            &args,
-            &AddressParams::LIQUID_TESTNET,
-        )?;
+        let covenant_address =
+            get_option_offer_address(&keypair.x_only_public_key().0, &args, NETWORK)?;
 
         let collateral_amount = 1000u64;
         let premium_amount = collateral_amount * args.premium_per_collateral();
@@ -608,7 +584,7 @@ mod option_offer_tests {
             (
                 OutPoint::new(Txid::from_slice(&[3; 32])?, 0),
                 TxOut {
-                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                    asset: Asset::Explicit(NETWORK.policy_asset()),
                     value: Value::Explicit(fee_amount),
                     nonce: elements::confidential::Nonce::Null,
                     script_pubkey: Script::new(),
@@ -644,8 +620,7 @@ mod option_offer_tests {
             &program,
             &keypair.x_only_public_key().0,
             &utxos,
-            &AddressParams::LIQUID_TESTNET,
-            *LIQUID_TESTNET_GENESIS,
+            NETWORK,
             0,
         )?;
 

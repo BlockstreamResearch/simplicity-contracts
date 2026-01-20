@@ -9,13 +9,13 @@ use sha2::{Digest, Sha256};
 use std::fmt::Display;
 use std::str::FromStr;
 
-use simplicityhl::elements::{Address, AddressParams, schnorr::XOnlyPublicKey};
+use simplicityhl::elements::{Address, schnorr::XOnlyPublicKey};
 
+use crate::error::TaprootPubkeyGenError;
 use simplicityhl::simplicity::ToXOnlyPubkey;
 use simplicityhl::simplicity::bitcoin::PublicKey;
 use simplicityhl::simplicity::bitcoin::key::Parity;
-
-use crate::error::TaprootPubkeyGenError;
+use simplicityhl_core::SimplicityNetwork;
 
 /// Container for the seed, public key and derived address.
 #[derive(Debug, Clone)]
@@ -32,11 +32,11 @@ impl TaprootPubkeyGen {
     /// Returns error if address generation fails.
     pub fn from<A>(
         arguments: &A,
-        params: &'static AddressParams,
+        network: SimplicityNetwork,
         get_address: &impl Fn(
             &XOnlyPublicKey,
             &A,
-            &'static AddressParams,
+            SimplicityNetwork,
         ) -> Result<Address, simplicityhl_core::ProgramError>,
     ) -> Result<Self, TaprootPubkeyGenError> {
         let (not_existent_public_key, seed) = generate_public_key_without_private();
@@ -44,7 +44,7 @@ impl TaprootPubkeyGen {
         let address = get_address(
             &not_existent_public_key.to_x_only_pubkey(),
             arguments,
-            params,
+            network,
         )?;
 
         Ok(Self {
@@ -61,16 +61,16 @@ impl TaprootPubkeyGen {
     pub fn build_from_str<A>(
         s: &str,
         arguments: &A,
-        params: &'static AddressParams,
+        network: SimplicityNetwork,
         get_address: &impl Fn(
             &XOnlyPublicKey,
             &A,
-            &'static AddressParams,
+            SimplicityNetwork,
         ) -> Result<Address, simplicityhl_core::ProgramError>,
     ) -> Result<Self, TaprootPubkeyGenError> {
         let taproot_pubkey_gen = Self::parse_from_str(s)?;
 
-        taproot_pubkey_gen.verify(arguments, params, get_address)?;
+        taproot_pubkey_gen.verify(arguments, network, get_address)?;
 
         Ok(taproot_pubkey_gen)
     }
@@ -82,11 +82,11 @@ impl TaprootPubkeyGen {
     pub fn verify<A>(
         &self,
         arguments: &A,
-        params: &'static AddressParams,
+        network: SimplicityNetwork,
         get_address: &impl Fn(
             &XOnlyPublicKey,
             &A,
-            &'static AddressParams,
+            SimplicityNetwork,
         ) -> Result<Address, simplicityhl_core::ProgramError>,
     ) -> Result<(), TaprootPubkeyGenError> {
         let rand_seed = self.seed.as_slice();
@@ -108,7 +108,7 @@ impl TaprootPubkeyGen {
             });
         }
 
-        let expected_address = get_address(&self.pubkey.to_x_only_pubkey(), arguments, params)?;
+        let expected_address = get_address(&self.pubkey.to_x_only_pubkey(), arguments, network)?;
         if self.address != expected_address {
             return Err(TaprootPubkeyGenError::InvalidAddress {
                 expected: expected_address.to_string(),

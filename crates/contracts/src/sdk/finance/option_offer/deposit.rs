@@ -5,7 +5,8 @@ use crate::sdk::validation::TxOutExt;
 
 use simplicityhl::elements::bitcoin::secp256k1;
 use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
-use simplicityhl::elements::{AddressParams, OutPoint, Script, TxOut};
+use simplicityhl::elements::{OutPoint, Script, TxOut};
+use simplicityhl_core::SimplicityNetwork;
 
 /// Build PSET for user to deposit collateral and premium into the option offer covenant.
 ///
@@ -38,7 +39,7 @@ pub fn build_option_offer_deposit(
     collateral_deposit_amount: u64,
     fee_amount: u64,
     arguments: &OptionOfferArguments,
-    address_params: &'static AddressParams,
+    network: SimplicityNetwork,
 ) -> Result<(PartiallySignedTransaction, TaprootPubkeyGen), TransactionBuildError> {
     let (collateral_outpoint, collateral_tx_out) = collateral_utxo;
     let (premium_outpoint, premium_tx_out) = premium_utxo;
@@ -91,7 +92,7 @@ pub fn build_option_offer_deposit(
     let change_recipient_script = collateral_tx_out.script_pubkey.clone();
 
     let option_offer_taproot_pubkey_gen =
-        TaprootPubkeyGen::from(arguments, address_params, &get_option_offer_address)?;
+        TaprootPubkeyGen::from(arguments, network, &get_option_offer_address)?;
 
     let mut pst = PartiallySignedTransaction::new_v2();
 
