@@ -83,7 +83,7 @@ use std::sync::Arc;
 use simplicityhl::num::U256;
 use simplicityhl::simplicity::RedeemNode;
 use simplicityhl::simplicity::bitcoin::XOnlyPublicKey;
-use simplicityhl::simplicity::elements::{Address, AddressParams, Transaction, TxInWitness, TxOut};
+use simplicityhl::simplicity::elements::{Address, Transaction, TxInWitness, TxOut};
 use simplicityhl::simplicity::jet::Elements;
 use simplicityhl::simplicity::jet::elements::{ElementsEnv, ElementsUtxo};
 use simplicityhl::str::WitnessName;
@@ -100,12 +100,12 @@ pub const P2PK_SOURCE: &str = include_str!("source_simf/p2pk.simf");
 /// Returns error if the P2PK program fails to compile.
 pub fn get_p2pk_address(
     x_only_public_key: &XOnlyPublicKey,
-    params: &'static AddressParams,
+    network: SimplicityNetwork,
 ) -> Result<Address, ProgramError> {
     Ok(create_p2tr_address(
         get_p2pk_program(x_only_public_key)?.commit().cmr(),
         x_only_public_key,
-        params,
+        network.address_params(),
     ))
 }
 
@@ -159,8 +159,7 @@ pub fn create_p2pk_signature(
     utxos: &[TxOut],
     keypair: &elements::schnorr::Keypair,
     input_index: usize,
-    params: &'static AddressParams,
-    genesis_hash: elements::BlockHash,
+    network: SimplicityNetwork,
 ) -> Result<Signature, ProgramError> {
     use simplicityhl::simplicity::hashes::Hash as _;
 
@@ -172,8 +171,7 @@ pub fn create_p2pk_signature(
         &p2pk_program,
         &x_only_public_key,
         utxos,
-        params,
-        genesis_hash,
+        network,
         input_index,
     )?;
 
@@ -203,8 +201,7 @@ pub fn finalize_p2pk_transaction(
     x_only_public_key: &XOnlyPublicKey,
     schnorr_signature: &Signature,
     input_index: usize,
-    params: &'static AddressParams,
-    genesis_hash: elements::BlockHash,
+    network: SimplicityNetwork,
     log_level: TrackerLogLevel,
 ) -> Result<Transaction, ProgramError> {
     let p2pk_program = get_p2pk_program(x_only_public_key)?;
@@ -214,8 +211,7 @@ pub fn finalize_p2pk_transaction(
         &p2pk_program,
         x_only_public_key,
         utxos,
-        params,
-        genesis_hash,
+        network,
         input_index,
     )?;
 
@@ -251,8 +247,7 @@ pub fn finalize_transaction(
     utxos: &[TxOut],
     input_index: usize,
     witness_values: WitnessValues,
-    params: &'static AddressParams,
-    genesis_hash: elements::BlockHash,
+    network: SimplicityNetwork,
     log_level: TrackerLogLevel,
 ) -> Result<Transaction, ProgramError> {
     let env = get_and_verify_env(
@@ -260,8 +255,7 @@ pub fn finalize_transaction(
         program,
         program_public_key,
         utxos,
-        params,
-        genesis_hash,
+        network,
         input_index,
     )?;
 
@@ -294,10 +288,11 @@ pub fn get_and_verify_env(
     program: &CompiledProgram,
     program_public_key: &XOnlyPublicKey,
     utxos: &[TxOut],
-    params: &'static AddressParams,
-    genesis_hash: elements::BlockHash,
+    network: SimplicityNetwork,
     input_index: usize,
 ) -> Result<ElementsEnv<Arc<Transaction>>, ProgramError> {
+    let params = network.address_params();
+    let genesis_hash = network.genesis_block_hash();
     let cmr = program.commit().cmr();
 
     if utxos.len() <= input_index {
