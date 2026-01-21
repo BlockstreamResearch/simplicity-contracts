@@ -1,15 +1,14 @@
 use crate::error::TransactionBuildError;
+
+use crate::sdk::PartialPset;
 use crate::sdk::taproot_pubkey_gen::get_random_seed;
 use crate::sdk::validation::TxOutExt;
 
-use std::collections::HashMap;
-
-use simplicityhl::elements::bitcoin::secp256k1;
 use simplicityhl::elements::confidential::{AssetBlindingFactor, ValueBlindingFactor};
 use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
 use simplicityhl::elements::secp256k1_zkp::PublicKey;
-use simplicityhl::elements::secp256k1_zkp::rand::thread_rng;
 use simplicityhl::elements::{OutPoint, TxOut, TxOutSecrets};
+use std::collections::HashMap;
 
 /// Issue a new asset with given amount.
 ///
@@ -23,14 +22,9 @@ pub fn issue_asset(
     blinding_key: &PublicKey,
     fee_utxo: (OutPoint, TxOut),
     issue_amount: u64,
-    fee_amount: u64,
-) -> Result<PartiallySignedTransaction, TransactionBuildError> {
+) -> Result<PartialPset, TransactionBuildError> {
     let (fee_out_point, fee_tx_out) = fee_utxo;
-
-    let (fee_asset_id, total_lbtc_left) = (
-        fee_tx_out.explicit_asset()?,
-        fee_tx_out.validate_amount(fee_amount)?,
-    );
+    let (fee_asset_id, fee_value) = fee_tx_out.explicit()?;
 
     let change_recipient_script = fee_tx_out.script_pubkey.clone();
 
@@ -53,7 +47,7 @@ pub fn issue_asset(
         TxOutSecrets {
             asset_bf: AssetBlindingFactor::zero(),
             value_bf: ValueBlindingFactor::zero(),
-            value: total_lbtc_left + fee_amount,
+            value: fee_value,
             asset: fee_asset_id,
         },
     );
@@ -76,20 +70,8 @@ pub fn issue_asset(
         None,
     ));
 
-    // LBTC Change
-    pst.add_output(Output::new_explicit(
-        change_recipient_script,
-        total_lbtc_left,
-        fee_asset_id,
-        None,
-    ));
-
-    pst.add_output(Output::from_txout(TxOut::new_fee(fee_amount, fee_asset_id)));
-
-    pst.blind_last(&mut thread_rng(), secp256k1::SECP256K1, &inp_txout_sec)?;
-
-    pst.extract_tx()?
-        .verify_tx_amt_proofs(secp256k1::SECP256K1, &[fee_tx_out])?;
-
-    Ok(pst)
+    Ok(
+        PartialPset::new(pst, change_recipient_script, vec![fee_tx_out])
+            .inp_tx_out_secrets(inp_txout_sec),
+    )
 }

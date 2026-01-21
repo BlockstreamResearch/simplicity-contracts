@@ -3,18 +3,16 @@ use crate::finance::options::get_options_address;
 
 use crate::error::TransactionBuildError;
 
+use crate::sdk::PartialPset;
 use crate::sdk::taproot_pubkey_gen::TaprootPubkeyGen;
 use crate::sdk::validation::TxOutExt;
 
 use std::collections::HashMap;
 
-use simplicityhl::elements::secp256k1_zkp::PublicKey;
-
-use simplicityhl::elements::bitcoin::secp256k1;
 use simplicityhl::elements::confidential::{AssetBlindingFactor, ValueBlindingFactor};
 use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
-use simplicityhl::elements::secp256k1_zkp::rand::thread_rng;
-use simplicityhl::elements::{OutPoint, Script, Sequence, TxOut, TxOutSecrets};
+use simplicityhl::elements::secp256k1_zkp::PublicKey;
+use simplicityhl::elements::{OutPoint, Sequence, TxOut, TxOutSecrets};
 use simplicityhl_core::SimplicityNetwork;
 
 /// Create a new option contract with option and grantor token issuance.
@@ -33,9 +31,8 @@ pub fn build_option_creation(
     second_fee_utxo: (OutPoint, TxOut),
     option_arguments: &OptionsArguments,
     issuance_asset_entropy: [u8; 32],
-    fee_amount: u64,
     network: SimplicityNetwork,
-) -> Result<(PartiallySignedTransaction, TaprootPubkeyGen), TransactionBuildError> {
+) -> Result<(PartialPset, TaprootPubkeyGen), TransactionBuildError> {
     let (first_out_point, first_tx_out) = first_fee_utxo;
     let (second_out_point, second_tx_out) = second_fee_utxo;
 
@@ -50,10 +47,6 @@ pub fn build_option_creation(
             second_asset: second_asset_id.to_string(),
         });
     }
-
-    let total_input_fee = first_value + second_value;
-
-    first_tx_out.validate_amount(fee_amount.saturating_sub(second_value))?;
 
     let change_recipient_script = first_tx_out.script_pubkey.clone();
 
@@ -122,20 +115,6 @@ pub fn build_option_creation(
     output.blinder_index = Some(1);
     pst.add_output(output);
 
-    pst.add_output(Output::new_explicit(
-        change_recipient_script,
-        total_input_fee - fee_amount,
-        second_asset_id,
-        None,
-    ));
-
-    pst.add_output(Output::new_explicit(
-        Script::new(),
-        fee_amount,
-        second_asset_id,
-        None,
-    ));
-
     let first_input_secrets = TxOutSecrets {
         asset_bf: AssetBlindingFactor::zero(),
         value_bf: ValueBlindingFactor::zero(),
@@ -153,10 +132,12 @@ pub fn build_option_creation(
     inp_txout_sec.insert(0, first_input_secrets);
     inp_txout_sec.insert(1, second_input_secrets);
 
-    pst.blind_last(&mut thread_rng(), secp256k1::SECP256K1, &inp_txout_sec)?;
+    let non_finalized_pset = PartialPset::new(
+        pst,
+        change_recipient_script,
+        vec![first_tx_out, second_tx_out],
+    )
+    .inp_tx_out_secrets(inp_txout_sec);
 
-    pst.extract_tx()?
-        .verify_tx_amt_proofs(secp256k1::SECP256K1, &[first_tx_out, second_tx_out])?;
-
-    Ok((pst, options_taproot_pubkey_gen))
+    Ok((non_finalized_pset, options_taproot_pubkey_gen))
 }

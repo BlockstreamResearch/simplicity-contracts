@@ -132,13 +132,14 @@ pub fn finalize_options_transaction(
     Ok(tx)
 }
 
+#[allow(clippy::too_many_lines)]
 #[cfg(test)]
 mod options_tests {
     use super::*;
 
     use crate::sdk::taproot_pubkey_gen::{TaprootPubkeyGen, get_random_seed};
     use crate::sdk::{
-        build_option_cancellation, build_option_creation, build_option_exercise,
+        SignerTrait, build_option_cancellation, build_option_creation, build_option_exercise,
         build_option_expiry, build_option_funding, build_option_settlement,
     };
 
@@ -153,15 +154,25 @@ mod options_tests {
     use simplicityhl::simplicity::elements::{self, AssetId, OutPoint, Txid};
     use simplicityhl::simplicity::hashes::Hash;
 
-    use simplicityhl::elements::pset::PartiallySignedTransaction;
     use simplicityhl::elements::secp256k1_zkp::SECP256K1;
     use simplicityhl::elements::taproot::ControlBlock;
     use simplicityhl::simplicity::jet::elements::ElementsUtxo;
     use simplicityhl_core::{
         LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_TEST_ASSET_ID_STR, SimplicityNetwork,
+        create_p2pk_signature, finalize_p2pk_transaction, get_p2pk_program,
     };
 
     const NETWORK: SimplicityNetwork = SimplicityNetwork::LiquidTestnet;
+
+    fn get_user_script_pubkey(keypair: &Keypair, network: SimplicityNetwork) -> Result<Script> {
+        let x_only_public_key = keypair.x_only_public_key().0;
+        let p2pk_program = get_p2pk_program(&x_only_public_key)?;
+        let cmr = p2pk_program.commit().cmr();
+
+        let address = create_p2tr_address(cmr, &x_only_public_key, network.address_params());
+        let script_pubkey = address.script_pubkey();
+        Ok(script_pubkey)
+    }
 
     fn get_creation_pst(
         keypair: &Keypair,
@@ -169,14 +180,12 @@ mod options_tests {
         expiry_time: u32,
         collateral_per_contract: u64,
         settlement_per_contract: u64,
-    ) -> Result<(
-        (PartiallySignedTransaction, TaprootPubkeyGen),
-        OptionsArguments,
-    )> {
+    ) -> Result<((Transaction, TaprootPubkeyGen), OptionsArguments)> {
         let option_outpoint = OutPoint::new(Txid::from_slice(&[1; 32])?, 0);
         let grantor_outpoint = OutPoint::new(Txid::from_slice(&[2; 32])?, 0);
 
         let issuance_asset_entropy = get_random_seed();
+        let user_script = get_user_script_pubkey(keypair, NETWORK)?;
 
         let option_arguments = OptionsArguments::new(
             start_time,
@@ -190,36 +199,61 @@ mod options_tests {
             (grantor_outpoint, false),
         );
 
-        Ok((
-            build_option_creation(
-                &keypair.public_key(),
-                (
-                    option_outpoint,
-                    TxOut {
-                        asset: Asset::Explicit(NETWORK.policy_asset()),
-                        value: Value::Explicit(500),
-                        nonce: elements::confidential::Nonce::Null,
-                        script_pubkey: Script::new(),
-                        witness: elements::TxOutWitness::default(),
-                    },
-                ),
-                (
-                    grantor_outpoint,
-                    TxOut {
-                        asset: Asset::Explicit(NETWORK.policy_asset()),
-                        value: Value::Explicit(1000),
-                        nonce: elements::confidential::Nonce::Null,
-                        script_pubkey: Script::new(),
-                        witness: elements::TxOutWitness::default(),
-                    },
-                ),
-                &option_arguments,
-                issuance_asset_entropy,
-                100,
-                NETWORK,
-            )?,
-            option_arguments,
-        ))
+        let (partial_pset, taproot) = build_option_creation(
+            &keypair.public_key(),
+            (
+                option_outpoint,
+                TxOut {
+                    asset: Asset::Explicit(NETWORK.policy_asset()),
+                    value: Value::Explicit(500),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: user_script.clone(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            (
+                grantor_outpoint,
+                TxOut {
+                    asset: Asset::Explicit(NETWORK.policy_asset()),
+                    value: Value::Explicit(1000),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: user_script,
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            &option_arguments,
+            issuance_asset_entropy,
+            NETWORK,
+        )?;
+        let partial_pset = partial_pset.fee(99);
+
+        let tx = partial_pset.finalize(NETWORK, |network: SimplicityNetwork, tx, utxos| {
+            let x_only_public_key = keypair.x_only_public_key().0;
+
+            let signature_0 = create_p2pk_signature(&tx, utxos, keypair, 0, network)?;
+            let tx = finalize_p2pk_transaction(
+                tx,
+                utxos,
+                &x_only_public_key,
+                &signature_0,
+                0,
+                network,
+                TrackerLogLevel::None,
+            )?;
+
+            let signature_1 = create_p2pk_signature(&tx, utxos, keypair, 1, network)?;
+            finalize_p2pk_transaction(
+                tx,
+                utxos,
+                &x_only_public_key,
+                &signature_1,
+                1,
+                network,
+                TrackerLogLevel::None,
+            )
+        })?;
+
+        Ok(((tx, taproot), option_arguments))
     }
 
     struct FundingTestContext {
@@ -268,34 +302,97 @@ mod options_tests {
     }
 
     fn setup_funding_scenario() -> Result<FundingTestContext> {
+        fn spawn_funding_signer(
+            branch: OptionBranch,
+            taproot_pubkey_gen: TaprootPubkeyGen,
+            keypair: Keypair,
+            option_arguments: OptionsArguments,
+        ) -> impl SignerTrait {
+            move |network: SimplicityNetwork, tx, utxos| {
+                let taproot_pubkey_gen = taproot_pubkey_gen.clone();
+
+                let tx = finalize_options_transaction(
+                    tx,
+                    &taproot_pubkey_gen.get_x_only_pubkey(),
+                    &get_options_program(&option_arguments)?,
+                    utxos,
+                    0,
+                    &branch,
+                    network,
+                    TrackerLogLevel::None,
+                )?;
+
+                let tx = finalize_options_transaction(
+                    tx,
+                    &taproot_pubkey_gen.get_x_only_pubkey(),
+                    &get_options_program(&option_arguments)?,
+                    utxos,
+                    1,
+                    &branch,
+                    network,
+                    TrackerLogLevel::None,
+                )?;
+
+                let x_only_public_key = keypair.x_only_public_key().0;
+                let signature = create_p2pk_signature(&tx, utxos, &keypair, 2, network)?;
+                let tx = finalize_p2pk_transaction(
+                    tx,
+                    utxos,
+                    &x_only_public_key,
+                    &signature,
+                    2,
+                    network,
+                    TrackerLogLevel::None,
+                )?;
+
+                if utxos.len() == 4 {
+                    let signature = create_p2pk_signature(&tx, utxos, &keypair, 3, network)?;
+                    finalize_p2pk_transaction(
+                        tx,
+                        utxos,
+                        &x_only_public_key,
+                        &signature,
+                        3,
+                        network,
+                        TrackerLogLevel::None,
+                    )
+                } else {
+                    Ok(tx)
+                }
+            }
+        }
+
         let keypair = Keypair::from_secret_key(
             &Secp256k1::new(),
             &secp256k1::SecretKey::from_slice(&[1u8; 32])?,
         );
 
+        let user_script = get_user_script_pubkey(&keypair, NETWORK)?;
+
         let collateral_per_contract = 20;
         let settlement_per_contract = 25;
         let collateral_amount = 1000;
 
-        // 1. Creation PST
-        let ((pst, pubkey_gen), arguments) = get_creation_pst(
+        // 1. Creation TX
+        let ((creation_tx, taproot_pubkey_gen), arguments) = get_creation_pst(
             &keypair,
             0,
             0,
             collateral_per_contract,
             settlement_per_contract,
         )?;
-        let pst_tx = pst.extract_tx()?;
 
         // 2. Unblinding outputs - these are INPUT secrets for the funding tx
-        let input_option_tx_out = pst_tx.output[0].clone();
-        let input_option_secrets = pst_tx.output[0].unblind(SECP256K1, keypair.secret_key())?;
+        let input_option_tx_out = creation_tx.output[0].clone();
+        let input_option_secrets =
+            creation_tx.output[0].unblind(SECP256K1, keypair.secret_key())?;
 
-        let input_grantor_tx_out = pst_tx.output[1].clone();
-        let input_grantor_secrets = pst_tx.output[1].unblind(SECP256K1, keypair.secret_key())?;
+        let input_grantor_tx_out = creation_tx.output[1].clone();
+        let input_grantor_secrets =
+            creation_tx.output[1].unblind(SECP256K1, keypair.secret_key())?;
 
         // 3. Build Funding - returns PST and OptionBranch with all ABF/VBF extracted
-        let (pst, branch) = build_option_funding(
+        let (partial_pset, expected_asset_amount) = build_option_funding(
             &keypair,
             (
                 OutPoint::default(),
@@ -313,24 +410,50 @@ mod options_tests {
                     asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(collateral_amount + 1000),
                     nonce: elements::confidential::Nonce::Null,
-                    script_pubkey: Script::new(),
+                    script_pubkey: user_script,
                     witness: elements::TxOutWitness::default(),
                 },
             ),
             None,
             &arguments,
             collateral_amount,
-            50,
         )?;
 
-        let final_tx = pst.extract_tx()?;
+        let fee = 100;
+
+        // Create Draft pset for initial fee estimation
+        let pset = partial_pset.create_pset(fee, NETWORK)?;
+        let draft_finalized_pset = crate::sdk::PartialPset::finalize_pset_raw(
+            pset,
+            partial_pset.get_inp_tx_out_sec(),
+            partial_pset.get_spent_tx_outs(),
+        )?;
+        let tx = draft_finalized_pset.extract_tx()?;
+        let draft_branch = crate::sdk::extract_funding_option_branch(
+            &keypair,
+            &partial_pset,
+            &tx,
+            expected_asset_amount,
+        )?;
+        let signer = spawn_funding_signer(
+            draft_branch.clone(),
+            taproot_pubkey_gen.clone(),
+            keypair,
+            arguments.clone(),
+        );
+        let signed_tx = crate::sdk::PartialPset::sign_tx_raw(
+            tx,
+            partial_pset.get_spent_tx_outs(),
+            NETWORK,
+            signer,
+        )?;
 
         Ok(FundingTestContext {
-            tx: final_tx,
+            tx: signed_tx,
             program: get_compiled_options_program(&arguments),
             arguments,
-            branch,
-            pubkey_gen,
+            branch: draft_branch,
+            pubkey_gen: taproot_pubkey_gen,
             collateral_amount,
             input_option_tx_out,
             input_grantor_tx_out,
@@ -435,11 +558,33 @@ mod options_tests {
     }
 
     #[test]
+    fn test_options_cancellation_path_draft() -> Result<()> {
+        let keypair = Keypair::from_secret_key(
+            &Secp256k1::new(),
+            &secp256k1::SecretKey::from_slice(&[1u8; 32])?,
+        );
+
+        let collateral_per_contract = 20;
+        let settlement_per_contract = 25;
+
+        let ((_, _option_pubkey_gen), _option_arguments) = get_creation_pst(
+            &keypair,
+            0,
+            0,
+            collateral_per_contract,
+            settlement_per_contract,
+        )?;
+        Ok(())
+    }
+
+    #[test]
     fn test_options_cancellation_path() -> Result<()> {
         let keypair = Keypair::from_secret_key(
             &Secp256k1::new(),
             &secp256k1::SecretKey::from_slice(&[1u8; 32])?,
         );
+
+        let user_script = get_user_script_pubkey(&keypair, NETWORK)?;
 
         let collateral_per_contract = 20;
         let settlement_per_contract = 25;
@@ -459,7 +604,7 @@ mod options_tests {
         let (option_asset_id, _) = option_arguments.get_option_token_ids();
         let (grantor_asset_id, _) = option_arguments.get_grantor_token_ids();
 
-        let (pst, option_branch) = build_option_cancellation(
+        let (partial_pset, option_branch) = build_option_cancellation(
             (
                 OutPoint::default(),
                 TxOut {
@@ -476,7 +621,7 @@ mod options_tests {
                     asset: Asset::Explicit(option_asset_id),
                     value: Value::Explicit(option_token_amount),
                     nonce: elements::confidential::Nonce::Null,
-                    script_pubkey: Script::new(),
+                    script_pubkey: user_script.clone(),
                     witness: elements::TxOutWitness::default(),
                 },
             ),
@@ -486,7 +631,7 @@ mod options_tests {
                     asset: Asset::Explicit(grantor_asset_id),
                     value: Value::Explicit(option_token_amount),
                     nonce: elements::confidential::Nonce::Null,
-                    script_pubkey: Script::new(),
+                    script_pubkey: user_script.clone(),
                     witness: elements::TxOutWitness::default(),
                 },
             ),
@@ -496,19 +641,67 @@ mod options_tests {
                     asset: Asset::Explicit(NETWORK.policy_asset()),
                     value: Value::Explicit(100),
                     nonce: elements::confidential::Nonce::Null,
-                    script_pubkey: Script::new(),
+                    script_pubkey: user_script,
                     witness: elements::TxOutWitness::default(),
                 },
             ),
             &option_arguments,
             amount_to_burn,
-            50,
         )?;
+
+        let partial_pset = partial_pset.fee(99);
+        let tx = partial_pset.finalize(NETWORK, |network: SimplicityNetwork, tx, utxos| {
+            let tx = finalize_options_transaction(
+                tx,
+                &option_pubkey_gen.get_x_only_pubkey(),
+                &get_options_program(&option_arguments)?,
+                utxos,
+                0,
+                &option_branch,
+                network,
+                TrackerLogLevel::None,
+            )?;
+
+            let x_only_public_key = keypair.x_only_public_key().0;
+
+            let signature_1 = create_p2pk_signature(&tx, utxos, &keypair, 1, network)?;
+            let tx = finalize_p2pk_transaction(
+                tx,
+                utxos,
+                &x_only_public_key,
+                &signature_1,
+                1,
+                network,
+                TrackerLogLevel::None,
+            )?;
+
+            let signature_2 = create_p2pk_signature(&tx, utxos, &keypair, 2, network)?;
+            let tx = finalize_p2pk_transaction(
+                tx,
+                utxos,
+                &x_only_public_key,
+                &signature_2,
+                2,
+                network,
+                TrackerLogLevel::None,
+            )?;
+
+            let signature_3 = create_p2pk_signature(&tx, utxos, &keypair, 3, network)?;
+            finalize_p2pk_transaction(
+                tx,
+                utxos,
+                &x_only_public_key,
+                &signature_3,
+                3,
+                network,
+                TrackerLogLevel::None,
+            )
+        })?;
 
         let program = get_compiled_options_program(&option_arguments);
 
         let env = ElementsEnv::new(
-            Arc::new(pst.extract_tx()?),
+            Arc::new(tx),
             vec![ElementsUtxo {
                 script_pubkey: option_pubkey_gen.address.script_pubkey(),
                 asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
@@ -538,6 +731,8 @@ mod options_tests {
             &secp256k1::SecretKey::from_slice(&[1u8; 32])?,
         );
 
+        let user_script = get_user_script_pubkey(&keypair, NETWORK)?;
+
         let collateral_per_contract = 20;
         let settlement_per_contract = 10;
 
@@ -557,7 +752,7 @@ mod options_tests {
         let (option_asset_id, _) = option_arguments.get_option_token_ids();
         let settlement_asset_id = AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?;
 
-        let (pst, option_branch) = build_option_exercise(
+        let (partial_pset, option_branch) = build_option_exercise(
             (
                 OutPoint::default(),
                 TxOut {
@@ -574,7 +769,7 @@ mod options_tests {
                     asset: Asset::Explicit(option_asset_id),
                     value: Value::Explicit(option_token_amount_total),
                     nonce: elements::confidential::Nonce::Null,
-                    script_pubkey: Script::new(),
+                    script_pubkey: user_script.clone(),
                     witness: elements::TxOutWitness::default(),
                 },
             ),
@@ -584,7 +779,7 @@ mod options_tests {
                     asset: Asset::Explicit(settlement_asset_id),
                     value: Value::Explicit(asset_amount_to_pay + 100), // extra for change
                     nonce: elements::confidential::Nonce::Null,
-                    script_pubkey: Script::new(),
+                    script_pubkey: user_script.clone(),
                     witness: elements::TxOutWitness::default(),
                 },
             ),
@@ -594,19 +789,67 @@ mod options_tests {
                     asset: Asset::Explicit(NETWORK.policy_asset()),
                     value: Value::Explicit(100),
                     nonce: elements::confidential::Nonce::Null,
-                    script_pubkey: Script::new(),
+                    script_pubkey: user_script,
                     witness: elements::TxOutWitness::default(),
                 },
             )),
             option_amount_to_burn,
-            50,
             &option_arguments,
         )?;
+
+        let partial_pset = partial_pset.fee(99);
+        let tx = partial_pset.finalize(NETWORK, |network: SimplicityNetwork, tx, utxos| {
+            let tx = finalize_options_transaction(
+                tx,
+                &option_pubkey_gen.get_x_only_pubkey(),
+                &get_options_program(&option_arguments)?,
+                utxos,
+                0,
+                &option_branch,
+                network,
+                TrackerLogLevel::None,
+            )?;
+
+            let x_only_public_key = keypair.x_only_public_key().0;
+
+            let signature_1 = create_p2pk_signature(&tx, utxos, &keypair, 1, network)?;
+            let tx = finalize_p2pk_transaction(
+                tx,
+                utxos,
+                &x_only_public_key,
+                &signature_1,
+                1,
+                network,
+                TrackerLogLevel::None,
+            )?;
+
+            let signature_2 = create_p2pk_signature(&tx, utxos, &keypair, 2, network)?;
+            let tx = finalize_p2pk_transaction(
+                tx,
+                utxos,
+                &x_only_public_key,
+                &signature_2,
+                2,
+                network,
+                TrackerLogLevel::None,
+            )?;
+
+            let signature_3 = create_p2pk_signature(&tx, utxos, &keypair, 3, network)?;
+            finalize_p2pk_transaction(
+                tx,
+                utxos,
+                &x_only_public_key,
+                &signature_3,
+                3,
+                network,
+                TrackerLogLevel::None,
+            )
+        })?;
 
         let program = get_compiled_options_program(&option_arguments);
 
         let env = ElementsEnv::new(
-            Arc::new(pst.extract_tx()?),
+            Arc::new(tx),
             vec![ElementsUtxo {
                 script_pubkey: option_pubkey_gen.address.script_pubkey(),
                 asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
@@ -636,6 +879,8 @@ mod options_tests {
             &secp256k1::SecretKey::from_slice(&[1u8; 32])?,
         );
 
+        let user_script = get_user_script_pubkey(&keypair, NETWORK)?;
+
         let collateral_per_contract = 20;
         let settlement_per_contract = 40;
 
@@ -653,7 +898,7 @@ mod options_tests {
         let (grantor_asset_id, _) = option_arguments.get_grantor_token_ids();
         let settlement_asset_id = AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?;
 
-        let (pst, option_branch) = build_option_settlement(
+        let (partial_pset, option_branch) = build_option_settlement(
             (
                 OutPoint::default(),
                 TxOut {
@@ -670,7 +915,7 @@ mod options_tests {
                     asset: Asset::Explicit(grantor_asset_id),
                     value: Value::Explicit(grantor_token_amount_to_burn + 5), // extra for change
                     nonce: elements::confidential::Nonce::Null,
-                    script_pubkey: Script::new(),
+                    script_pubkey: user_script.clone(),
                     witness: elements::TxOutWitness::default(),
                 },
             ),
@@ -680,19 +925,56 @@ mod options_tests {
                     asset: Asset::Explicit(NETWORK.policy_asset()),
                     value: Value::Explicit(100),
                     nonce: elements::confidential::Nonce::Null,
-                    script_pubkey: Script::new(),
+                    script_pubkey: user_script,
                     witness: elements::TxOutWitness::default(),
                 },
             ),
             grantor_token_amount_to_burn,
-            50,
             &option_arguments,
         )?;
+
+        let partial_pset = partial_pset.fee(99);
+        let tx = partial_pset.finalize(NETWORK, |network: SimplicityNetwork, tx, utxos| {
+            let tx = finalize_options_transaction(
+                tx,
+                &option_pubkey_gen.get_x_only_pubkey(),
+                &get_options_program(&option_arguments)?,
+                utxos,
+                0,
+                &option_branch,
+                network,
+                TrackerLogLevel::None,
+            )?;
+
+            let x_only_public_key = keypair.x_only_public_key().0;
+
+            let signature_1 = create_p2pk_signature(&tx, utxos, &keypair, 1, network)?;
+            let tx = finalize_p2pk_transaction(
+                tx,
+                utxos,
+                &x_only_public_key,
+                &signature_1,
+                1,
+                network,
+                TrackerLogLevel::None,
+            )?;
+
+            let signature_2 = create_p2pk_signature(&tx, utxos, &keypair, 2, network)?;
+            finalize_p2pk_transaction(
+                tx,
+                utxos,
+                &x_only_public_key,
+                &signature_2,
+                2,
+                network,
+                TrackerLogLevel::None,
+            )
+        })?;
 
         let program = get_compiled_options_program(&option_arguments);
 
         let env = ElementsEnv::new(
-            Arc::new(pst.extract_tx()?),
+            Arc::new(tx),
             vec![ElementsUtxo {
                 script_pubkey: option_pubkey_gen.address.script_pubkey(),
                 asset: Asset::Explicit(settlement_asset_id),
@@ -722,6 +1004,8 @@ mod options_tests {
             &secp256k1::SecretKey::from_slice(&[1u8; 32])?,
         );
 
+        let user_script = get_user_script_pubkey(&keypair, NETWORK)?;
+
         let collateral_per_contract = 20;
         let settlement_per_contract = 25;
 
@@ -741,7 +1025,7 @@ mod options_tests {
 
         let (grantor_asset_id, _) = option_arguments.get_grantor_token_ids();
 
-        let (pst, option_branch) = build_option_expiry(
+        let (partial_pset, option_branch) = build_option_expiry(
             (
                 OutPoint::default(),
                 TxOut {
@@ -758,7 +1042,7 @@ mod options_tests {
                     asset: Asset::Explicit(grantor_asset_id),
                     value: Value::Explicit(grantor_token_amount_to_burn + 5), // extra for change
                     nonce: elements::confidential::Nonce::Null,
-                    script_pubkey: Script::new(),
+                    script_pubkey: user_script.clone(),
                     witness: elements::TxOutWitness::default(),
                 },
             ),
@@ -768,19 +1052,56 @@ mod options_tests {
                     asset: Asset::Explicit(NETWORK.policy_asset()),
                     value: Value::Explicit(100),
                     nonce: elements::confidential::Nonce::Null,
-                    script_pubkey: Script::new(),
+                    script_pubkey: user_script,
                     witness: elements::TxOutWitness::default(),
                 },
             ),
             grantor_token_amount_to_burn,
-            50,
             &option_arguments,
         )?;
+
+        let partial_pset = partial_pset.fee(99);
+        let tx = partial_pset.finalize(NETWORK, |network: SimplicityNetwork, tx, utxos| {
+            let tx = finalize_options_transaction(
+                tx,
+                &option_pubkey_gen.get_x_only_pubkey(),
+                &get_options_program(&option_arguments)?,
+                utxos,
+                0,
+                &option_branch,
+                network,
+                TrackerLogLevel::None,
+            )?;
+
+            let x_only_public_key = keypair.x_only_public_key().0;
+
+            let signature_1 = create_p2pk_signature(&tx, utxos, &keypair, 1, NETWORK)?;
+            let tx = finalize_p2pk_transaction(
+                tx,
+                utxos,
+                &x_only_public_key,
+                &signature_1,
+                1,
+                NETWORK,
+                TrackerLogLevel::None,
+            )?;
+
+            let signature_2 = create_p2pk_signature(&tx, utxos, &keypair, 2, NETWORK)?;
+            finalize_p2pk_transaction(
+                tx,
+                utxos,
+                &x_only_public_key,
+                &signature_2,
+                2,
+                NETWORK,
+                TrackerLogLevel::None,
+            )
+        })?;
 
         let program = get_compiled_options_program(&option_arguments);
 
         let env = ElementsEnv::new(
-            Arc::new(pst.extract_tx()?),
+            Arc::new(tx),
             vec![ElementsUtxo {
                 script_pubkey: option_pubkey_gen.address.script_pubkey(),
                 asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
