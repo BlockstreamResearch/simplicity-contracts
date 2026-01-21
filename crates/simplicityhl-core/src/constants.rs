@@ -11,6 +11,16 @@ use std::str::FromStr;
 
 pub const PUBLIC_SECRET_BLINDER_KEY: [u8; 32] = [1; 32];
 
+/// `PLACEHOLDER_ISSUANCE_VALUE` constant is used for issuance and reissuance tokens during the blinding process.
+///
+/// During blinding, the PSET collects surjection proof inputs from all outputs with matching asset IDs.
+/// For issuance tokens, only the `asset_id` from `TxOutSectet` is copied into surjection proofs while the `value` is set to `0`,
+/// as the exact value inserted for the issuance token is irrelevant to the proof computation.
+/// This is because issuance and reissuance tokens surjection proofs only care about the `asset_id` or `token_id`, not the token value.
+///
+/// See: `<https://github.com/ElementsProject/rust-elements/blob/2d94f5dcb5e4a81838681c71ed8a49b337feecd2/src/pset/mod.rs#L438>`
+pub const PLACEHOLDER_ISSUANCE_VALUE: u64 = 0;
+
 /// Policy asset id (hex, BE) for Liquid mainnet.
 pub const LIQUID_POLICY_ASSET_STR: &str =
     "6f0279e9ed041c3d710a9f57d0c02928416460c4b722ae3457a11eec381c526d";
