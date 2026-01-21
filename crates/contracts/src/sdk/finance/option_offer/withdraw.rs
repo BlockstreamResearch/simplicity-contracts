@@ -1,9 +1,10 @@
 use crate::finance::option_offer::OptionOfferArguments;
 
 use crate::error::TransactionBuildError;
+
+use crate::sdk::PartialPset;
 use crate::sdk::validation::TxOutExt;
 
-use simplicityhl::elements::bitcoin::secp256k1;
 use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
 use simplicityhl::elements::{OutPoint, Script, TxOut};
 
@@ -28,17 +29,12 @@ use simplicityhl::elements::{OutPoint, Script, TxOut};
 pub fn build_option_offer_withdraw(
     settlement_covenant_utxo: (OutPoint, TxOut),
     fee_utxo: (OutPoint, TxOut),
-    fee_amount: u64,
     arguments: &OptionOfferArguments,
     user_recipient_script: Script,
-) -> Result<PartiallySignedTransaction, TransactionBuildError> {
+) -> Result<PartialPset, TransactionBuildError> {
     let (settlement_outpoint, settlement_tx_out) = settlement_covenant_utxo;
     let (fee_outpoint, fee_tx_out) = fee_utxo;
 
-    let (fee_asset_id, fee_change) = (
-        fee_tx_out.explicit_asset()?,
-        fee_tx_out.validate_amount(fee_amount)?,
-    );
     let (settlement_asset_id, settlement_amount) = settlement_tx_out.explicit()?;
 
     let expected_settlement = arguments.get_settlement_asset_id();
@@ -61,8 +57,6 @@ pub fn build_option_offer_withdraw(
     fee_input.witness_utxo = Some(fee_tx_out.clone());
     pst.add_input(fee_input);
 
-    let is_fee_change_needed = fee_change != 0;
-
     pst.add_output(Output::new_explicit(
         user_recipient_script,
         settlement_amount,
@@ -70,24 +64,11 @@ pub fn build_option_offer_withdraw(
         None,
     ));
 
-    if is_fee_change_needed {
-        pst.add_output(Output::new_explicit(
-            change_recipient_script,
-            fee_change,
-            fee_asset_id,
-            None,
-        ));
-    }
+    let non_finalized_pset = PartialPset::new(
+        pst,
+        change_recipient_script,
+        vec![settlement_tx_out, fee_tx_out],
+    );
 
-    pst.add_output(Output::new_explicit(
-        Script::new(),
-        fee_amount,
-        fee_asset_id,
-        None,
-    ));
-
-    pst.extract_tx()?
-        .verify_tx_amt_proofs(secp256k1::SECP256K1, &[settlement_tx_out, fee_tx_out])?;
-
-    Ok(pst)
+    Ok(non_finalized_pset)
 }

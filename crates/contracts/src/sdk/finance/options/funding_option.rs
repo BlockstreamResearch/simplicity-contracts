@@ -3,6 +3,7 @@ use crate::finance::options::build_witness::{OptionBranch, blinding_factors_from
 
 use crate::error::TransactionBuildError;
 
+use crate::sdk::PartialPset;
 use crate::sdk::validation::TxOutExt;
 
 use std::collections::HashMap;
@@ -10,8 +11,9 @@ use std::collections::HashMap;
 use simplicityhl::elements::bitcoin::secp256k1::Keypair;
 use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
 use simplicityhl::elements::secp256k1_zkp::SECP256K1;
-use simplicityhl::elements::secp256k1_zkp::rand::thread_rng;
-use simplicityhl::elements::{OutPoint, Script, Sequence, TxOut, TxOutSecrets};
+use simplicityhl::elements::{OutPoint, Sequence, Transaction, TxOut, TxOutSecrets};
+
+pub type ExpectedAssetAmount = u64;
 
 /// Fund an option contract by depositing collateral and reissuing tokens.
 ///
@@ -36,8 +38,7 @@ pub fn build_option_funding(
     fee_utxo: Option<&(OutPoint, TxOut)>,
     option_arguments: &OptionsArguments,
     collateral_amount: u64,
-    fee_amount: u64,
-) -> Result<(PartiallySignedTransaction, OptionBranch), TransactionBuildError> {
+) -> Result<(PartialPset, ExpectedAssetAmount), TransactionBuildError> {
     let blinding_key = blinding_keypair.public_key();
 
     let (option_out_point, option_tx_out, input_option_secrets) = option_asset_utxo;
@@ -131,10 +132,7 @@ pub fn build_option_funding(
     ));
 
     let utxos = if let Some((_, fee_tx_out)) = fee_utxo {
-        let total_fee = fee_tx_out.validate_amount(fee_amount)?;
-
         let is_collateral_change_needed = total_collateral != collateral_amount;
-        let is_fee_change_needed = total_fee != 0;
 
         if is_collateral_change_needed {
             pst.add_output(Output::new_explicit(
@@ -145,22 +143,6 @@ pub fn build_option_funding(
             ));
         }
 
-        if is_fee_change_needed {
-            pst.add_output(Output::new_explicit(
-                change_recipient_script,
-                total_fee,
-                fee_tx_out.explicit_asset()?,
-                None,
-            ));
-        }
-
-        pst.add_output(Output::new_explicit(
-            Script::new(),
-            fee_amount,
-            fee_tx_out.explicit_asset()?,
-            None,
-        ));
-
         vec![
             option_tx_out,
             grantor_tx_out,
@@ -168,24 +150,6 @@ pub fn build_option_funding(
             fee_tx_out.clone(),
         ]
     } else {
-        let is_collateral_change_needed = total_collateral != (collateral_amount + fee_amount);
-
-        if is_collateral_change_needed {
-            pst.add_output(Output::new_explicit(
-                change_recipient_script,
-                total_collateral - collateral_amount - fee_amount,
-                collateral_asset_id,
-                None,
-            ));
-        }
-
-        pst.add_output(Output::new_explicit(
-            Script::new(),
-            fee_amount,
-            collateral_asset_id,
-            None,
-        ));
-
         vec![option_tx_out, grantor_tx_out, collateral_tx_out]
     };
 
@@ -193,14 +157,82 @@ pub fn build_option_funding(
     inp_tx_out_sec.insert(0, input_option_secrets);
     inp_tx_out_sec.insert(1, input_grantor_secrets);
 
-    pst.blind_last(&mut thread_rng(), SECP256K1, &inp_tx_out_sec)?;
+    let expected_asset_amount = option_token_amount * option_arguments.settlement_per_contract();
 
-    let tx = pst.extract_tx()?;
+    let non_finalized_pset =
+        PartialPset::new(pst, change_recipient_script, utxos).inp_tx_out_secrets(inp_tx_out_sec);
 
-    tx.verify_tx_amt_proofs(SECP256K1, &utxos)?;
+    Ok((non_finalized_pset, expected_asset_amount))
+}
 
-    let output_option_secrets = tx.output[0].unblind(SECP256K1, blinding_keypair.secret_key())?;
-    let output_grantor_secrets = tx.output[1].unblind(SECP256K1, blinding_keypair.secret_key())?;
+/// Extracts the funding option branch with blinding factors from a blinded transaction.
+///
+/// This function should be called after creating a draft transaction using
+/// `PartialPset::create_draft_transaction()` to extract the blinding factors
+/// needed for the Simplicity witness.
+///
+/// # Arguments
+///
+/// * `blinding_keypair` - Keypair used for blinding the outputs
+/// * `input_option_secrets` - Secrets for the option token input
+/// * `input_grantor_secrets` - Secrets for the grantor token input
+/// * `expected_asset_amount` - Expected settlement asset amount from `build_option_funding`
+/// * `tx` - The draft transaction (blinded but not finalized)
+///
+/// # Errors
+///
+/// Returns an error if unblinding the outputs fails.
+#[allow(clippy::similar_names)]
+pub fn extract_funding_option_branch(
+    blinding_keypair: &Keypair,
+    non_finalized_pset: &PartialPset,
+    tx: &Transaction,
+    expected_asset_amount: ExpectedAssetAmount,
+) -> Result<OptionBranch, TransactionBuildError> {
+    let (
+        (input_option_secrets, output_option_secrets),
+        (input_grantor_secrets, output_grantor_secrets),
+    ) = if let Some(inp_tx_out_sec) = non_finalized_pset.get_inp_tx_out_sec() {
+        // option secrets
+        let key1 = 0;
+        let in1 =
+            *inp_tx_out_sec
+                .get(&key1)
+                .ok_or_else(|| TransactionBuildError::NoTxOutSecret {
+                    description: Some("input_option_secrets".into()),
+                    id: key1,
+                })?;
+        let out1 = tx
+            .output
+            .get(key1)
+            .ok_or_else(|| TransactionBuildError::NoTxOut {
+                description: Some("output_option".into()),
+                id: key1,
+            })?;
+        let out1 = out1.unblind(SECP256K1, blinding_keypair.secret_key())?;
+
+        // grantor secrets
+        let key2 = 1;
+        let in2 =
+            *inp_tx_out_sec
+                .get(&key2)
+                .ok_or_else(|| TransactionBuildError::NoTxOutSecret {
+                    description: Some("output_grantor_secrets".into()),
+                    id: key2,
+                })?;
+        let out2 = tx
+            .output
+            .get(key2)
+            .ok_or_else(|| TransactionBuildError::NoTxOut {
+                description: Some("output_grantor".into()),
+                id: key2,
+            })?;
+        let out2 = out2.unblind(SECP256K1, blinding_keypair.secret_key())?;
+
+        Ok(((in1, out1), (in2, out2)))
+    } else {
+        Err(TransactionBuildError::MissingTxOutSecrets)
+    }?;
 
     let (input_option_abf, input_option_vbf) = blinding_factors_from_secrets(&input_option_secrets);
     let (input_grantor_abf, input_grantor_vbf) =
@@ -210,8 +242,6 @@ pub fn build_option_funding(
         blinding_factors_from_secrets(&output_option_secrets);
     let (output_grantor_abf, output_grantor_vbf) =
         blinding_factors_from_secrets(&output_grantor_secrets);
-
-    let expected_asset_amount = option_token_amount * option_arguments.settlement_per_contract();
 
     let option_branch = OptionBranch::Funding {
         expected_asset_amount,
@@ -224,6 +254,5 @@ pub fn build_option_funding(
         output_grantor_abf,
         output_grantor_vbf,
     };
-
-    Ok((pst, option_branch))
+    Ok(option_branch)
 }

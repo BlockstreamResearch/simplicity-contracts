@@ -3,9 +3,9 @@ use crate::finance::option_offer::build_witness::OptionOfferBranch;
 
 use crate::error::TransactionBuildError;
 
+use crate::sdk::PartialPset;
 use crate::sdk::validation::TxOutExt;
 
-use simplicityhl::elements::bitcoin::secp256k1;
 use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
 use simplicityhl::elements::{OutPoint, Script, TxOut};
 
@@ -51,19 +51,14 @@ pub fn build_option_offer_exercise(
     settlement_utxo: (OutPoint, TxOut),
     fee_utxo: (OutPoint, TxOut),
     collateral_amount_to_receive: u64,
-    fee_amount: u64,
     arguments: &OptionOfferArguments,
     counterparty_recipient_script: Script,
-) -> Result<(PartiallySignedTransaction, OptionOfferBranch), TransactionBuildError> {
+) -> Result<(PartialPset, OptionOfferBranch), TransactionBuildError> {
     let (collateral_outpoint, collateral_tx_out) = collateral_covenant_utxo;
     let (premium_outpoint, premium_tx_out) = premium_covenant_utxo;
     let (settlement_outpoint, settlement_tx_out) = settlement_utxo;
     let (fee_outpoint, fee_tx_out) = fee_utxo;
 
-    let (fee_asset_id, fee_change) = (
-        fee_tx_out.explicit_asset()?,
-        fee_tx_out.validate_amount(fee_amount)?,
-    );
     let (collateral_asset_id, total_collateral) = collateral_tx_out.explicit()?;
     let (premium_asset_id, total_premium) = premium_tx_out.explicit()?;
     let (settlement_asset_id, total_settlement) = settlement_tx_out.explicit()?;
@@ -150,7 +145,6 @@ pub fn build_option_offer_exercise(
 
     let is_change_needed = total_collateral != collateral_amount_to_receive;
     let is_settlement_change_needed = total_settlement != settlement_amount_required;
-    let is_fee_change_needed = fee_change != 0;
 
     if is_change_needed {
         pst.add_output(Output::new_explicit(
@@ -198,34 +192,19 @@ pub fn build_option_offer_exercise(
         ));
     }
 
-    if is_fee_change_needed {
-        pst.add_output(Output::new_explicit(
-            change_recipient_script,
-            fee_change,
-            fee_asset_id,
-            None,
-        ));
-    }
-
-    pst.add_output(Output::new_explicit(
-        Script::new(),
-        fee_amount,
-        fee_asset_id,
-        None,
-    ));
-
-    pst.extract_tx()?.verify_tx_amt_proofs(
-        secp256k1::SECP256K1,
-        &[
+    let non_finalized_pset = PartialPset::new(
+        pst,
+        change_recipient_script,
+        vec![
             collateral_tx_out,
             premium_tx_out,
             settlement_tx_out,
             fee_tx_out,
         ],
-    )?;
+    );
 
     Ok((
-        pst,
+        non_finalized_pset,
         OptionOfferBranch::Exercise {
             collateral_amount: collateral_amount_to_receive,
             is_change_needed,

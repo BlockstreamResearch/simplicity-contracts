@@ -7,17 +7,19 @@ use crate::commands::NETWORK;
 use crate::explorer::{broadcast_tx, fetch_utxo};
 
 use clap::Subcommand;
+use contracts::sdk::{DEFAULT_TARGET_BLOCKS, SyncFeeFetcher};
+
 use simplicityhl::elements::hashes::{Hash, sha256};
 use simplicityhl::elements::pset::serialize::Serialize;
 use simplicityhl::elements::secp256k1_zkp::SECP256K1;
 use simplicityhl::elements::{AssetId, ContractHash};
 use simplicityhl::simplicity::elements::{Address, OutPoint};
 use simplicityhl::simplicity::hex::DisplayHex;
-
 use simplicityhl::tracker::TrackerLogLevel;
+
 use simplicityhl_core::{
-    create_p2pk_signature, derive_public_blinder_key, finalize_p2pk_transaction, get_p2pk_address,
-    hash_script,
+    SimplicityNetwork, create_p2pk_signature, derive_public_blinder_key, finalize_p2pk_transaction,
+    get_p2pk_address, hash_script,
 };
 
 #[derive(Subcommand, Debug)]
@@ -40,7 +42,7 @@ pub enum Basic {
         amount_to_send: u64,
         /// Miner fee in satoshis (LBTC)
         #[arg(long = "fee-sats")]
-        fee_amount: u64,
+        fee_amount: Option<u64>,
         /// Account that will pay for transaction fees and that owns a tokens to send
         #[arg(long = "account-index", default_value_t = 0)]
         account_index: u32,
@@ -58,7 +60,7 @@ pub enum Basic {
         split_parts: u64,
         /// Miner fee in satoshis (LBTC)
         #[arg(long = "fee-amount")]
-        fee_amount: u64,
+        fee_amount: Option<u64>,
         /// Account that will pay for transaction fees and that owns a tokens to split
         #[arg(long = "account-index", default_value_t = 0)]
         account_index: u32,
@@ -82,7 +84,7 @@ pub enum Basic {
         send_amount: u64,
         /// Miner fee in satoshis (LBTC)
         #[arg(long = "fee-sats")]
-        fee_amount: u64,
+        fee_amount: Option<u64>,
         /// Account that will pay for transaction fees and that owns a tokens to send
         #[arg(long = "account-index", default_value_t = 0)]
         account_index: u32,
@@ -103,7 +105,7 @@ pub enum Basic {
         issue_amount: u64,
         /// Miner fee in satoshis (LBTC)
         #[arg(long = "fee-sats")]
-        fee_amount: u64,
+        fee_amount: Option<u64>,
         /// Account that will pay for transaction fees and that owns a tokens to send
         #[arg(long = "account-index", default_value_t = 0)]
         account_index: u32,
@@ -127,7 +129,7 @@ pub enum Basic {
         reissue_amount: u64,
         /// Miner fee in satoshis (LBTC)
         #[arg(long = "fee-sats")]
-        fee_amount: u64,
+        fee_amount: Option<u64>,
         /// Account that will pay for transaction fees and that owns a tokens to send
         #[arg(long = "account-index", default_value_t = 0)]
         account_index: u32,
@@ -179,24 +181,31 @@ impl Basic {
                     (*utxo_outpoint, tx_out.clone()),
                     to_address,
                     *amount_to_send,
-                    *fee_amount,
                 )?;
 
-                let tx = pst.extract_tx()?;
-                let utxos = &[tx_out];
+                let fee_rate =
+                    contracts::sdk::EsploraFeeFetcher::get_fee_rate(DEFAULT_TARGET_BLOCKS)?;
+                let mut partial_pset = pst.fee_rate(fee_rate);
+                if let Some(fee_amount) = *fee_amount {
+                    partial_pset = partial_pset.fee(fee_amount);
+                }
 
-                let x_only_public_key = keypair.x_only_public_key().0;
-                let signature = create_p2pk_signature(&tx, utxos, &keypair, 0, NETWORK)?;
+                let tx =
+                    partial_pset.finalize(NETWORK, |network: SimplicityNetwork, tx, utxos| {
+                        let x_only_public_key = keypair.x_only_public_key().0;
 
-                let tx = finalize_p2pk_transaction(
-                    tx,
-                    utxos,
-                    &x_only_public_key,
-                    &signature,
-                    0,
-                    NETWORK,
-                    TrackerLogLevel::None,
-                )?;
+                        let signature = create_p2pk_signature(&tx, utxos, &keypair, 0, network)?;
+
+                        finalize_p2pk_transaction(
+                            tx,
+                            utxos,
+                            &x_only_public_key,
+                            &signature,
+                            0,
+                            network,
+                            TrackerLogLevel::None,
+                        )
+                    })?;
 
                 if *broadcast {
                     println!("Broadcasted txid: {}", broadcast_tx(&tx).await?);
@@ -217,27 +226,32 @@ impl Basic {
 
                 let tx_out = fetch_utxo(*fee_utxo).await?;
 
-                let pst = contracts::sdk::split_native_any(
-                    (*fee_utxo, tx_out.clone()),
-                    *split_parts,
-                    *fee_amount,
-                )?;
+                let pst =
+                    contracts::sdk::split_native_any((*fee_utxo, tx_out.clone()), *split_parts)?;
 
-                let tx = pst.extract_tx()?;
-                let utxos = &[tx_out];
+                let fee_rate =
+                    contracts::sdk::EsploraFeeFetcher::get_fee_rate(DEFAULT_TARGET_BLOCKS)?;
+                let mut partial_pset = pst.fee_rate(fee_rate);
+                if let Some(fee_amount) = *fee_amount {
+                    partial_pset = partial_pset.fee(fee_amount);
+                }
 
-                let x_only_public_key = keypair.x_only_public_key().0;
-                let signature = create_p2pk_signature(&tx, utxos, &keypair, 0, NETWORK)?;
+                let tx =
+                    partial_pset.finalize(NETWORK, |network: SimplicityNetwork, tx, utxos| {
+                        let x_only_public_key = keypair.x_only_public_key().0;
 
-                let tx = finalize_p2pk_transaction(
-                    tx,
-                    utxos,
-                    &x_only_public_key,
-                    &signature,
-                    0,
-                    NETWORK,
-                    TrackerLogLevel::None,
-                )?;
+                        let signature = create_p2pk_signature(&tx, utxos, &keypair, 0, network)?;
+
+                        finalize_p2pk_transaction(
+                            tx,
+                            utxos,
+                            &x_only_public_key,
+                            &signature,
+                            0,
+                            network,
+                            TrackerLogLevel::None,
+                        )
+                    })?;
 
                 if *broadcast {
                     println!("Broadcasted txid: {}", broadcast_tx(&tx).await?);
@@ -261,39 +275,46 @@ impl Basic {
                 let asset_tx_out = fetch_utxo(*asset_utxo_outpoint).await?;
                 let fee_tx_out = fetch_utxo(*fee_utxo_outpoint).await?;
 
-                let pst = contracts::sdk::transfer_asset(
+                let partial_pset = contracts::sdk::transfer_asset(
                     (*asset_utxo_outpoint, asset_tx_out.clone()),
                     (*fee_utxo_outpoint, fee_tx_out.clone()),
                     to_address,
                     *send_amount,
-                    *fee_amount,
                 )?;
 
-                let tx = pst.extract_tx()?;
-                let utxos = vec![asset_tx_out, fee_tx_out];
-                let x_only_public_key = keypair.x_only_public_key().0;
+                let fee_rate =
+                    contracts::sdk::EsploraFeeFetcher::get_fee_rate(DEFAULT_TARGET_BLOCKS)?;
+                let mut partial_pset = partial_pset.fee_rate(fee_rate);
+                if let Some(fee_amount) = *fee_amount {
+                    partial_pset = partial_pset.fee(fee_amount);
+                }
 
-                let signature_0 = create_p2pk_signature(&tx, &utxos, &keypair, 0, NETWORK)?;
-                let tx = finalize_p2pk_transaction(
-                    tx,
-                    &utxos,
-                    &x_only_public_key,
-                    &signature_0,
-                    0,
-                    NETWORK,
-                    TrackerLogLevel::None,
-                )?;
+                let tx =
+                    partial_pset.finalize(NETWORK, |network: SimplicityNetwork, tx, utxos| {
+                        let x_only_public_key = keypair.x_only_public_key().0;
 
-                let signature_1 = create_p2pk_signature(&tx, &utxos, &keypair, 1, NETWORK)?;
-                let tx = finalize_p2pk_transaction(
-                    tx,
-                    &utxos,
-                    &x_only_public_key,
-                    &signature_1,
-                    1,
-                    NETWORK,
-                    TrackerLogLevel::None,
-                )?;
+                        let signature_0 = create_p2pk_signature(&tx, utxos, &keypair, 0, network)?;
+                        let tx = finalize_p2pk_transaction(
+                            tx,
+                            utxos,
+                            &x_only_public_key,
+                            &signature_0,
+                            0,
+                            network,
+                            TrackerLogLevel::None,
+                        )?;
+
+                        let signature_1 = create_p2pk_signature(&tx, utxos, &keypair, 1, network)?;
+                        finalize_p2pk_transaction(
+                            tx,
+                            utxos,
+                            &x_only_public_key,
+                            &signature_1,
+                            1,
+                            network,
+                            TrackerLogLevel::None,
+                        )
+                    })?;
 
                 if *broadcast {
                     println!("Broadcasted txid: {}", broadcast_tx(&tx).await?);
@@ -322,37 +343,50 @@ impl Basic {
 
                 let fee_tx_out = fetch_utxo(*fee_utxo_outpoint).await?;
 
-                let pst = contracts::sdk::issue_asset(
+                let partial_pset = contracts::sdk::issue_asset(
                     &blinding_keypair.public_key(),
                     (*fee_utxo_outpoint, fee_tx_out.clone()),
                     *issue_amount,
-                    *fee_amount,
                 )?;
 
-                let (asset_id, reissuance_asset_id) = pst.inputs()[0].issuance_ids();
-                let asset_entropy = pst.inputs()[0]
-                    .issuance_asset_entropy
-                    .expect("expected entropy");
+                let fee_rate =
+                    contracts::sdk::EsploraFeeFetcher::get_fee_rate(DEFAULT_TARGET_BLOCKS)?;
+                let mut partial_pset = partial_pset.fee_rate(fee_rate);
+                if let Some(fee_amount) = *fee_amount {
+                    partial_pset = partial_pset.fee(fee_amount);
+                }
+
+                let (asset_id, reissuance_asset_id, asset_entropy) = {
+                    let pst = partial_pset.pset();
+                    let issue_input = &pst.inputs()[0];
+                    let (asset_id, reissuance_asset_id) = issue_input.issuance_ids();
+                    let asset_entropy = issue_input
+                        .issuance_asset_entropy
+                        .expect("expected entropy");
+                    (asset_id, reissuance_asset_id, asset_entropy)
+                };
+
+                let tx =
+                    partial_pset.finalize(NETWORK, |network: SimplicityNetwork, tx, utxos| {
+                        let x_only_public_key = keypair.x_only_public_key().0;
+
+                        let signature = create_p2pk_signature(&tx, utxos, &keypair, 0, network)?;
+
+                        finalize_p2pk_transaction(
+                            tx,
+                            utxos,
+                            &x_only_public_key,
+                            &signature,
+                            0,
+                            network,
+                            TrackerLogLevel::None,
+                        )
+                    })?;
+
                 let asset_entropy = AssetId::generate_asset_entropy(
                     *fee_utxo_outpoint,
                     ContractHash::from_byte_array(asset_entropy),
                 );
-
-                let tx = pst.extract_tx()?;
-                let utxos = &[fee_tx_out];
-
-                let x_only_public_key = keypair.x_only_public_key().0;
-                let signature = create_p2pk_signature(&tx, utxos, &keypair, 0, NETWORK)?;
-
-                let tx = finalize_p2pk_transaction(
-                    tx,
-                    utxos,
-                    &x_only_public_key,
-                    &signature,
-                    0,
-                    NETWORK,
-                    TrackerLogLevel::None,
-                )?;
 
                 println!(
                     "Asset id: {asset_id}, \
@@ -403,43 +437,51 @@ impl Basic {
                 let reissue_utxo_secrets =
                     reissue_tx_out.unblind(SECP256K1, blinding_keypair.secret_key())?;
 
-                let pst = contracts::sdk::reissue_asset(
+                let partial_pset = contracts::sdk::reissue_asset(
                     &blinding_keypair.public_key(),
                     (*reissue_asset_outpoint, reissue_tx_out.clone()),
                     reissue_utxo_secrets,
                     (*fee_utxo_outpoint, fee_tx_out.clone()),
                     *reissue_amount,
-                    *fee_amount,
                     asset_entropy,
                 )?;
 
-                let (asset_id, reissuance_asset_id) = pst.inputs()[0].issuance_ids();
+                let fee_rate =
+                    contracts::sdk::EsploraFeeFetcher::get_fee_rate(DEFAULT_TARGET_BLOCKS)?;
+                let mut partial_pset = partial_pset.fee_rate(fee_rate);
+                if let Some(fee_amount) = *fee_amount {
+                    partial_pset = partial_pset.fee(fee_amount);
+                }
 
-                let tx = pst.extract_tx()?;
-                let utxos = vec![reissue_tx_out, fee_tx_out];
-                let x_only_public_key = keypair.x_only_public_key().0;
+                let (asset_id, reissuance_asset_id) =
+                    partial_pset.pset().inputs()[0].issuance_ids();
 
-                let signature_0 = create_p2pk_signature(&tx, &utxos, &keypair, 0, NETWORK)?;
-                let tx = finalize_p2pk_transaction(
-                    tx,
-                    &utxos,
-                    &x_only_public_key,
-                    &signature_0,
-                    0,
-                    NETWORK,
-                    TrackerLogLevel::None,
-                )?;
+                let tx =
+                    partial_pset.finalize(NETWORK, |network: SimplicityNetwork, tx, utxos| {
+                        let x_only_public_key = keypair.x_only_public_key().0;
 
-                let signature_1 = create_p2pk_signature(&tx, &utxos, &keypair, 1, NETWORK)?;
-                let tx = finalize_p2pk_transaction(
-                    tx,
-                    &utxos,
-                    &x_only_public_key,
-                    &signature_1,
-                    1,
-                    NETWORK,
-                    TrackerLogLevel::None,
-                )?;
+                        let signature_0 = create_p2pk_signature(&tx, utxos, &keypair, 0, network)?;
+                        let tx = finalize_p2pk_transaction(
+                            tx,
+                            utxos,
+                            &x_only_public_key,
+                            &signature_0,
+                            0,
+                            network,
+                            TrackerLogLevel::None,
+                        )?;
+
+                        let signature_1 = create_p2pk_signature(&tx, utxos, &keypair, 1, network)?;
+                        finalize_p2pk_transaction(
+                            tx,
+                            utxos,
+                            &x_only_public_key,
+                            &signature_1,
+                            1,
+                            network,
+                            TrackerLogLevel::None,
+                        )
+                    })?;
 
                 println!("Asset id: {asset_id}, Reissuance id: {reissuance_asset_id}");
 
