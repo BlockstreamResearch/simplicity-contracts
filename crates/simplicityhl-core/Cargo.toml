@@ -28,3 +28,5 @@ sha2 = { workspace = true }
 hex = { workspace = true }
 
 simplicityhl = { workspace = true }
+
+minreq = { workspace = true }
