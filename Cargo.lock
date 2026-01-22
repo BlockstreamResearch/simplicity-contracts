@@ -683,6 +683,8 @@ checksum = "05015102dad0f7d61691ca347e9d9d9006685a64aefb3d79eecf62665de2153d"
 dependencies = [
  "rustls",
  "rustls-webpki",
+ "serde",
+ "serde_json",
  "webpki-roots",
 ]
 
@@ -1149,6 +1151,7 @@ version = "0.4.1"
 dependencies = [
  "bincode",
  "hex",
+ "minreq",
  "sha2",
  "simplicityhl",
  "thiserror",

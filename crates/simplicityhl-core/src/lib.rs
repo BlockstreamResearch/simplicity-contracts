@@ -5,6 +5,7 @@
 mod blinder;
 mod constants;
 mod error;
+mod fee_rate_fetcher;
 mod runner;
 mod scripts;
 
@@ -71,6 +72,8 @@ pub use error::EncodingError;
 
 pub use runner::*;
 pub use scripts::*;
+
+pub use fee_rate_fetcher::*;
 
 #[cfg(feature = "encoding")]
 pub use encoding::Encodable;

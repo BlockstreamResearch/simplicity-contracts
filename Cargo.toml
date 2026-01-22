@@ -18,6 +18,8 @@ sha2 = { version = "0.10.9", features = ["compress"] }
 hex = "0.4.3"
 tracing = { version = "0.1.41" }
 
+minreq = { version = "2.14.1", features = ["https", "json-using-serde"]}
+
 simplicityhl = { version = "0.4.0" }
 simplicityhl-core = { version = "0.4.1", features = ["encoding"] }
 
