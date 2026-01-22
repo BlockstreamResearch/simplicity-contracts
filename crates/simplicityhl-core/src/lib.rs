@@ -8,6 +8,7 @@ mod error;
 mod fee_rate_fetcher;
 mod runner;
 mod scripts;
+mod signer;
 
 #[cfg(feature = "encoding")]
 pub mod encoding {
@@ -72,6 +73,8 @@ pub use error::EncodingError;
 
 pub use runner::*;
 pub use scripts::*;
+
+pub use signer::*;
 
 pub use fee_rate_fetcher::*;
 
