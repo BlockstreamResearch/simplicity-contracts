@@ -15,6 +15,7 @@ use simplicityhl::elements::confidential::{AssetBlindingFactor, ValueBlindingFac
 use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
 use simplicityhl::elements::secp256k1_zkp::rand::thread_rng;
 use simplicityhl::elements::{OutPoint, Script, Sequence, TxOut, TxOutSecrets};
+use simplicityhl_core::PLACEHOLDER_ISSUANCE_VALUE;
 use simplicityhl_core::SimplicityNetwork;
 
 /// Create a new option contract with option and grantor token issuance.
@@ -139,13 +140,13 @@ pub fn build_option_creation(
     let first_input_secrets = TxOutSecrets {
         asset_bf: AssetBlindingFactor::zero(),
         value_bf: ValueBlindingFactor::zero(),
-        value: first_value,
+        value: PLACEHOLDER_ISSUANCE_VALUE,
         asset: second_asset_id,
     };
     let second_input_secrets = TxOutSecrets {
         asset_bf: AssetBlindingFactor::zero(),
         value_bf: ValueBlindingFactor::zero(),
-        value: second_value,
+        value: PLACEHOLDER_ISSUANCE_VALUE,
         asset: second_asset_id,
     };
 

@@ -10,6 +10,7 @@ use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
 use simplicityhl::elements::secp256k1_zkp::PublicKey;
 use simplicityhl::elements::secp256k1_zkp::rand::thread_rng;
 use simplicityhl::elements::{OutPoint, TxOut, TxOutSecrets};
+use simplicityhl_core::PLACEHOLDER_ISSUANCE_VALUE;
 
 /// Issue a new asset with given amount.
 ///
@@ -53,7 +54,7 @@ pub fn issue_asset(
         TxOutSecrets {
             asset_bf: AssetBlindingFactor::zero(),
             value_bf: ValueBlindingFactor::zero(),
-            value: total_lbtc_left + fee_amount,
+            value: PLACEHOLDER_ISSUANCE_VALUE,
             asset: fee_asset_id,
         },
     );
