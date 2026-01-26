@@ -11,32 +11,42 @@ pub trait IssuanceSpec {
 #[derive(Error, Debug)]
 pub enum IssuanceVerificationError {
     #[error("Invalid issuance count: expected exactly 2 inputs with issuances, found {found}")]
-    InvalidIssuanceCount {
-        found: usize,
-    },
+    InvalidIssuanceCount { found: usize },
 
-    #[error("Primary Generator input is missing or invalid. Check Asset ID, ensure Amount is Null and Inflation Keys are Explicit.")]
+    #[error(
+        "Primary Generator input is missing or invalid. Check Asset ID, ensure Amount is Null and Inflation Keys are Explicit."
+    )]
     InvalidPrimaryGeneratorInput,
 
-    #[error("Secondary Generator input is missing or invalid. Check Asset ID, ensure Amount is Null and Inflation Keys are Explicit.")]
+    #[error(
+        "Secondary Generator input is missing or invalid. Check Asset ID, ensure Amount is Null and Inflation Keys are Explicit."
+    )]
     InvalidSecondaryGeneratorInput,
 
-    #[error("Security Breach: Controlling reissuance token explicitly sent to external wallet at output #{0}")]
+    #[error(
+        "Security Breach: Controlling reissuance token explicitly sent to external wallet at output #{0}"
+    )]
     ControllingReissuanceExplicitLeak(usize),
 
-    #[error("Potential Security Breach: Unknown confidential outputs detected outside the covenant")]
+    #[error(
+        "Potential Security Breach: Unknown confidential outputs detected outside the covenant"
+    )]
     ConfidentialOutputLeak,
 
     #[error("Failure: Controlling reissuance token not found in covenant")]
     ControllingReissuanceMissingFromCovenant,
 }
 
+/// Verifies the issuance against the provided transaction.
+///
+/// # Errors
+///
+/// Returns an [`IssuanceVerificationError`] if the transaction or script validation fails.
 pub fn verify_issuance(
     tx: &Transaction,
     def: &impl IssuanceSpec,
     expected_covenant_script: &Script,
 ) -> Result<(), IssuanceVerificationError> {
-
     verify_issuances_input(tx, def)?;
     verify_reissuance_output(tx, def, expected_covenant_script)?;
 
@@ -44,16 +54,18 @@ pub fn verify_issuance(
 }
 
 fn verify_issuances_input(
-    tx: &Transaction, 
-    def: &impl IssuanceSpec
+    tx: &Transaction,
+    def: &impl IssuanceSpec,
 ) -> Result<(), IssuanceVerificationError> {
-    let issuances: Vec<_> = tx.input.iter()
+    let issuances: Vec<_> = tx
+        .input
+        .iter()
         .filter(|i| !i.asset_issuance.is_null())
         .collect();
 
     if issuances.len() != 2 {
-        return Err(IssuanceVerificationError::InvalidIssuanceCount { 
-            found: issuances.len() 
+        return Err(IssuanceVerificationError::InvalidIssuanceCount {
+            found: issuances.len(),
         });
     }
 
@@ -62,15 +74,15 @@ fn verify_issuances_input(
 
     let valid_primary_issuance = issuances.iter().any(|i| {
         let issued_id = i.issuance_ids().0;
-        issued_id == primary_asset 
-            && i.asset_issuance.amount.is_null() 
+        issued_id == primary_asset
+            && i.asset_issuance.amount.is_null()
             && i.asset_issuance.inflation_keys.is_explicit()
     });
 
     let valid_secondary_issuance = issuances.iter().any(|i| {
         let issued_id = i.issuance_ids().0;
-        issued_id == secondary_asset 
-            && i.asset_issuance.amount.is_null() 
+        issued_id == secondary_asset
+            && i.asset_issuance.amount.is_null()
             && i.asset_issuance.inflation_keys.is_explicit()
     });
 
@@ -83,11 +95,11 @@ fn verify_issuances_input(
 
     Ok(())
 }
-    
+
 fn verify_reissuance_output(
-    tx: &Transaction, 
-    def: &impl IssuanceSpec, 
-    covenant_script: &Script
+    tx: &Transaction,
+    def: &impl IssuanceSpec,
+    covenant_script: &Script,
 ) -> Result<(), IssuanceVerificationError> {
     let controlling_reissuance = def.get_controlling_reissuance_id();
 
@@ -99,24 +111,23 @@ fn verify_reissuance_output(
             continue;
         }
 
-        match output.asset.explicit() {
-            Some(asset_id) => {
-                if asset_id == controlling_reissuance {
-                    return Err(IssuanceVerificationError::ControllingReissuanceExplicitLeak(i));
-                }
-            },
-            None => {
-                println!("Output #{} is Confidential and goes to an external address.", i);
-                potential_leak = true;
+        if let Some(asset_id) = output.asset.explicit() {
+            if asset_id == controlling_reissuance {
+                return Err(IssuanceVerificationError::ControllingReissuanceExplicitLeak(i));
             }
+        } else {
+            println!("Output #{i} is Confidential and goes to an external address.");
+            potential_leak = true;
         }
     }
 
     if potential_leak {
         return Err(IssuanceVerificationError::ConfidentialOutputLeak);
     }
-    
-    let secured = tx.output.iter()
+
+    let secured = tx
+        .output
+        .iter()
         .filter(|o| o.script_pubkey == *covenant_script)
         .any(|o| o.asset.explicit() == Some(controlling_reissuance) || o.asset.is_confidential());
 
