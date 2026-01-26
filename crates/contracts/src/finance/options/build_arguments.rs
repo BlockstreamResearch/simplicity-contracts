@@ -372,6 +372,14 @@ impl OptionsArguments {
 
 impl simplicityhl_core::Encodable for OptionsArguments {}
 
+use crate::sdk::IssuanceSpec;
+
+impl IssuanceSpec for OptionsArguments {
+    fn get_primary_issuance_id(&self) -> AssetId { self.get_option_token_ids().0 }
+    fn get_secondary_issuance_id(&self) -> AssetId { self.get_grantor_token_ids().0 }
+    fn get_controlling_reissuance_id(&self) -> AssetId { self.get_grantor_token_ids().1 }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
