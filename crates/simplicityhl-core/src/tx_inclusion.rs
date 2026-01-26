@@ -1,9 +1,22 @@
+//! Transaction inclusion verification using Merkle proofs for Liquid/Elements blocks.
+//!
+//! This module provides SPV (Simplified Payment Verification) functionality to prove
+//! a transaction exists in a block without downloading all transactions.
+
 use simplicityhl::elements::hashes::{Hash, HashEngine};
 use simplicityhl::elements::{Block, TxMerkleNode, Txid};
 
+/// Merkle proof: (`transaction_index`, `sibling_hashes`)
 pub type MerkleProof = (usize, Vec<TxMerkleNode>);
 
-/// Creates inclusion proof for tx in block's Merkle tree
+/// Constructs a Merkle inclusion proof (Merkle branch) for a transaction TXID
+/// in a block, using Bitcoin consensus Merkle tree construction rules
+/// (pairwise double-SHA256 hashing with odd-hash duplication).
+///
+/// Liquid inherits the same Merkle tree semantics via the Elements codebase:
+/// <https://developer.bitcoin.org/reference/block_chain.html>
+///
+/// Returns `None` if the transaction is not present in the block.
 #[must_use]
 pub fn merkle_branch(tx: &Txid, block: &Block) -> Option<MerkleProof> {
     if block.txdata.is_empty() {
@@ -15,7 +28,14 @@ pub fn merkle_branch(tx: &Txid, block: &Block) -> Option<MerkleProof> {
     Some((tx_index, build_merkle_branch(tx_index, block)))
 }
 
-/// Verifies proof of tx inclusion
+/// Verifies a Merkle inclusion proof (Merkle branch) for a transaction TXID
+/// against the given Merkle root using Bitcoin consensus Merkle tree rules
+/// (pairwise double-SHA256 hashing with left/right ordering).
+///
+/// Liquid inherits the same Merkle tree semantics via the Elements codebase:
+/// <https://developer.bitcoin.org/reference/block_chain.html>
+///
+/// Returns `true` if the proof commits the transaction to the given root.
 #[must_use]
 pub fn verify_tx(tx: &Txid, root: &TxMerkleNode, proof: &MerkleProof) -> bool {
     root.eq(&compute_merkle_root_from_branch(tx, proof.0, &proof.1))
@@ -34,6 +54,7 @@ fn build_merkle_branch(tx_index: usize, block: &Block) -> Vec<TxMerkleNode> {
         .collect::<Vec<_>>();
     let mut index = tx_index;
 
+    // Bottom-up traversal: pair nodes, hash parents, collect siblings along path to root
     while layer.len() > 1 {
         let mut next_layer = vec![];
 
