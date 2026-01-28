@@ -22,7 +22,7 @@ fn hash_array_tr_storage_with_update(elem: (u256, bool), prev_hash: u256) -> u25
     jet::sha_256_ctx_8_finalize(new_hash)
 }
 
-fn script_hash_for_input_script(leaf: u256, merkle_data: [(u256, bool); 7]) -> u256 {
+fn script_hash_for_input_script(key: u256, leaf: u256, merkle_data: [(u256, bool); 7]) -> u256 {
     let tap_leaf: u256 = jet::tapleaf_hash();
     let ctx: Ctx8 = jet::tapdata_init();
     let ctx: Ctx8 = jet::sha_256_ctx_8_add_32(ctx, leaf);
@@ -31,8 +31,7 @@ fn script_hash_for_input_script(leaf: u256, merkle_data: [(u256, bool); 7]) -> u
     let computed: u256 = array_fold::<hash_array_tr_storage_with_update, 7>(merkle_data, hash_leaf);
     let tap_node: u256 = jet::build_tapbranch(tap_leaf, computed);
 
-    let bip0341_key: u256 = 0x50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0;
-    let tweaked_key: u256 = jet::build_taptweak(bip0341_key, tap_node);
+    let tweaked_key: u256 = jet::build_taptweak(key, tap_node);
     
     let hash_ctx1: Ctx8 = jet::sha_256_ctx_8_init();
     let hash_ctx2: Ctx8 = jet::sha_256_ctx_8_add_2(hash_ctx1, 0x5120); // Segwit v1, length 32
@@ -41,6 +40,7 @@ fn script_hash_for_input_script(leaf: u256, merkle_data: [(u256, bool); 7]) -> u
 }
 
 fn main() {
+    let key: u256 = witness::KEY;
     let leaf_data: u256 = witness::LEAF;
 
     // Path and hash
@@ -49,7 +49,7 @@ fn main() {
 
     // Load
     assert!(jet::eq_256(
-        script_hash_for_input_script(leaf_data, merkle_data),
+        script_hash_for_input_script(key, leaf_data, merkle_data),
         unwrap(jet::input_script_hash(jet::current_index()))
     ));
     
@@ -59,7 +59,7 @@ fn main() {
 
     // Store
     assert!(jet::eq_256(
-        script_hash_for_input_script(new_leaf, merkle_data),
+        script_hash_for_input_script(key, new_leaf, merkle_data),
         unwrap(jet::output_script_hash(jet::current_index()))
     ));
 }

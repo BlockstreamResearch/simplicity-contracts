@@ -11,14 +11,16 @@ pub const DEPTH: usize = 7;
 
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq)]
 pub struct SMTWitness {
+    key: u256,
     leaf: u256,
     merkle_data: [(u256, bool); DEPTH],
 }
 
 impl SMTWitness {
     #[must_use]
-    pub fn new(leaf: &u256, merkle_data: &[(u256, bool); DEPTH]) -> Self {
+    pub fn new(key: &u256, leaf: &u256, merkle_data: &[(u256, bool); DEPTH]) -> Self {
         Self {
+            key: *key,
             leaf: *leaf,
             merkle_data: *merkle_data,
         }
@@ -28,6 +30,7 @@ impl SMTWitness {
 impl Default for SMTWitness {
     fn default() -> Self {
         Self {
+            key: [0u8; 32],
             leaf: [0u8; 32],
             merkle_data: [([0u8; 32], false); DEPTH],
         }
@@ -54,6 +57,10 @@ pub fn build_smt_storage_witness(witness: &SMTWitness) -> WitnessValues {
     );
 
     simplicityhl::WitnessValues::from(HashMap::from([
+        (
+            WitnessName::from_str_unchecked("KEY"),
+            simplicityhl::Value::from(UIntValue::U256(U256::from_byte_array(witness.key))),
+        ),
         (
             WitnessName::from_str_unchecked("LEAF"),
             simplicityhl::Value::from(UIntValue::U256(U256::from_byte_array(witness.leaf))),
