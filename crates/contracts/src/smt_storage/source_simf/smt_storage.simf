@@ -1,0 +1,68 @@
+/* 
+ * Extends `bytes32_tr_storage` using `array_fold` for larger buffers.
+ * Optimized for small, fixed-size states where linear hashing is more efficient
+ * than Merkle Trees. By avoiding proof overhead like sibling hashes, we reduce 
+ * witness size and simplify contract logic for small N.
+ */
+fn hash_array_tr_storage_with_update(elem: (u256, bool), prev_hash: u256) -> u256 {
+    let (hash, is_right): (u256, bool) = dbg!(elem);
+    let ctx: Ctx8 = jet::sha_256_ctx_8_init();
+
+    let new_hash: Ctx8 = match is_right {
+        true => {
+            let ctx: Ctx8 = jet::sha_256_ctx_8_add_32(ctx, hash);
+            jet::sha_256_ctx_8_add_32(ctx, prev_hash)
+        },
+        false => {
+            let ctx: Ctx8 = jet::sha_256_ctx_8_add_32(ctx, prev_hash);
+            jet::sha_256_ctx_8_add_32(ctx, hash)
+        }
+    };
+
+    jet::sha_256_ctx_8_finalize(new_hash)
+}
+
+fn script_hash_for_input_script(key: u256, leaf: u256, path_bits: u8, merkle_data: [(u256, bool); 8]) -> u256 {
+    let tap_leaf: u256 = jet::tapleaf_hash();
+    let ctx: Ctx8 = jet::tapdata_init();
+    let ctx: Ctx8 = jet::sha_256_ctx_8_add_32(ctx, leaf);
+    let ctx: Ctx8 = jet::sha_256_ctx_8_add_1(ctx, path_bits);
+
+    let hash_leaf: u256 = jet::sha_256_ctx_8_finalize(ctx);
+
+    let computed: u256 = array_fold::<hash_array_tr_storage_with_update, 8>(merkle_data, hash_leaf);
+    let tap_node: u256 = jet::build_tapbranch(tap_leaf, computed);
+
+    let tweaked_key: u256 = jet::build_taptweak(key, tap_node);
+    
+    let hash_ctx1: Ctx8 = jet::sha_256_ctx_8_init();
+    let hash_ctx2: Ctx8 = jet::sha_256_ctx_8_add_2(hash_ctx1, 0x5120); // Segwit v1, length 32
+    let hash_ctx3: Ctx8 = jet::sha_256_ctx_8_add_32(hash_ctx2, tweaked_key);
+    jet::sha_256_ctx_8_finalize(hash_ctx3)
+}
+
+fn main() {
+    let key: u256 = witness::KEY;
+    let leaf_data: u256 = witness::LEAF;
+    let path_bits: u8 = witness::PATH_BITS;
+
+    // Path and hash
+    let merkle_data: [(u256, bool); 8] = witness::MERKLE_DATA;
+    let (leaf1, leaf2, leaf3, leaf4): (u64, u64, u64, u64) = <u256>::into(leaf_data);
+
+    // Load
+    assert!(jet::eq_256(
+        script_hash_for_input_script(key, leaf_data, path_bits, merkle_data),
+        unwrap(jet::input_script_hash(jet::current_index()))
+    ));
+    
+    // There may be arbitrary logic here
+    let new_leaf4: u64 = 1;
+    let new_leaf: u256 = <(u64, u64, u64, u64)>::into((leaf1, leaf2, leaf3, new_leaf4));
+
+    // Store
+    assert!(jet::eq_256(
+        script_hash_for_input_script(key, new_leaf, path_bits, merkle_data),
+        unwrap(jet::output_script_hash(jet::current_index()))
+    ));
+}
