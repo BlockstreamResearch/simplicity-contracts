@@ -72,6 +72,7 @@ impl TxOutExt for TxOut {
             })
     }
 
+    // TODO: Change this validation to another func
     fn validate_amount(&self, required: u64) -> Result<u64, ValidationError> {
         let available = self.explicit_value()?;
 

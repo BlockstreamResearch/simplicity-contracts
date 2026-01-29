@@ -19,7 +19,6 @@ simple-storage = []
 bytes32-tr-storage = []
 array-tr-storage = []
 smt-storage = []
-swap-with-change = []
 
 [lints]
 workspace = true
@@ -40,4 +39,3 @@ simplicityhl-core = { workspace = true }
 
 [dev-dependencies]
 anyhow = "1"
-rand = "0.9.2"
