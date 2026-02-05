@@ -5,6 +5,7 @@ use crate::error::TransactionBuildError;
 
 use crate::sdk::taproot_pubkey_gen::TaprootPubkeyGen;
 use crate::sdk::validation::TxOutExt;
+use crate::sdk::{IssuanceInputConstraints, IssuanceTxConstraints, verify_issuance};
 
 use std::collections::HashMap;
 
@@ -153,6 +154,31 @@ pub fn build_option_creation(
     let mut inp_txout_sec = HashMap::new();
     inp_txout_sec.insert(0, first_input_secrets);
     inp_txout_sec.insert(1, second_input_secrets);
+
+    verify_issuance(
+        &pst.extract_tx()?,
+        &IssuanceTxConstraints {
+            inputs: vec![
+                IssuanceInputConstraints {
+                    input_idx: 0,
+                    issuance_destination: None,
+                    reissuance_destination: Some((
+                        options_taproot_pubkey_gen.address.script_pubkey(),
+                        1,
+                    )),
+                },
+                IssuanceInputConstraints {
+                    input_idx: 1,
+                    issuance_destination: None,
+                    reissuance_destination: Some((
+                        options_taproot_pubkey_gen.address.script_pubkey(),
+                        1,
+                    )),
+                },
+            ],
+            allow_unconstrained_issuances: false,
+        },
+    )?;
 
     pst.blind_last(&mut thread_rng(), secp256k1::SECP256K1, &inp_txout_sec)?;
 

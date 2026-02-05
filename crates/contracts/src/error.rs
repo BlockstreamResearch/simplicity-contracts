@@ -123,6 +123,9 @@ pub enum TransactionBuildError {
 
     #[error(transparent)]
     TaprootPubkeyGen(#[from] TaprootPubkeyGenError),
+
+    #[error(transparent)]
+    IssuanceValidation(#[from] crate::sdk::IssuanceVerificationError),
 }
 
 /// Errors from extracting arguments from Arguments struct.
