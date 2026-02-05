@@ -17,7 +17,7 @@ pub struct State {
 
 impl State {
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             limbs: [[0u8; 32]; MAX_VAL],
         }
