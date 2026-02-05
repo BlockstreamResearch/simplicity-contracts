@@ -2,6 +2,8 @@
 mod basic;
 #[cfg(any(feature = "finance-option-offer", feature = "finance-options"))]
 mod finance;
+#[cfg(feature = "smt-storage")]
+mod storage;
 
 pub mod taproot_pubkey_gen;
 pub mod validation;
@@ -10,3 +12,5 @@ pub mod validation;
 pub use basic::*;
 #[cfg(any(feature = "finance-option-offer", feature = "finance-options"))]
 pub use finance::*;
+#[cfg(feature = "smt-storage")]
+pub use storage::*;

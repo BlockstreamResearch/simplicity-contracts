@@ -15,6 +15,7 @@ use clap::{Parser, Subcommand};
 
 use crate::commands::basic::Basic;
 use crate::commands::options::Options;
+use crate::commands::smt_storage::SMTStorage;
 
 /// Command-line entrypoint for the Simplicity helper CLI.
 #[derive(Parser, Debug)]
@@ -41,6 +42,11 @@ enum Commands {
         #[command(subcommand)]
         options: Box<Options>,
     },
+    /// Storage utilities
+    Storage {
+        #[command(subcommand)]
+        storage: Box<SMTStorage>,
+    },
 }
 
 #[tokio::main]
@@ -48,5 +54,6 @@ async fn main() -> Result<()> {
     match Cli::parse().command {
         Commands::Basic { basic } => basic.handle().await,
         Commands::Options { options } => options.handle().await,
+        Commands::Storage { storage } => storage.handle().await,
     }
 }
