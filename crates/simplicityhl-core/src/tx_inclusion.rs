@@ -9,8 +9,9 @@ use simplicityhl::elements::{Block, TxMerkleNode, Txid};
 /// Merkle proof: (`transaction_index`, `sibling_hashes`)
 pub type MerkleProof = (usize, Vec<TxMerkleNode>);
 
-/// Constructs a Merkle inclusion proof (Merkle branch) for a transaction TXID
-/// in a block, using Bitcoin consensus Merkle tree construction rules
+/// Constructs a Merkle inclusion proof (Merkle branch).
+///
+/// For a transaction TXID in a block, using Bitcoin consensus Merkle tree construction rules
 /// (pairwise double-SHA256 hashing with odd-hash duplication).
 ///
 /// Liquid inherits the same Merkle tree semantics via the Elements codebase:
@@ -28,8 +29,9 @@ pub fn merkle_branch(tx: &Txid, block: &Block) -> Option<MerkleProof> {
     Some((tx_index, build_merkle_branch(tx_index, block)))
 }
 
-/// Verifies a Merkle inclusion proof (Merkle branch) for a transaction TXID
-/// against the given Merkle root using Bitcoin consensus Merkle tree rules
+/// Verifies a Merkle inclusion proof (Merkle branch).
+///
+/// For a transaction TXID against the given Merkle root using Bitcoin consensus Merkle tree rules
 /// (pairwise double-SHA256 hashing with left/right ordering).
 ///
 /// Liquid inherits the same Merkle tree semantics via the Elements codebase:
@@ -96,15 +98,14 @@ fn compute_merkle_root_from_branch(
     for leaf in branch {
         let mut eng = TxMerkleNode::engine();
 
-        res = if pos & 1 == 0 {
+        if pos & 1 == 0 {
             eng.input(res.as_raw_hash().as_byte_array());
             eng.input(leaf.as_raw_hash().as_byte_array());
-            TxMerkleNode::from_engine(eng)
         } else {
             eng.input(leaf.as_raw_hash().as_byte_array());
             eng.input(res.as_raw_hash().as_byte_array());
-            TxMerkleNode::from_engine(eng)
-        };
+        }
+        res = TxMerkleNode::from_engine(eng);
 
         pos >>= 1;
     }

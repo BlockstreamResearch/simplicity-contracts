@@ -22,16 +22,16 @@ enum TreeNode {
     /// The `hash` is typically calculated as `Hash(Left_Child_Hash || Right_Child_Hash)`.
     Branch {
         hash: u256,
-        left: Box<TreeNode>,
-        right: Box<TreeNode>,
+        left: Box<Self>,
+        right: Box<Self>,
     },
 }
 
 impl TreeNode {
-    pub fn get_hash(&self) -> u256 {
+    pub const fn get_hash(&self) -> u256 {
         match self {
-            TreeNode::Leaf { leaf_hash } => *leaf_hash,
-            TreeNode::Branch { hash, .. } => *hash,
+            Self::Leaf { leaf_hash } => *leaf_hash,
+            Self::Branch { hash, .. } => *hash,
         }
     }
 }
@@ -113,7 +113,7 @@ impl SparseMerkleTree {
     }
 
     /// Computes parent hash: `SHA256(left_child_hash || right_child_hash)`.
-    fn calculate_hash(left: &mut TreeNode, right: &mut TreeNode) -> u256 {
+    fn calculate_hash(left: &TreeNode, right: &TreeNode) -> u256 {
         let mut eng = sha256::Hash::engine();
         eng.input(&left.get_hash());
         eng.input(&right.get_hash());

@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use simplicityhl::elements::confidential::Value as ConfidentialValue;
-use simplicityhl::elements::secp256k1_zkp::ZERO_TWEAK;
+use simplicityhl::elements::secp256k1_zkp::{SECP256K1, SecretKey, ZERO_TWEAK};
 use simplicityhl::elements::{AssetId, Script, Transaction};
 
 /// Constraints for verifying an issuance transaction.
@@ -20,11 +20,19 @@ pub struct IssuanceInputConstraints {
     /// Index into `tx.input`.
     pub input_idx: usize,
 
-    /// Destination and amount for the issued asset.
-    pub issuance_destination: Option<(Script, u64)>,
+    /// Destination, amount, and optional blinding key for the issued asset.
+    ///
+    /// The tuple is `(script, amount, blinding_key)`. When `blinding_key` is `Some`,
+    /// confidential outputs are unblinded using it; if unblinding succeeds and the asset
+    /// matches, the output is accounted for, otherwise it is skipped.
+    pub issuance_destination: Option<(Script, u64, Option<SecretKey>)>,
 
-    /// Destination and amount for the reissuance token.
-    pub reissuance_destination: Option<(Script, u64)>,
+    /// Destination, amount, and optional blinding key for the reissuance token.
+    ///
+    /// The tuple is `(script, amount, blinding_key)`. When `blinding_key` is `Some`,
+    /// confidential outputs are unblinded using it; if unblinding succeeds and the asset
+    /// matches, the output is accounted for, otherwise it is skipped.
+    pub reissuance_destination: Option<(Script, u64, Option<SecretKey>)>,
 }
 
 #[derive(thiserror::Error, Debug, PartialEq, Eq)]
@@ -105,8 +113,12 @@ pub enum IssuanceVerificationError {
 ///
 /// ## Confidentiality policy
 ///
-/// - Outputs whose **asset is confidential** are ignored during verification (this verifier makes
-///   no claims about what may be hidden in confidential-asset outputs).
+/// - Each destination tuple carries an optional blinding key (the third element). When set,
+///   confidential outputs are unblinded using the key. If unblinding succeeds and the asset
+///   matches, the output is accounted for. If unblinding fails, the output is silently skipped.
+/// - When no blinding key is provided for a destination, outputs whose **asset is confidential**
+///   are ignored during verification (this verifier makes no claims about what may be hidden in
+///   confidential-asset outputs).
 /// - For constrained assets, any output with an **explicit matching asset** but a **non-explicit
 ///   value** fails verification (cannot check exact amounts).
 ///
@@ -241,13 +253,13 @@ fn verify_constrained_asset(
     tx: &Transaction,
     asset_id: AssetId,
     minted_amount: u64,
-    destination: Option<&(Script, u64)>,
+    destination: Option<&(Script, u64, Option<SecretKey>)>,
     input_idx: usize,
     kind: MintedConstraintKind,
 ) -> Result<(), IssuanceVerificationError> {
-    let (dest_script, expected_amount) = match destination {
-        Some((s, amt)) => (Some(s), *amt),
-        None => (None, 0),
+    let (dest_script, expected_amount, blinder) = match destination {
+        Some((s, amt, blinder)) => (Some(s), *amt, Option::from(blinder)),
+        None => (None, 0, None),
     };
 
     if minted_amount != expected_amount {
@@ -271,7 +283,7 @@ fn verify_constrained_asset(
         });
     }
 
-    verify_asset_destination(tx, asset_id, expected_amount, dest_script)
+    verify_asset_destination(tx, asset_id, expected_amount, dest_script, blinder)
 }
 
 fn verify_asset_destination(
@@ -279,11 +291,12 @@ fn verify_asset_destination(
     asset_id: AssetId,
     expected_amount: u64,
     destination_script: Option<&Script>,
+    blinding_key: Option<&SecretKey>,
 ) -> Result<(), IssuanceVerificationError> {
     let mut sum_to_destination = 0u64;
 
     for (vout, output) in tx.output.iter().enumerate() {
-        match output.asset.explicit() {
+        let resolved = match output.asset.explicit() {
             Some(out_asset) if out_asset == asset_id => {
                 let Some(value) = output.value.explicit() else {
                     return Err(
@@ -293,24 +306,30 @@ fn verify_asset_destination(
                         },
                     );
                 };
-
-                let Some(dest_script) = destination_script else {
-                    return Err(IssuanceVerificationError::AssetAppearsInUnexpectedOutput {
-                        vout,
-                        asset_id,
-                    });
-                };
-
-                if output.script_pubkey != *dest_script {
-                    return Err(IssuanceVerificationError::AssetAppearsInUnexpectedOutput {
-                        vout,
-                        asset_id,
-                    });
-                }
-
-                sum_to_destination = sum_to_destination.saturating_add(value);
+                Some(value)
             }
-            _ => {}
+            _ => blinding_key
+                .and_then(|key| output.unblind(SECP256K1, *key).ok())
+                .filter(|secrets| secrets.asset == asset_id)
+                .map(|secrets| secrets.value),
+        };
+
+        if let Some(value) = resolved {
+            let Some(dest_script) = destination_script else {
+                return Err(IssuanceVerificationError::AssetAppearsInUnexpectedOutput {
+                    vout,
+                    asset_id,
+                });
+            };
+
+            if output.script_pubkey != *dest_script {
+                return Err(IssuanceVerificationError::AssetAppearsInUnexpectedOutput {
+                    vout,
+                    asset_id,
+                });
+            }
+
+            sum_to_destination = sum_to_destination.saturating_add(value);
         }
     }
 
@@ -435,10 +454,10 @@ mod tests {
         let constraints = IssuanceTxConstraints {
             inputs: vec![IssuanceInputConstraints {
                 input_idx: 0,
-                issuance_destination: Some((issue_script, 50)),
-                reissuance_destination: Some((token_script, 1)),
+                issuance_destination: Some((issue_script, 50, None)),
+                reissuance_destination: Some((token_script, 1, None)),
             }],
-            allow_unconstrained_issuances: false,
+            ..Default::default()
         };
 
         assert_eq!(verify_issuance(&tx, &constraints), Ok(()));
@@ -464,10 +483,10 @@ mod tests {
         let constraints = IssuanceTxConstraints {
             inputs: vec![IssuanceInputConstraints {
                 input_idx: 0,
-                issuance_destination: Some((issue_script, 10)),
-                reissuance_destination: Some((token_script, 1)),
+                issuance_destination: Some((issue_script, 10, None)),
+                reissuance_destination: Some((token_script, 1, None)),
             }],
-            allow_unconstrained_issuances: false,
+            ..Default::default()
         };
 
         assert!(matches!(
@@ -495,10 +514,10 @@ mod tests {
         let constraints = IssuanceTxConstraints {
             inputs: vec![IssuanceInputConstraints {
                 input_idx: 0,
-                issuance_destination: Some((issue_script, 10)),
-                reissuance_destination: Some((token_script, 1)),
+                issuance_destination: Some((issue_script, 10, None)),
+                reissuance_destination: Some((token_script, 1, None)),
             }],
-            allow_unconstrained_issuances: false,
+            ..Default::default()
         };
 
         assert!(matches!(
@@ -527,9 +546,9 @@ mod tests {
             inputs: vec![IssuanceInputConstraints {
                 input_idx: 0,
                 issuance_destination: None,
-                reissuance_destination: Some((token_script, 1)),
+                reissuance_destination: Some((token_script, 1, None)),
             }],
-            allow_unconstrained_issuances: false,
+            ..Default::default()
         };
 
         assert!(matches!(
@@ -547,7 +566,7 @@ mod tests {
                 issuance_destination: None,
                 reissuance_destination: None,
             }],
-            allow_unconstrained_issuances: false,
+            ..Default::default()
         };
 
         assert_eq!(
@@ -577,10 +596,10 @@ mod tests {
         let constraints_strict = IssuanceTxConstraints {
             inputs: vec![IssuanceInputConstraints {
                 input_idx: 0,
-                issuance_destination: Some((issue_script, 10)),
-                reissuance_destination: Some((token_script, 1)),
+                issuance_destination: Some((issue_script, 10, None)),
+                reissuance_destination: Some((token_script, 1, None)),
             }],
-            allow_unconstrained_issuances: false,
+            ..Default::default()
         };
 
         assert_eq!(
@@ -621,15 +640,15 @@ mod tests {
                 IssuanceInputConstraints {
                     input_idx: 0,
                     issuance_destination: None,
-                    reissuance_destination: Some((taproot_gen.address.script_pubkey(), 1)),
+                    reissuance_destination: Some((taproot_gen.address.script_pubkey(), 1, None)),
                 },
                 IssuanceInputConstraints {
                     input_idx: 1,
                     issuance_destination: None,
-                    reissuance_destination: Some((taproot_gen.address.script_pubkey(), 1)),
+                    reissuance_destination: Some((taproot_gen.address.script_pubkey(), 1, None)),
                 },
             ],
-            allow_unconstrained_issuances: false,
+            ..Default::default()
         };
 
         verify_issuance(&tx, &constraints).map_err(|e| format!("Verification failed: {e:?}"))?;

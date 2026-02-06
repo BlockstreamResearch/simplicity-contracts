@@ -351,7 +351,7 @@ mod smt_storage_tests {
         let outpoint0 = OutPoint::new(Txid::from_slice(&[0; 32])?, 0);
         pst.add_input(Input::from_prevout(outpoint0));
         pst.add_output(Output::new_explicit(
-            new_script_pubkey.clone(),
+            new_script_pubkey,
             0,
             AssetId::default(),
             None,

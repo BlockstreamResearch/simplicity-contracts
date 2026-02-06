@@ -69,7 +69,7 @@ pub fn transfer_asset_with_storage(
 
     if change_amount > 0 {
         pst.add_output(Output::new_explicit(
-            change_recipient_script.clone(),
+            change_recipient_script,
             change_amount,
             fee_asset_id,
             None,

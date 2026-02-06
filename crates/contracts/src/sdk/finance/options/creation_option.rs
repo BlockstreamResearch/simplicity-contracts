@@ -165,6 +165,7 @@ pub fn build_option_creation(
                     reissuance_destination: Some((
                         options_taproot_pubkey_gen.address.script_pubkey(),
                         1,
+                        None,
                     )),
                 },
                 IssuanceInputConstraints {
@@ -173,6 +174,7 @@ pub fn build_option_creation(
                     reissuance_destination: Some((
                         options_taproot_pubkey_gen.address.script_pubkey(),
                         1,
+                        None,
                     )),
                 },
             ],

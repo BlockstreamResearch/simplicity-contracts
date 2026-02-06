@@ -45,7 +45,7 @@ pub struct SMTWitness {
 
 impl SMTWitness {
     #[must_use]
-    pub fn new(
+    pub const fn new(
         key: &u256,
         leaf: &u256,
         path_bits: u8,
