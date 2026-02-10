@@ -37,7 +37,7 @@ pub fn build_option_offer_withdraw(
 
     let (fee_asset_id, fee_change) = (
         fee_tx_out.explicit_asset()?,
-        fee_tx_out.validate_amount(fee_amount)?,
+        fee_tx_out.remaining_after_required(fee_amount)?,
     );
     let (settlement_asset_id, settlement_amount) = settlement_tx_out.explicit()?;
 

@@ -131,7 +131,7 @@ pub fn build_option_funding(
     ));
 
     let utxos = if let Some((_, fee_tx_out)) = fee_utxo {
-        let total_fee = fee_tx_out.validate_amount(fee_amount)?;
+        let total_fee = fee_tx_out.remaining_after_required(fee_amount)?;
 
         let is_collateral_change_needed = total_collateral != collateral_amount;
         let is_fee_change_needed = total_fee != 0;

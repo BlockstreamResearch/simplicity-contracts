@@ -55,7 +55,7 @@ pub fn build_option_creation(
 
     let total_input_fee = first_value + second_value;
 
-    first_tx_out.validate_amount(fee_amount.saturating_sub(second_value))?;
+    first_tx_out.remaining_after_required(fee_amount.saturating_sub(second_value))?;
 
     let change_recipient_script = first_tx_out.script_pubkey.clone();
 

@@ -33,7 +33,7 @@ pub fn build_option_cancellation(
 
     let (fee_asset_id, total_lbtc_left) = (
         fee_tx_out.explicit_asset()?,
-        fee_tx_out.validate_amount(fee_amount)?,
+        fee_tx_out.remaining_after_required(fee_amount)?,
     );
     let (collateral_asset_id, total_collateral) = collateral_tx_out.explicit()?;
 

@@ -36,7 +36,7 @@ pub trait TxOutExt {
     /// Returns an error if:
     /// - The value is confidential
     /// - The available amount is less than required
-    fn validate_amount(&self, required: u64) -> Result<u64, ValidationError>;
+    fn remaining_after_required(&self, required: u64) -> Result<u64, ValidationError>;
 
     /// Validates that this UTXO can cover the required fee with the expected asset.
     ///
@@ -48,7 +48,11 @@ pub trait TxOutExt {
     /// - The value or asset is confidential
     /// - The asset doesn't match the expected fee asset
     /// - The available amount is less than required
-    fn validate_fee(&self, required: u64, expected_asset: AssetId) -> Result<u64, ValidationError>;
+    fn remaining_fee_after_required(
+        &self,
+        required: u64,
+        expected_asset: AssetId,
+    ) -> Result<u64, ValidationError>;
 }
 
 impl TxOutExt for TxOut {
@@ -72,8 +76,7 @@ impl TxOutExt for TxOut {
             })
     }
 
-    // TODO: Change this validation to another func
-    fn validate_amount(&self, required: u64) -> Result<u64, ValidationError> {
+    fn remaining_after_required(&self, required: u64) -> Result<u64, ValidationError> {
         let available = self.explicit_value()?;
 
         if available < required {
@@ -87,7 +90,11 @@ impl TxOutExt for TxOut {
         Ok(available - required)
     }
 
-    fn validate_fee(&self, required: u64, expected_asset: AssetId) -> Result<u64, ValidationError> {
+    fn remaining_fee_after_required(
+        &self,
+        required: u64,
+        expected_asset: AssetId,
+    ) -> Result<u64, ValidationError> {
         let asset = self.explicit_asset()?;
 
         if asset != expected_asset {
@@ -98,6 +105,6 @@ impl TxOutExt for TxOut {
             });
         }
 
-        self.validate_amount(required)
+        self.remaining_after_required(required)
     }
 }

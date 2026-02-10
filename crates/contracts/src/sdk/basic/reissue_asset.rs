@@ -33,7 +33,7 @@ pub fn reissue_asset(
 
     let (fee_asset_id, total_lbtc_left) = (
         fee_tx_out.explicit_asset()?,
-        fee_tx_out.validate_amount(fee_amount)?,
+        fee_tx_out.remaining_after_required(fee_amount)?,
     );
 
     let change_recipient_script = fee_tx_out.script_pubkey.clone();
@@ -88,12 +88,14 @@ pub fn reissue_asset(
         None,
     ));
 
-    pst.add_output(Output::new_explicit(
-        change_recipient_script,
-        total_lbtc_left,
-        fee_asset_id,
-        None,
-    ));
+    if total_lbtc_left != 0 {
+        pst.add_output(Output::new_explicit(
+            change_recipient_script,
+            total_lbtc_left,
+            fee_asset_id,
+            None,
+        ));
+    }
 
     pst.add_output(Output::from_txout(TxOut::new_fee(fee_amount, fee_asset_id)));
 

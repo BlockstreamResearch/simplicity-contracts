@@ -76,7 +76,7 @@ pub fn build_option_exercise(
         if let Some((fee_out_point, fee_tx_out)) = fee_utxo {
             let (fee_asset_id, total_lbtc_left) = (
                 fee_tx_out.explicit_asset()?,
-                fee_tx_out.validate_amount(fee_amount)?,
+                fee_tx_out.remaining_after_required(fee_amount)?,
             );
 
             if asset_amount_to_pay > total_asset_amount {

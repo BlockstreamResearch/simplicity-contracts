@@ -32,7 +32,7 @@ pub fn build_option_settlement(
 
     let (fee_asset_id, total_lbtc_left) = (
         fee_tx_out.explicit_asset()?,
-        fee_tx_out.validate_amount(fee_amount)?,
+        fee_tx_out.remaining_after_required(fee_amount)?,
     );
     let (settlement_asset_id, available_settlement_asset) = settlement_tx_out.explicit()?;
     let (grantor_token_id, total_grantor_token_amount) = grantor_tx_out.explicit()?;

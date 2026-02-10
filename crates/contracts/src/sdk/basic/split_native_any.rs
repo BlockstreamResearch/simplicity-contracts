@@ -25,7 +25,7 @@ pub fn split_native_any(
 
     let (asset_id, total_lbtc_left) = (
         tx_out.explicit_asset()?,
-        tx_out.validate_amount(fee_amount)?,
+        tx_out.remaining_after_required(fee_amount)?,
     );
 
     let recipient_script = tx_out.script_pubkey.clone();

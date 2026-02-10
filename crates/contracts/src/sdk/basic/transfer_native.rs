@@ -22,7 +22,7 @@ pub fn transfer_native(
 
     let (asset_id, total_lbtc_left) = (
         tx_out.explicit_asset()?,
-        tx_out.validate_amount(amount_to_send + fee_amount)?,
+        tx_out.remaining_after_required(amount_to_send + fee_amount)?,
     );
 
     let change_recipient_script = tx_out.script_pubkey.clone();
@@ -40,12 +40,14 @@ pub fn transfer_native(
         None,
     ));
 
-    pst.add_output(Output::new_explicit(
-        change_recipient_script,
-        total_lbtc_left,
-        asset_id,
-        None,
-    ));
+    if total_lbtc_left != 0 {
+        pst.add_output(Output::new_explicit(
+            change_recipient_script,
+            total_lbtc_left,
+            asset_id,
+            None,
+        ));
+    }
 
     pst.add_output(Output::from_txout(TxOut::new_fee(fee_amount, asset_id)));
 

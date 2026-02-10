@@ -46,7 +46,7 @@ pub fn transfer_asset_with_storage(
     let (storage_asset_id, total_input_storage_amount) = storage_tx_out.explicit()?;
     let (fee_asset_id, change_amount) = (
         fee_tx_out.explicit_asset()?,
-        fee_tx_out.validate_amount(fee_amount)?,
+        fee_tx_out.remaining_after_required(fee_amount)?,
     );
 
     let mut pst = PartiallySignedTransaction::new_v2();
