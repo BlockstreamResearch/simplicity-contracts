@@ -1,13 +1,17 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use simplicityhl::elements::Address;
 use simplicityhl::elements::{Transaction, TxInWitness, TxOut};
+use simplicityhl::num::U256;
 use simplicityhl::simplicity::RedeemNode;
 use simplicityhl::simplicity::bitcoin::XOnlyPublicKey;
 use simplicityhl::simplicity::jet::Elements;
 use simplicityhl::simplicity::jet::elements::ElementsEnv;
+use simplicityhl::str::WitnessName;
 use simplicityhl::tracker::TrackerLogLevel;
-use simplicityhl::{Arguments, CompiledProgram, TemplateProgram, WitnessValues};
+use simplicityhl::value::ValueConstructible;
+use simplicityhl::{Arguments, CompiledProgram, TemplateProgram, Value, WitnessValues};
 use simplicityhl_core::{
     ProgramError, SimplicityNetwork, control_block, create_p2tr_address, get_and_verify_env,
     load_program, run_program,
@@ -90,7 +94,23 @@ pub fn finalize_sphincs_main_transaction(
         input_index,
     )?;
 
-    let pruned = execute_sphincs_main_program(&contract_program, WitnessValues::default(), &env, log_level)?;
+    let wt = simplicityhl::WitnessValues::from(HashMap::from([
+        (
+            WitnessName::from_str_unchecked("PARAM"),
+            Value::u256(U256::from_byte_array(
+                hex::decode("d5fbd7a8ee5f95496e39ef74f3724ecc567046931ad02019997e261117797955")
+                    .unwrap()
+                    .try_into()
+                    .unwrap(),
+            )),
+        ),
+        (
+            WitnessName::from_str_unchecked("SIG_2"),
+            Value::u128(0x00000000000000000000000000000000ac78f16e2dc46e1738db9dd971915eac),
+        ),
+    ]));
+
+    let pruned = execute_sphincs_main_program(&contract_program, wt, &env, log_level)?;
     let (simplicity_program_bytes, simplicity_witness_bytes) = pruned.to_vec_with_witness();
     let cmr = pruned.cmr();
 

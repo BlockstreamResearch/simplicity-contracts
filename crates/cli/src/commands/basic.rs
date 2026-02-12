@@ -196,7 +196,7 @@ impl Basic {
                     utxos,
                     0,
                     NETWORK,
-                    TrackerLogLevel::None,
+                    TrackerLogLevel::Trace,
                 )?;
 
                 if *broadcast {
