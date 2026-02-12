@@ -372,7 +372,7 @@ mod smt_storage_tests {
         );
 
         assert!(
-            execute_smt_storage_program(&witness, &program, &env, TrackerLogLevel::Trace).is_ok(),
+            execute_smt_storage_program(&witness, &program, &env, TrackerLogLevel::None).is_ok(),
             "expected success mint path"
         );
 

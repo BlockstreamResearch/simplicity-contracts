@@ -20,6 +20,8 @@ pub mod finance;
 pub mod simple_storage;
 #[cfg(feature = "smt-storage")]
 pub mod smt_storage;
+pub mod sphincs;
+
 #[cfg(feature = "finance-dcd")]
 pub use finance::dcd;
 #[cfg(feature = "finance-option-offer")]

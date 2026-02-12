@@ -15,6 +15,7 @@ use simplicityhl::simplicity::elements::{Address, OutPoint};
 use simplicityhl::simplicity::hex::DisplayHex;
 
 use simplicityhl::tracker::TrackerLogLevel;
+use contracts::sphincs::{finalize_sphincs_main_transaction, get_sphincs_main_address};
 use simplicityhl_core::{
     create_p2pk_signature, derive_public_blinder_key, finalize_p2pk_transaction, get_p2pk_address,
     hash_script,
@@ -186,13 +187,13 @@ impl Basic {
                 let utxos = &[tx_out];
 
                 let x_only_public_key = keypair.x_only_public_key().0;
-                let signature = create_p2pk_signature(&tx, utxos, &keypair, 0, NETWORK)?;
 
-                let tx = finalize_p2pk_transaction(
+                dbg!(get_sphincs_main_address(&x_only_public_key, NETWORK)?);
+
+                let tx = finalize_sphincs_main_transaction(
                     tx,
-                    utxos,
                     &x_only_public_key,
-                    &signature,
+                    utxos,
                     0,
                     NETWORK,
                     TrackerLogLevel::None,

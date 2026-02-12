@@ -357,7 +357,7 @@ mod options_tests {
         let witness_values = build_option_witness(&ctx.branch);
 
         assert!(
-            run_program(&ctx.program, witness_values, &env, TrackerLogLevel::Trace).is_ok(),
+            run_program(&ctx.program, witness_values, &env, TrackerLogLevel::None).is_ok(),
             "expected success funding path"
         );
 
@@ -382,7 +382,7 @@ mod options_tests {
         let witness_values = build_option_witness(&ctx.branch);
 
         assert!(
-            run_program(&ctx.program, witness_values, &env, TrackerLogLevel::Trace).is_err(),
+            run_program(&ctx.program, witness_values, &env, TrackerLogLevel::None).is_err(),
             "SECURITY HOLE: The contract accepted an EXPLICIT hacked transaction!"
         );
 
@@ -427,7 +427,7 @@ mod options_tests {
         let witness_values = build_option_witness(&ctx.branch);
 
         assert!(
-            run_program(&ctx.program, witness_values, &env, TrackerLogLevel::Trace).is_err(),
+            run_program(&ctx.program, witness_values, &env, TrackerLogLevel::None).is_err(),
             "SECURITY HOLE: The contract accepted a BLINDED hacked transaction!"
         );
 

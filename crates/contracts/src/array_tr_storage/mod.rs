@@ -191,7 +191,7 @@ mod array_tr_storage_tests {
                 u16::try_from(changed_index)?,
                 &program,
                 &env,
-                TrackerLogLevel::Trace,
+                TrackerLogLevel::None,
             )
             .is_ok(),
             "expected success mint path"

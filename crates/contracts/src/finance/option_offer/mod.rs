@@ -343,7 +343,7 @@ mod option_offer_tests {
         let witness_values = build_option_offer_witness(&branch);
 
         assert!(
-            run_program(&program, witness_values, &env, TrackerLogLevel::Trace).is_ok(),
+            run_program(&program, witness_values, &env, TrackerLogLevel::None).is_ok(),
             "expected success exercise path with change"
         );
 
@@ -444,7 +444,7 @@ mod option_offer_tests {
         let witness_values = build_option_offer_witness(&branch);
 
         assert!(
-            run_program(&program, witness_values, &env, TrackerLogLevel::Trace).is_ok(),
+            run_program(&program, witness_values, &env, TrackerLogLevel::None).is_ok(),
             "expected success exercise path without change"
         );
 
@@ -534,7 +534,7 @@ mod option_offer_tests {
         let witness_values = build_option_offer_witness(&branch);
 
         assert!(
-            run_program(&program, witness_values, &env, TrackerLogLevel::Trace).is_ok(),
+            run_program(&program, witness_values, &env, TrackerLogLevel::None).is_ok(),
             "expected success withdraw path"
         );
 
@@ -635,7 +635,7 @@ mod option_offer_tests {
         let witness_values = build_option_offer_witness(&branch);
 
         assert!(
-            run_program(&program, witness_values, &env, TrackerLogLevel::Trace).is_ok(),
+            run_program(&program, witness_values, &env, TrackerLogLevel::None).is_ok(),
             "expected success expiry path"
         );
 
