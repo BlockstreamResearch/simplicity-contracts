@@ -14,8 +14,8 @@ use simplicityhl::elements::{AssetId, ContractHash};
 use simplicityhl::simplicity::elements::{Address, OutPoint};
 use simplicityhl::simplicity::hex::DisplayHex;
 
-use simplicityhl::tracker::TrackerLogLevel;
 use contracts::sphincs::{finalize_sphincs_main_transaction, get_sphincs_main_address};
+use simplicityhl::tracker::TrackerLogLevel;
 use simplicityhl_core::{
     create_p2pk_signature, derive_public_blinder_key, finalize_p2pk_transaction, get_p2pk_address,
     hash_script,
@@ -196,7 +196,7 @@ impl Basic {
                     utxos,
                     0,
                     NETWORK,
-                    TrackerLogLevel::Trace,
+                    TrackerLogLevel::None,
                 )?;
 
                 if *broadcast {

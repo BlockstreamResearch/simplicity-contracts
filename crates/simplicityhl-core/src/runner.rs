@@ -34,7 +34,7 @@ pub fn run_program(
     let pruned = satisfied.redeem().prune_with_tracker(env, &mut tracker)?;
     let mut mac = BitMachine::for_program(&pruned)?;
 
-    // let result = mac.exec(&pruned, env).map_err(ProgramError::Execution)?;
+    let result = mac.exec(&pruned, env).map_err(ProgramError::Execution)?;
 
-    Ok((pruned, Value::unit()))
+    Ok((pruned, result))
 }

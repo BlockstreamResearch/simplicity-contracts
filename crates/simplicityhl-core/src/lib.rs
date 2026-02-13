@@ -85,9 +85,6 @@ use simplicityhl::elements::secp256k1_zkp::schnorr::Signature;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use simplicityhl::elements::bitcoin::Script;
-use simplicityhl::elements::bitcoin::opcodes::OP_FALSE;
-use simplicityhl::elements::bitcoin::opcodes::all::{OP_ENDIF, OP_IF};
 use simplicityhl::num::U256;
 use simplicityhl::simplicity::RedeemNode;
 use simplicityhl::simplicity::bitcoin::XOnlyPublicKey;
@@ -98,7 +95,6 @@ use simplicityhl::str::WitnessName;
 use simplicityhl::tracker::TrackerLogLevel;
 use simplicityhl::value::ValueConstructible;
 use simplicityhl::{CompiledProgram, Value, WitnessValues, elements};
-use simplicityhl::elements::script;
 
 /// Embedded Simplicity source for a basic P2PK program used to sign a single input.
 pub const P2PK_SOURCE: &str = include_str!("source_simf/p2pk.simf");
@@ -293,27 +289,6 @@ pub fn finalize_transaction(
 
     let (simplicity_program_bytes, simplicity_witness_bytes) = pruned.to_vec_with_witness();
     let cmr = pruned.cmr();
-
-    let script = Script::builder()
-        .push_opcode(OP_FALSE)
-        .push_opcode(OP_IF)
-        .push_slice(b"ordsdnfksadfklnsdakljfhjklsadhfklsdahflkjahsdlfkasdfhalsdjhflaksjhdflash")
-        .push_slice(b"ordsdnfksadfklnsdakljfhjklsadhfklsdahflkjahsdlfkasdfhalsdjhflaksjhdflash")
-        .push_slice(b"ordsdnfksadfklnsdakljfhjklsadhfklsdahflkjahsdlfkasdfhalsdjhflaksjhdflash")
-        .push_slice(b"ordsdnfksadfklnsdakljfhjklsadhfklsdahflkjahsdlfkasdfhalsdjhflaksjhdflash")
-        .push_slice(b"ordsdnfksadfklnsdakljfhjklsadhfklsdahflkjahsdlfkasdfhalsdjhflaksjhdflash")
-        .push_slice(b"ordsdnfksadfklnsdakljfhjklsadhfklsdahflkjahsdlfkasdfhalsdjhflaksjhdflash")
-        .push_slice(b"ordsdnfksadfklnsdakljfhjklsadhfklsdahflkjahsdlfkasdfhalsdjhflaksjhdflash")
-        .push_slice(b"ordsdnfksadfklnsdakljfhjklsadhfklsdahflkjahsdlfkasdfhalsdjhflaksjhdflash")
-        .push_slice(b"ordsdnfksadfklnsdakljfhjklsadhfklsdahflkjahsdlfkasdfhalsdjhflaksjhdflash")
-        .push_slice(b"ordsdnfksadfklnsdakljfhjklsadhfklsdahflkjahsdlfkasdfhalsdjhflaksjhdflash")
-        .push_slice(b"ordsdnfksadfklnsdakljfhjklsadhfklsdahflkjahsdlfkasdfhalsdjhflaksjhdflash")
-        .push_slice(b"ordsdnfksadfklnsdakljfhjklsadhfklsdahflkjahsdlfkasdfhalsdjhflaksjhdflash")
-        .push_slice(b"ordsdnfksadfklnsdakljfhjklsadhfklsdahflkjahsdlfkasdfhalsdjhflaksjhdflash")
-        .push_slice(b"ordsdnfksadfklnsdakljfhjklsadhfklsdahflkjahsdlfkasdfhalsdjhflaksjhdflash")
-        .push_slice(b"ordsdnfksadfklnsdakljfhjklsadhfklsdahflkjahsdlfkasdfhalsdjhflaksjhdflash")
-        .push_opcode(OP_ENDIF)
-        .into_bytes();
 
     tx.input[input_index].witness = TxInWitness {
         amount_rangeproof: None,

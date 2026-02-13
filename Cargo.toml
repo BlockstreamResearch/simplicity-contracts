@@ -25,3 +25,4 @@ simplicityhl-core = { path = "./crates/simplicityhl-core", features = ["encoding
 
 [patch.crates-io]
 simplicity-sys = { git = "https://github.com/BlockstreamResearch/rust-simplicity", tag = "simplicity-sys-0.6.1" }
+simplicity-lang = { git = "https://github.com/KyrylR/rust-simplicity", branch = "prune-bug-fix" }

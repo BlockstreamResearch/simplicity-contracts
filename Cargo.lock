@@ -1102,8 +1102,7 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 [[package]]
 name = "simplicity-lang"
 version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70e57bd4d84853974a212eab24ed89da54f49fbccf5e33e93bcd29f0a6591cd5"
+source = "git+https://github.com/KyrylR/rust-simplicity?branch=prune-bug-fix#56bf1089de186fc97b114243bb923bd6bae505e7"
 dependencies = [
  "bitcoin",
  "bitcoin_hashes",
@@ -1120,7 +1119,7 @@ dependencies = [
 [[package]]
 name = "simplicity-sys"
 version = "0.6.1"
-source = "git+https://github.com/BlockstreamResearch/rust-simplicity?tag=simplicity-sys-0.6.1#7f42b532fdcad8b88e65af467a238af28204bc8b"
+source = "git+https://github.com/KyrylR/rust-simplicity?branch=prune-bug-fix#56bf1089de186fc97b114243bb923bd6bae505e7"
 dependencies = [
  "bitcoin_hashes",
  "cc",
@@ -1549,3 +1548,8 @@ name = "zmij"
 version = "1.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2fc5a66a20078bf1251bde995aa2fdcc4b800c70b5d92dd2c62abc5c60f679f8"
+
+[[patch.unused]]
+name = "simplicity-sys"
+version = "0.6.1"
+source = "git+https://github.com/BlockstreamResearch/rust-simplicity?tag=simplicity-sys-0.6.1#7f42b532fdcad8b88e65af467a238af28204bc8b"
