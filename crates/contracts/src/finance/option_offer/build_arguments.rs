@@ -1,11 +1,13 @@
-use std::collections::HashMap;
-
-use simplicityhl::elements::AssetId;
-use simplicityhl::num::U256;
-use simplicityhl::{Arguments, str::WitnessName, value::UIntValue};
+#![allow(clippy::missing_errors_doc)]
 
 use crate::arguments_helpers::{extract_u32, extract_u64, extract_u256_bytes};
 use crate::error::FromArgumentsError;
+use serde_json::Value;
+use simplicityhl::elements::AssetId;
+use simplicityhl::num::U256;
+use simplicityhl::{Arguments, str::WitnessName, value::UIntValue};
+use std::collections::HashMap;
+use wallet_abi::WalletAbiError;
 
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq, Default)]
 pub struct OptionOfferArguments {
@@ -90,6 +92,10 @@ impl OptionOfferArguments {
         ]))
     }
 
+    pub fn to_json(&self) -> Result<Value, WalletAbiError> {
+        serde_json::to_value(self.build_arguments()).map_err(WalletAbiError::from)
+    }
+
     /// Returns the collateral per contract amount.
     #[must_use]
     pub const fn collateral_per_contract(&self) -> u64 {
@@ -170,12 +176,12 @@ impl OptionOfferArguments {
     }
 }
 
-impl simplicityhl_core::Encodable for OptionOfferArguments {}
+impl wallet_abi::Encodable for OptionOfferArguments {}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use simplicityhl_core::Encodable;
+    use wallet_abi::Encodable;
 
     #[test]
     fn test_serialize_deserialize_default() -> anyhow::Result<()> {
