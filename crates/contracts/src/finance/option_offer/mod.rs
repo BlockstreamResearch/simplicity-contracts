@@ -77,9 +77,7 @@ mod test {
 
     use simplicityhl::elements::{AssetId, LockTime, OutPoint, Sequence, Txid};
 
-    use wallet_abi::{
-        FinalizerSpec, InputBlinder, InputSchema, OutputSchema, RuntimeParams, UTXOSource,
-    };
+    use wallet_abi::{AssetVariant, BlinderVariant, FinalizerSpec, InputBlinder, InputSchema, LockVariant, OutputSchema, RuntimeParams, UTXOSource};
 
     use crate::option_offer::build_witness::{
         OptionOfferSimfBranch, build_option_offer_simf_witness,
@@ -94,7 +92,7 @@ mod test {
     const EXPIRY_TIME: u32 = 1_700_000_000;
 
     struct RuntimeFixture {
-        runtime_config: WalletRuntimeConfig,
+        runtime: WalletRuntimeConfig,
         collateral_asset_id: AssetId,
         premium_asset_id: AssetId,
         settlement_asset_id: AssetId,
@@ -139,7 +137,7 @@ mod test {
                 TaprootPubkeyGen::from(&args, Network::LocaltestLiquid, &get_option_offer_address)?;
 
             Ok(Self {
-                runtime_config,
+                runtime: runtime_config,
                 collateral_asset_id,
                 premium_asset_id,
                 settlement_asset_id,
@@ -170,7 +168,7 @@ mod test {
                 arguments: serialize_arguments(&self.args.build_simf_arguments())?,
                 witness: serialize_witness(&build_option_offer_simf_witness(
                     witness,
-                    self.runtime_config.signer_x_only_public_key()?,
+                    self.runtime.signer_x_only_public_key()?,
                 ))?,
             })
         }
@@ -226,17 +224,75 @@ mod test {
             &self,
             creation_tx_id: Txid,
             collateral_amount: u64,
-            is_change_needed: bool,
         ) -> anyhow::Result<TxCreateRequest> {
             let premium_amount = self.premium_amount(collateral_amount)?;
             let settlement_amount = self.settlement_amount(collateral_amount)?;
 
+            let collateral_outpoint = OutPoint::new(creation_tx_id, 0);
+            let collateral_tx_out = self.runtime.fetch_tx_out(&collateral_outpoint)?;
+            let available_collateral = collateral_tx_out.value.explicit().expect("non-confidential");
+
+            let premium_outpoint = OutPoint::new(creation_tx_id, 1);
+            let premium_tx_out = self.runtime.fetch_tx_out(&premium_outpoint)?;
+            let available_premium = premium_tx_out.value.explicit().expect("non-confidential");
+
+            let collateral_change = available_collateral.checked_sub(collateral_amount).expect("should not overflow");
+            let premium_change = available_premium.checked_sub(premium_amount).expect("should not overflow");
+
             let finalizer = self.get_base_finalizer_spec(&OptionOfferSimfBranch::Exercise {
                 collateral_amount,
-                is_change_needed,
+                is_change_needed: collateral_change != 0,
             })?;
 
-            let receiver = self.runtime_config.signer_receive_address()?;
+            dbg!(collateral_change != 0);
+
+            let receiver = self.runtime.signer_receive_address()?;
+
+            let mut outputs: Vec<OutputSchema> = Vec::new();
+            if collateral_change != 0 {
+                outputs.push(
+                    OutputSchema {
+                        id: "covenant-collateral-change".to_string(),
+                        amount_sat: collateral_change,
+                        lock: LockVariant::Script { script: self.tap.address.script_pubkey() },
+                        asset: AssetVariant::AssetId { asset_id: self.collateral_asset_id },
+                        blinder: BlinderVariant::Explicit,
+                    }
+                );
+                outputs.push(
+                    OutputSchema {
+                        id: "covenant-premium-change".to_string(),
+                        amount_sat: premium_change,
+                        lock: LockVariant::Script { script: self.tap.address.script_pubkey() },
+                        asset: AssetVariant::AssetId { asset_id: self.premium_asset_id },
+                        blinder: BlinderVariant::Explicit,
+                    }
+                );
+            }
+
+            outputs.extend(vec![
+                OutputSchema {
+                    id: "covenant-settlement-change".to_string(),
+                    amount_sat: settlement_amount,
+                    lock: LockVariant::Script { script: self.tap.address.script_pubkey() },
+                    asset: AssetVariant::AssetId { asset_id: self.settlement_asset_id },
+                    blinder: BlinderVariant::Explicit,
+                },
+                OutputSchema {
+                    id: "user-collateral-requested".to_string(),
+                    amount_sat: collateral_amount,
+                    lock: LockVariant::Script { script: receiver.script_pubkey() },
+                    asset: AssetVariant::AssetId { asset_id: self.collateral_asset_id },
+                    blinder: BlinderVariant::Wallet,
+                },
+                OutputSchema {
+                    id: "user-premium-requested".to_string(),
+                    amount_sat: premium_amount,
+                    lock: LockVariant::Script { script: receiver.script_pubkey() },
+                    asset: AssetVariant::AssetId { asset_id: self.premium_asset_id },
+                    blinder: BlinderVariant::Wallet,
+                },
+            ]);
 
             Ok(Self::build_request(
                 "option_offer.exercise",
@@ -263,26 +319,7 @@ mod test {
                     },
                     InputSchema::new("input2"),
                 ],
-                vec![
-                    OutputSchema::from_script(
-                        "out0",
-                        self.settlement_asset_id,
-                        settlement_amount,
-                        self.tap.address.script_pubkey(),
-                    ),
-                    OutputSchema::from_script(
-                        "out1",
-                        self.collateral_asset_id,
-                        collateral_amount,
-                        receiver.script_pubkey(),
-                    ),
-                    OutputSchema::from_script(
-                        "out2",
-                        self.premium_asset_id,
-                        premium_amount,
-                        receiver.script_pubkey(),
-                    ),
-                ],
+                outputs,
                 None,
             ))
         }
@@ -294,7 +331,7 @@ mod test {
         ) -> anyhow::Result<TxCreateRequest> {
             let finalizer = self.get_base_finalizer_spec(&OptionOfferSimfBranch::Withdraw)?;
 
-            let receiver = self.runtime_config.signer_receive_address()?;
+            let receiver = self.runtime.signer_receive_address()?;
 
             Ok(Self::build_request(
                 "option_offer.withdraw",
@@ -326,7 +363,7 @@ mod test {
         ) -> anyhow::Result<TxCreateRequest> {
             let finalizer = self.get_base_finalizer_spec(&OptionOfferSimfBranch::Expiry)?;
 
-            let receiver = self.runtime_config.signer_receive_address()?;
+            let receiver = self.runtime.signer_receive_address()?;
 
             Ok(Self::build_request(
                 "option_offer.expiry",
@@ -374,7 +411,7 @@ mod test {
             &mut self,
             request: &TxCreateRequest,
         ) -> anyhow::Result<Txid> {
-            let response = self.runtime_config.process_request(request)?;
+            let response = self.runtime.process_request(request)?;
 
             let Some(tx_info) = response.transaction else {
                 panic!("Expected a response broadcast info");
@@ -402,7 +439,7 @@ mod test {
         let creation_tx_id = fixture.assert_broadcast_happy_path(&request)?;
         mine_blocks(1)?;
 
-        let request = fixture.build_exercise_request(creation_tx_id, collateral_amount, false)?;
+        let request = fixture.build_exercise_request(creation_tx_id, collateral_amount)?;
         let _ = fixture.assert_broadcast_happy_path(&request)?;
         Ok(())
     }
@@ -418,7 +455,7 @@ mod test {
         mine_blocks(1)?;
 
         let exercise_request =
-            fixture.build_exercise_request(creation_tx_id, collateral_amount, false)?;
+            fixture.build_exercise_request(creation_tx_id, collateral_amount)?;
         let exercise_tx_id = fixture.assert_broadcast_happy_path(&exercise_request)?;
         mine_blocks(1)?;
 

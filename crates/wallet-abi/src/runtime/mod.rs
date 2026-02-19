@@ -46,7 +46,6 @@ use lwk_wollet::blocking::EsploraClient;
 use lwk_wollet::elements::hex::ToHex;
 use lwk_wollet::elements::pset::PartiallySignedTransaction;
 use lwk_wollet::elements::pset::raw::ProprietaryKey;
-use lwk_wollet::elements::secp256k1_zkp::ZERO_TWEAK;
 use lwk_wollet::elements::{Address, BlockHash, OutPoint, Script, TxOut, TxOutSecrets};
 use lwk_wollet::elements_miniscript::ToPublicKey;
 use lwk_wollet::elements_miniscript::psbt::PsbtExt;
@@ -325,7 +324,7 @@ impl WalletRuntimeConfig {
         Ok(tx)
     }
 
-    /// Collect non-explicit input secrets to be used as blinding inputs.
+    /// Collect input secrets used by blinding and surjection-proof domain construction.
     fn input_blinding_secrets(
         pst: &PartiallySignedTransaction,
     ) -> Result<HashMap<usize, TxOutSecrets>, WalletAbiError> {
@@ -337,9 +336,6 @@ impl WalletRuntimeConfig {
                     .get(&get_secrets_spec_key())
                     .expect("handled by the inputs resolver"),
             )?;
-            if secrets.asset_bf.into_inner() == ZERO_TWEAK {
-                continue;
-            }
             inp_txout_secrets.insert(input_index, secrets);
         }
 

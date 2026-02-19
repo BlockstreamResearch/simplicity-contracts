@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use simplicityhl::elements::AssetId;
 use simplicityhl::num::U256;
-use simplicityhl::{Arguments, str::WitnessName, value::UIntValue};
+use simplicityhl::{str::WitnessName, value::UIntValue, Arguments};
 
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq, Default)]
 pub struct OptionsArguments {

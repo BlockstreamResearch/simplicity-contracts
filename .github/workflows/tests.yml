@@ -33,10 +33,30 @@ jobs:
         with:
           cache-on-failure: true
 
+      - name: Verify colocated wallet schemas
+        run: |
+          set -euo pipefail
+          missing=0
+          while IFS= read -r -d '' simf; do
+            schema="${simf%.simf}.wallet.schema.json"
+            if [[ ! -f "$schema" ]]; then
+              echo "Missing wallet schema next to ${simf}"
+              missing=1
+            fi
+          done < <(find crates -name '*.simf' -print0)
+
+          if [[ "$missing" -ne 0 ]]; then
+            exit 1
+          fi
+
       - name: Build
         run: cargo build --workspace --all-features --verbose
 
+      - name: Targeted wallet-abi runtime tests
+        run: cargo test -p wallet-abi --test schema_runtime --verbose
+
+      - name: Targeted CLI unit tests
+        run: cargo test -p cli --lib --verbose
+
       - name: Test
         run: cargo test --workspace --all-features --no-fail-fast --verbose
-
-

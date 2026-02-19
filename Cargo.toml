@@ -25,6 +25,7 @@ minreq = { version = "2.14.1", features = ["https", "json-using-serde"]}
 simplicityhl = { version = "0.4.0" }
 
 [patch.crates-io]
+simplicity-lang = { path = "/Users/inter/Desktop/Simpl/rust-simplicity" }
 simplicity-sys = { git = "https://github.com/BlockstreamResearch/rust-simplicity", tag = "simplicity-sys-0.6.1" }
 lwk_common = { git = "https://github.com/Blockstream/lwk", rev = "4074c527fcc1268eb26953af397eecc6c1444293", package = "lwk_common" }
 lwk_signer = { git = "https://github.com/Blockstream/lwk", rev = "4074c527fcc1268eb26953af397eecc6c1444293", package = "lwk_signer" }

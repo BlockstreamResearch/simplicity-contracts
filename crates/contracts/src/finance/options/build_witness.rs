@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use simplicityhl::{
-    ResolvedType, WitnessValues, elements::TxOutSecrets, num::U256, parse::ParseFromStr,
-    str::WitnessName, types::TypeConstructible,
+    elements::TxOutSecrets, num::U256, parse::ParseFromStr, str::WitnessName,
+    types::TypeConstructible, ResolvedType, WitnessValues,
 };
 
 /// Extract (`asset_bf`, `value_bf`) as U256 from `TxOutSecrets`.

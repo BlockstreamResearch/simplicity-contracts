@@ -17,20 +17,17 @@ workspace = true
 [dependencies]
 anyhow = "1"
 thiserror = "2"
-
+serde_json = "1"
 sled = "0.34.7"
 
-dotenvy = "0.15"
-clap = { version = "4.5", features = ["derive"] }
-config = { version = "0.15.16", default-features = true }
-
-minreq = { version = "2.14", features = ["https"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "sync"] }
+clap = { version = "4.5", features = ["derive", "env"] }
 
 hex = { workspace = true }
 
+wallet-abi = { path = "../wallet-abi" }
 contracts = { path = "../contracts" }
+lwk_common = { git = "https://github.com/Blockstream/lwk", rev = "4074c527fcc1268eb26953af397eecc6c1444293", package = "lwk_common", default-features = false }
+lwk_wollet = { git = "https://github.com/Blockstream/lwk", rev = "4074c527fcc1268eb26953af397eecc6c1444293", package = "lwk_wollet", default-features = false, features = ["electrum", "esplora"] }
+lwk_signer = { git = "https://github.com/Blockstream/lwk", rev = "4074c527fcc1268eb26953af397eecc6c1444293", package = "lwk_signer", default-features = false }
 
 simplicityhl = { workspace = true }
-
-simplicityhl-core = { workspace = true }

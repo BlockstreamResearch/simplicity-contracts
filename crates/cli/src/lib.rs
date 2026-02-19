@@ -1,5 +1,8 @@
 #![warn(clippy::all, clippy::pedantic)]
-
-pub mod commands;
-pub mod explorer;
-pub mod modules;
+#![allow(
+    clippy::missing_errors_doc,
+    clippy::missing_panics_doc,
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    clippy::unnecessary_wraps
+)]

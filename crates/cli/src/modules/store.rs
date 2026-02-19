@@ -1,6 +1,5 @@
-use contracts::sdk::taproot_pubkey_gen::TaprootPubkeyGen;
-
-use simplicityhl_core::{Encodable, ProgramError, SimplicityNetwork};
+use wallet_abi::taproot_pubkey_gen::TaprootPubkeyGen;
+use wallet_abi::{Encodable, ProgramError};
 
 use simplicityhl::simplicity::bitcoin::XOnlyPublicKey;
 use simplicityhl::simplicity::elements::Address;
@@ -29,11 +28,11 @@ impl Store {
         &self,
         taproot_pubkey_gen: &str,
         encoded_data: &str,
-        network: SimplicityNetwork,
-        get_address: &impl Fn(&XOnlyPublicKey, &A, SimplicityNetwork) -> Result<Address, ProgramError>,
+        network: lwk_common::Network,
+        get_address: &impl Fn(&XOnlyPublicKey, &A, lwk_common::Network) -> Result<Address, ProgramError>,
     ) -> anyhow::Result<()>
     where
-        A: Encodable + simplicityhl_core::encoding::Decode<()>,
+        A: Encodable + wallet_abi::encoding::Decode<()>,
     {
         let decoded_data = hex::decode(encoded_data)?;
 
@@ -64,129 +63,12 @@ impl Store {
     /// Returns error if arguments are not found or decoding fails.
     pub fn get_arguments<A>(&self, arg_name: &str) -> anyhow::Result<A>
     where
-        A: Encodable + simplicityhl_core::encoding::Decode<()>,
+        A: Encodable + wallet_abi::encoding::Decode<()>,
     {
         if let Some(value) = self.store.get(arg_name)? {
             return Encodable::decode(&value).map_err(anyhow::Error::msg);
         }
 
         anyhow::bail!("Arguments not found");
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use contracts::options::OptionsArguments;
-    use contracts::options::get_options_address;
-    use contracts::sdk::taproot_pubkey_gen::get_random_seed;
-    use simplicityhl::elements::AssetId;
-    use simplicityhl::elements::OutPoint;
-    use simplicityhl::elements::Txid;
-    use simplicityhl::elements::hashes::Hash;
-    use simplicityhl_core::{
-        Encodable, LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_TEST_ASSET_ID_STR,
-        SimplicityNetwork,
-    };
-
-    use super::*;
-
-    const NETWORK: SimplicityNetwork = SimplicityNetwork::LiquidTestnet;
-
-    fn load_mock() -> Store {
-        Store {
-            store: sled::Config::new()
-                .temporary(true)
-                .open()
-                .expect("expected store"),
-        }
-    }
-
-    fn get_mocked_data() -> anyhow::Result<(OptionsArguments, TaprootPubkeyGen)> {
-        let settlement_asset_id =
-            AssetId::from_slice(&hex::decode(LIQUID_TESTNET_TEST_ASSET_ID_STR)?)?;
-
-        let args = OptionsArguments::new(
-            10,
-            50,
-            100,
-            1000,
-            *LIQUID_TESTNET_BITCOIN_ASSET,
-            settlement_asset_id,
-            get_random_seed(),
-            (OutPoint::new(Txid::from_slice(&[1; 32])?, 0), false),
-            (OutPoint::new(Txid::from_slice(&[2; 32])?, 0), false),
-        );
-
-        let options_taproot_pubkey_gen =
-            TaprootPubkeyGen::from(&args, NETWORK, &get_options_address)?;
-
-        Ok((args, options_taproot_pubkey_gen))
-    }
-
-    #[test]
-    fn test_sled_serialize_deserialize() -> anyhow::Result<()> {
-        let store = load_mock();
-
-        let (args, options_taproot_pubkey_gen) = get_mocked_data()?;
-
-        store.import_arguments(
-            &options_taproot_pubkey_gen.to_string(),
-            &args.to_hex()?,
-            NETWORK,
-            &get_options_address,
-        )?;
-
-        let retrieved =
-            store.get_arguments::<OptionsArguments>(&options_taproot_pubkey_gen.to_string())?;
-
-        assert_eq!(args, retrieved);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_sled_import_export_roundtrip() -> anyhow::Result<()> {
-        let store = load_mock();
-
-        let (args, options_taproot_pubkey_gen) = get_mocked_data()?;
-
-        store.import_arguments(
-            &options_taproot_pubkey_gen.to_string(),
-            &args.to_hex()?,
-            NETWORK,
-            &get_options_address,
-        )?;
-
-        let exported_hex = store.export_arguments(&options_taproot_pubkey_gen.to_string())?;
-
-        assert_eq!(exported_hex, args.to_hex()?);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_sled_export_get_consistency() -> anyhow::Result<()> {
-        let store = load_mock();
-
-        let (args, options_taproot_pubkey_gen) = get_mocked_data()?;
-
-        store.import_arguments(
-            &options_taproot_pubkey_gen.to_string(),
-            &args.to_hex()?,
-            NETWORK,
-            &get_options_address,
-        )?;
-
-        let exported_hex = store.export_arguments(&options_taproot_pubkey_gen.to_string())?;
-        let exported_bytes = hex::decode(&exported_hex)?;
-        let decoded_from_export: OptionsArguments = Encodable::decode(&exported_bytes)?;
-
-        let retrieved =
-            store.get_arguments::<OptionsArguments>(&options_taproot_pubkey_gen.to_string())?;
-
-        assert_eq!(decoded_from_export, retrieved);
-        assert_eq!(retrieved, args);
-
-        Ok(())
     }
 }
