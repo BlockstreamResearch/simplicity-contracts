@@ -1,55 +1,35 @@
 use crate::WalletAbiError;
 use crate::taproot_pubkey_gen::TaprootPubkeyGen;
 
-use std::collections::BTreeMap;
-
+use lwk_wollet::elements::LockTime;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 use simplicityhl::elements::secp256k1_zkp::{PublicKey, SecretKey};
 use simplicityhl::elements::{Address, AssetId, OutPoint, Script, Sequence};
-use simplicityhl::WitnessValues;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct SchemaBundle {
-    #[serde(rename = "$defs", default, skip_serializing_if = "Option::is_none")]
-    pub defs: Option<serde_json::Value>,
-    pub sources: BTreeMap<String, String>,
-    pub schema_id: String,
-    pub schema_version: String,
-    pub branches: BTreeMap<String, BranchSchema>,
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RuntimeParams {
+    #[serde(default)]
+    pub inputs: Vec<InputSchema>,
+    #[serde(default)]
+    pub outputs: Vec<OutputSchema>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fee_rate_sat_vb: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locktime: Option<LockTime>,
+    #[serde(flatten, default)]
+    pub extra: BTreeMap<String, serde_json::Value>,
 }
 
-impl SchemaBundle {
-    pub fn from_uri(schema_uri: &str) -> Result<Self, WalletAbiError> {
-        let json: serde_json::Value = serde_json::from_slice(schema_uri.as_bytes())?;
-
-        let bundle: Self = serde_json::from_value(json)?;
-
-        if bundle.schema_id.is_empty() || bundle.schema_version.is_empty() {
-            return Err(WalletAbiError::InvalidResponse(
-                "schema bundle must have non-empty schema_id and schema_version".to_string(),
-            ));
-        }
-        if bundle.sources.is_empty() {
-            return Err(WalletAbiError::InvalidResponse(
-                "schema bundle must include non-empty sources map".to_string(),
-            ));
-        }
-
-        Ok(bundle)
+impl RuntimeParams {
+    pub fn from_request_params(value: &serde_json::Value) -> Result<Self, WalletAbiError> {
+        serde_json::from_value(value.clone())
+            .map_err(|e| WalletAbiError::InvalidRequest(format!("invalid request params: {e}")))
     }
 
-    pub fn get_branch(&self, branch: &str) -> Result<&BranchSchema, WalletAbiError> {
-        self
-            .branch(branch)
-            .ok_or_else(|| WalletAbiError::UnsupportedBranch(branch.to_string()))
-    }
-}
-
-impl SchemaBundle {
-    #[must_use]
-    pub fn branch(&self, branch: &str) -> Option<&BranchSchema> {
-        self.branches.get(branch)
+    pub fn to_request_params_value(&self) -> Result<serde_json::Value, WalletAbiError> {
+        serde_json::to_value(self).map_err(WalletAbiError::from)
     }
 }
 
@@ -59,13 +39,6 @@ impl InputSchema {
         self.issuance = Some(issuance);
         self
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct BranchSchema {
-    pub params_schema: serde_json::Value,
-    pub contract_inputs: Vec<InputSchema>,
-    pub contract_outputs: Vec<OutputSchema>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -149,6 +122,7 @@ pub enum FinalizerSpec {
 }
 
 impl FinalizerSpec {
+    #[must_use]
     pub fn encode(&self) -> Vec<u8> {
         serde_json::to_vec(self).unwrap()
     }
@@ -188,28 +162,11 @@ impl InputSchema {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum OutputIntent {
-    #[default]
-    Transfer,
-    Issuance {
-        input_index: u32,
-    },
-    Reissuance {
-        input_index: u32,
-    },
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum LockVariant {
-    Script {
-        script: Script,
-    },
-    Finalizer {
-        finalizer: Box<FinalizerSpec>,
-    },
+    Script { script: Script },
+    Finalizer { finalizer: Box<FinalizerSpec> },
 }
 
 impl Default for LockVariant {
@@ -223,18 +180,10 @@ impl Default for LockVariant {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AssetVariant {
-    AssetId {
-        asset_id: AssetId,
-    },
-    NewIssuanceAsset {
-        input_index: u32,
-    },
-    NewIssuanceToken {
-        input_index: u32,
-    },
-    ReIssuanceAsset {
-        input_index: u32,
-    },
+    AssetId { asset_id: AssetId },
+    NewIssuanceAsset { input_index: u32 },
+    NewIssuanceToken { input_index: u32 },
+    ReIssuanceAsset { input_index: u32 },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -250,7 +199,6 @@ pub enum BlinderVariant {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct OutputSchema {
     pub id: String,
-    pub intent: OutputIntent,
     pub amount_sat: u64,
     pub lock: LockVariant,
     pub asset: AssetVariant,
@@ -273,7 +221,6 @@ impl OutputSchema {
 
         Self {
             id: id.into(),
-            intent: OutputIntent::Transfer,
             amount_sat,
             lock: LockVariant::Script {
                 script: address.script_pubkey(),
@@ -292,7 +239,6 @@ impl OutputSchema {
     ) -> Self {
         Self {
             id: id.into(),
-            intent: OutputIntent::Transfer,
             amount_sat,
             lock: LockVariant::Script { script },
             asset: AssetVariant::AssetId { asset_id },
@@ -304,7 +250,6 @@ impl OutputSchema {
     pub fn fee_placeholder(policy_asset: AssetId) -> Self {
         Self {
             id: "fee".to_string(),
-            intent: OutputIntent::Transfer,
             amount_sat: 0,
             lock: LockVariant::Script {
                 script: Script::new(),

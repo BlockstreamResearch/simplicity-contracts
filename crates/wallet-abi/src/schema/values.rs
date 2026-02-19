@@ -26,6 +26,7 @@ pub struct SimfArguments {
 }
 
 impl SimfArguments {
+    #[must_use]
     pub fn new(static_arguments: simplicityhl::Arguments) -> Self {
         Self {
             resolved: static_arguments,
@@ -121,7 +122,7 @@ pub fn resolve_witness(
     let keypair = runtime.signer_keypair()?;
     let sighash_all = Message::from_digest(env.c_tx_env().sighash_all().to_byte_array());
 
-    for (name, value) in simf_arguments.runtime_arguments {
+    for (_name, value) in simf_arguments.runtime_arguments {
         match value {
             RuntimeSimfWitness::SigHashAll { name, public_key } => {
                 assert_eq!(keypair.x_only_public_key().0, public_key);

@@ -1,5 +1,3 @@
-use lwk_wollet::blocking::EsploraClient;
-use std::sync::{MutexGuard, PoisonError};
 use lwk_wollet::elements::UnblindError;
 use thiserror::Error;
 
@@ -100,7 +98,7 @@ pub enum WalletAbiError {
     LWKWollet(#[from] lwk_wollet::Error),
 
     #[error("TXOut unblinding error: {0}")]
-    Unblind(#[from] UnblindError)
+    Unblind(#[from] UnblindError),
 }
 
 /// Errors that occur during binary or hex encoding/decoding operations.

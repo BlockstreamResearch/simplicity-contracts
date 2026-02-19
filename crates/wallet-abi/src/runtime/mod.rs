@@ -1,12 +1,11 @@
-pub mod params;
 pub mod utils;
 
 mod input_resolution;
+mod output_resolution;
 
 use crate::error::WalletAbiError;
-use crate::runtime::params::RuntimeParamsEnvelope;
 use crate::schema::tx_create::{TransactionInfo, TxCreateRequest, TxCreateResponse};
-use crate::{FinalizerSpec, InputSchema, LockFilter, SchemaBundle, UTXOSource};
+use crate::{FinalizerSpec, InputSchema, LockFilter, RuntimeParams, UTXOSource};
 
 use std::path::Path;
 use std::str::FromStr;
@@ -25,7 +24,7 @@ use lwk_wollet::blocking::EsploraClient;
 use lwk_wollet::elements::hex::ToHex;
 use lwk_wollet::elements::pset::PartiallySignedTransaction;
 use lwk_wollet::elements::pset::raw::ProprietaryKey;
-use lwk_wollet::elements::{OutPoint, Script, TxOut, TxOutSecrets, secp256k1_zkp};
+use lwk_wollet::elements::{Address, OutPoint, Script, TxOut, TxOutSecrets, secp256k1_zkp};
 use lwk_wollet::elements_miniscript::ToPublicKey;
 use lwk_wollet::secp256k1::{Keypair, XOnlyPublicKey};
 use lwk_wollet::{EC, Wollet, WolletDescriptor};
@@ -33,7 +32,7 @@ use simplicityhl::elements::{Transaction, encode};
 use simplicityhl::tracker::TrackerLogLevel;
 
 pub(crate) fn get_finalizer_spec_key() -> ProprietaryKey {
-    ProprietaryKey::from_pset_pair(1, "finalizer-spec".as_bytes().to_vec())
+    ProprietaryKey::from_pset_pair(1, b"finalizer-spec".to_vec())
 }
 
 #[derive(Debug)]
@@ -120,16 +119,18 @@ impl WalletRuntimeConfig {
         )?)
     }
 
-    pub fn signer_address(&self) -> Result<XOnlyPublicKey, WalletAbiError> {
-        let keypair = self.signer_keypair()?;
+    pub fn signer_x_only_public_key(&self) -> Result<XOnlyPublicKey, WalletAbiError> {
+        Ok(self.signer_keypair()?.x_only_public_key().0)
+    }
 
-        Ok(keypair.x_only_public_key().0)
+    pub fn signer_receive_address(&self) -> Result<Address, WalletAbiError> {
+        let descriptor = self.get_descriptor()?;
+
+        Ok(descriptor.address(0, self.network.address_params())?)
     }
 
     pub(crate) fn signer_keypair(&self) -> Result<Keypair, WalletAbiError> {
-        let x_private = self.x_private(Bip::Bip87)?;
-
-        Ok(x_private.to_keypair(&EC))
+        Ok(self.x_private(Bip::Bip87)?.to_keypair(&EC))
     }
 
     pub fn sync_wallet(&mut self) -> Result<(), WalletAbiError> {
@@ -184,42 +185,35 @@ impl WalletRuntimeConfig {
     ) -> Result<TxCreateResponse, WalletAbiError> {
         self.ensure_defaults()?;
 
-        let bundle = SchemaBundle::from_uri(&request.schema_uri)?;
-        let params = RuntimeParamsEnvelope::from_request_params(&request.params)?;
+        self.pre_sync_inputs(&request.params.inputs)?;
 
-        self.pre_sync_inputs(&params.inputs)?;
+        let finalized_tx = self.finalize(&request.params)?;
 
-        let finalized_tx = self.finalize(&params)?;
-
-        let txid = finalized_tx.txid().to_string();
+        let txid = finalized_tx.txid();
 
         let inner_esplora = self
             .esplora
             .lock()
             .map_err(|e| WalletAbiError::EsploraPoisoned(e.to_string()))?;
 
-        let published_txid = if request.broadcast {
-            Some(inner_esplora.broadcast(&finalized_tx)?)
-        } else {
-            None
-        };
+        if request.broadcast {
+            let published_txid = inner_esplora.broadcast(&finalized_tx)?;
+            assert_eq!(txid, published_txid);
+        }
 
         let response = TxCreateResponse::ok(
             request,
-            &bundle.schema_id,
-            &bundle.schema_version,
             TransactionInfo {
                 tx_hex: encode::serialize_hex(&finalized_tx),
                 txid,
             },
-            published_txid,
             None,
         );
 
         Ok(response)
     }
 
-    fn finalize(&self, params: &RuntimeParamsEnvelope) -> Result<Transaction, WalletAbiError> {
+    fn finalize(&self, params: &RuntimeParams) -> Result<Transaction, WalletAbiError> {
         let fee_estimation_build = self.build_transaction(params, 1u64)?;
 
         let finalized_tx = self.finalize_all_inputs(fee_estimation_build)?;
@@ -243,13 +237,14 @@ impl WalletRuntimeConfig {
 
     fn build_transaction(
         &self,
-        params: &RuntimeParamsEnvelope,
+        params: &RuntimeParams,
         fee_target_sat: u64,
     ) -> Result<PartiallySignedTransaction, WalletAbiError> {
         let mut pst = PartiallySignedTransaction::new_v2();
         pst.global.tx_data.fallback_locktime = params.locktime;
 
         pst = self.resolve_inputs(pst, params)?;
+        pst = self.balance_out(pst, params, fee_target_sat)?;
 
         Ok(pst)
     }
@@ -300,7 +295,7 @@ impl WalletRuntimeConfig {
                         input_index,
                     )?;
 
-                    let witness = resolve_witness(&witness, &self, &env)?;
+                    let witness = resolve_witness(&witness, self, &env)?;
 
                     let pruned = run_program(&program, witness, &env, TrackerLogLevel::None)?.0;
 
@@ -313,7 +308,7 @@ impl WalletRuntimeConfig {
                         simplicity_program_bytes,
                         cmr.as_ref().to_vec(),
                         control_block(cmr, internal_key.pubkey.to_x_only_pubkey()).serialize(),
-                    ])
+                    ]);
                 }
             }
         }
@@ -335,7 +330,7 @@ impl WalletRuntimeConfig {
                     }
                 },
                 UTXOSource::Provided { .. } => {}
-            };
+            }
         }
 
         Ok(())

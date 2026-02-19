@@ -44,17 +44,20 @@
 //! ```
 //!
 
-use crate::runtime::params::RuntimeParamsEnvelope;
-use crate::runtime::{get_finalizer_spec_key, WalletRuntimeConfig};
-use crate::{AmountFilter, AssetFilter, AssetVariant, FinalizerSpec, InputBlinder, InputIssuance, InputIssuanceKind, InputSchema, LockFilter, UTXOSource, WalletAbiError, WalletSourceFilter};
+use crate::runtime::{WalletRuntimeConfig, get_finalizer_spec_key};
+use crate::{
+    AmountFilter, AssetFilter, AssetVariant, FinalizerSpec, InputBlinder, InputIssuance,
+    InputIssuanceKind, InputSchema, LockFilter, RuntimeParams, UTXOSource, WalletAbiError,
+    WalletSourceFilter,
+};
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use lwk_wollet::elements::confidential::{Asset, AssetBlindingFactor, Value, ValueBlindingFactor};
 use lwk_wollet::elements::hashes::Hash;
 use lwk_wollet::elements::pset::{Input, PartiallySignedTransaction};
-use lwk_wollet::elements::{secp256k1_zkp, AssetId, ContractHash, OutPoint, TxOut, TxOutSecrets};
-use lwk_wollet::{WalletTxOut, EC};
+use lwk_wollet::elements::{AssetId, ContractHash, OutPoint, TxOut, TxOutSecrets, secp256k1_zkp};
+use lwk_wollet::{EC, WalletTxOut};
 
 type CandidateScore = (u64, u64, u64, String, u32);
 
@@ -92,7 +95,7 @@ struct ResolvedInputMaterial {
 /// add_balance(&mut balances, "L-BTC", 2).unwrap();
 /// assert_eq!(balances.get("L-BTC"), Some(&12));
 /// ```
-fn add_balance(
+pub(super) fn add_balance(
     map: &mut BTreeMap<AssetId, u64>,
     asset_id: AssetId,
     amount_sat: u64,
@@ -190,7 +193,7 @@ fn validate_output_input_index(
 /// assert_eq!(derive(3, InputIssuanceKind::Reissue(base)), base);
 /// assert_ne!(derive(3, InputIssuanceKind::New(base)), base);
 /// ```
-fn derive_issuance_entropy(outpoint: OutPoint, issuance: &InputIssuance) -> Midstate {
+pub(super) fn derive_issuance_entropy(outpoint: OutPoint, issuance: &InputIssuance) -> Midstate {
     match issuance.kind {
         InputIssuanceKind::New => AssetId::generate_asset_entropy(
             outpoint,
@@ -256,13 +259,13 @@ fn apply_issuance_to_pset_input(
         Some(issuance.token_amount_sat)
     };
 
-    if let InputIssuanceKind::Reissue = issuance.kind {
+    if issuance.kind == InputIssuanceKind::Reissue {
         // TODO: investigate the purpose of this field, and make it functionally correct.
         let mut nonce = secrets.asset_bf.into_inner();
         if nonce == secp256k1_zkp::ZERO_TWEAK {
             let mut one = [0u8; 32];
             one[0] = 1;
-            nonce = secp256k1_zkp::Tweak::from_slice(&one).expect("tweak from [0,..,1] is correct")
+            nonce = secp256k1_zkp::Tweak::from_slice(&one).expect("tweak from [0,..,1] is correct");
         }
         pset_input.issuance_blinding_nonce = Some(nonce);
     }
@@ -374,7 +377,7 @@ impl WalletRuntimeConfig {
     /// Build demand from output specs and store issuance-linked entries as deferred.
     fn resolve_output_demands(
         &self,
-        params: &RuntimeParamsEnvelope,
+        params: &RuntimeParams,
         state: &mut ResolutionState,
     ) -> Result<(), WalletAbiError> {
         // Convert output-level asset requirements into equation demand.
@@ -533,12 +536,16 @@ impl WalletRuntimeConfig {
         let mut pset_input = Input::from_prevout(material.outpoint);
         pset_input.sequence = Some(input.sequence);
         pset_input.witness_utxo = Some(material.tx_out.clone());
+        pset_input.amount = Some(material.secrets.value);
+        pset_input.asset = Some(material.secrets.asset);
 
         if let Some(issuance) = input.issuance.as_ref() {
             apply_issuance_to_pset_input(&mut pset_input, issuance, &material.secrets)?;
         }
 
-        pset_input.proprietary.insert(get_finalizer_spec_key(), input.finalizer.encode());
+        pset_input
+            .proprietary
+            .insert(get_finalizer_spec_key(), input.finalizer.encode());
         pst.add_input(pset_input);
 
         Ok(())
@@ -615,7 +622,7 @@ impl WalletRuntimeConfig {
     fn resolve_declared_inputs(
         &self,
         pst: &mut PartiallySignedTransaction,
-        params: &RuntimeParamsEnvelope,
+        params: &RuntimeParams,
         wallet_snapshot: &[WalletTxOut],
         state: &mut ResolutionState,
     ) -> Result<(), WalletAbiError> {
@@ -697,7 +704,11 @@ impl WalletRuntimeConfig {
         let tx_out = self.fetch_tx_out(&selected.outpoint)?;
         let mut pset_input = Input::from_prevout(selected.outpoint);
         pset_input.witness_utxo = Some(tx_out);
-        pset_input.proprietary.insert(get_finalizer_spec_key(), FinalizerSpec::Wallet.encode());
+        pset_input.amount = Some(selected.unblinded.value);
+        pset_input.asset = Some(selected.unblinded.asset);
+        pset_input
+            .proprietary
+            .insert(get_finalizer_spec_key(), FinalizerSpec::Wallet.encode());
         pst.add_input(pset_input);
 
         add_balance(
@@ -772,7 +783,7 @@ impl WalletRuntimeConfig {
     pub(super) fn resolve_inputs(
         &self,
         pst: PartiallySignedTransaction,
-        params: &RuntimeParamsEnvelope,
+        params: &RuntimeParams,
     ) -> Result<PartiallySignedTransaction, WalletAbiError> {
         // Phase 1: initialize demand/supply state and load wallet snapshot once.
         // We keep all equation state in a dedicated struct so each phase mutates a single object.

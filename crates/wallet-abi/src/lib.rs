@@ -28,7 +28,7 @@ pub use lwk_common::Network;
 pub use lwk_simplicity::error::ProgramError;
 pub use lwk_simplicity::runner::run_program;
 pub use lwk_simplicity::signer::{finalize_transaction, get_and_verify_env, get_sighash_all};
-pub use schema::bundle::*;
+pub use schema::runtime_params::*;
 pub use scripts::{
     control_block, create_p2tr_address, get_new_asset_entropy, hash_script, load_program,
     simplicity_leaf_version, tap_data_hash,
