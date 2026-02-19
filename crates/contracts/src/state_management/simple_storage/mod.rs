@@ -1,5 +1,5 @@
-use simplicityhl_core::{ProgramError, create_p2tr_address, load_program, run_program};
 use std::sync::Arc;
+use wallet_abi::{ProgramError, create_p2tr_address, load_program, run_program};
 
 use simplicityhl::simplicity::RedeemNode;
 use simplicityhl::simplicity::bitcoin::XOnlyPublicKey;
@@ -97,9 +97,9 @@ mod simple_storage_tests {
     use simplicityhl::simplicity::elements::taproot::ControlBlock;
     use simplicityhl::simplicity::jet::elements::ElementsEnv;
 
-    use simplicityhl_core::SimplicityNetwork;
+    use wallet_abi::Network;
 
-    const NETWORK: SimplicityNetwork = SimplicityNetwork::LiquidTestnet;
+    const NETWORK: Network = Network::TestnetLiquid;
 
     #[test]
     fn test_simple_storage_mint_path() -> Result<()> {
@@ -133,7 +133,7 @@ mod simple_storage_tests {
         pst.add_output(Output::new_explicit(
             storage_address.script_pubkey(),
             new_value,
-            NETWORK.policy_asset(),
+            *NETWORK.policy_asset(),
             None,
         ));
 
@@ -151,7 +151,7 @@ mod simple_storage_tests {
             vec![
                 simplicityhl::simplicity::jet::elements::ElementsUtxo {
                     script_pubkey: storage_address.script_pubkey(),
-                    asset: Asset::Explicit(NETWORK.policy_asset()),
+                    asset: Asset::Explicit(*NETWORK.policy_asset()),
                     value: Value::Explicit(old_value),
                 },
                 simplicityhl::simplicity::jet::elements::ElementsUtxo {
@@ -207,7 +207,7 @@ mod simple_storage_tests {
         pst.add_output(Output::new_explicit(
             storage_address.script_pubkey(),
             new_value,
-            NETWORK.policy_asset(),
+            *NETWORK.policy_asset(),
             None,
         ));
 
@@ -215,7 +215,7 @@ mod simple_storage_tests {
         pst.add_output(Output::new_explicit(
             Script::new_op_return(b"burn"),
             old_value - new_value,
-            NETWORK.policy_asset(),
+            *NETWORK.policy_asset(),
             None,
         ));
 
@@ -225,7 +225,7 @@ mod simple_storage_tests {
             Arc::new(pst.extract_tx()?),
             vec![simplicityhl::simplicity::jet::elements::ElementsUtxo {
                 script_pubkey: storage_address.script_pubkey(),
-                asset: Asset::Explicit(NETWORK.policy_asset()),
+                asset: Asset::Explicit(*NETWORK.policy_asset()),
                 value: Value::Explicit(old_value),
             }],
             0,

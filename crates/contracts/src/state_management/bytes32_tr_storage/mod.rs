@@ -1,16 +1,14 @@
 use std::sync::Arc;
 
 use simplicityhl::simplicity::bitcoin::secp256k1;
-use simplicityhl::simplicity::elements::hashes::HashEngine as _;
 use simplicityhl::simplicity::elements::taproot::{LeafVersion, TaprootBuilder, TaprootSpendInfo};
 use simplicityhl::simplicity::elements::{Script, Transaction};
-use simplicityhl::simplicity::hashes::{Hash, sha256};
 use simplicityhl::simplicity::jet::Elements;
 use simplicityhl::simplicity::jet::elements::ElementsEnv;
-use simplicityhl::simplicity::{Cmr, RedeemNode, leaf_version};
+use simplicityhl::simplicity::{Cmr, RedeemNode};
 use simplicityhl::tracker::TrackerLogLevel;
 use simplicityhl::{CompiledProgram, TemplateProgram};
-use simplicityhl_core::{ProgramError, run_program};
+use wallet_abi::{ProgramError, run_program, simplicity_leaf_version, tap_data_hash};
 
 mod build_witness;
 
@@ -75,7 +73,10 @@ pub fn unspendable_internal_key() -> secp256k1::XOnlyPublicKey {
 }
 
 fn script_ver(cmr: Cmr) -> (Script, LeafVersion) {
-    (Script::from(cmr.as_ref().to_vec()), leaf_version())
+    (
+        Script::from(cmr.as_ref().to_vec()),
+        simplicity_leaf_version(),
+    )
 }
 
 /// Given a Simplicity CMR and an internal key, computes the [`TaprootSpendInfo`]
@@ -94,14 +95,7 @@ pub fn taproot_spend_info(
     cmr: Cmr,
 ) -> TaprootSpendInfo {
     let (script, version) = script_ver(cmr);
-
-    // Compute TapData-tagged hash of the state
-    let tag = sha256::Hash::hash(b"TapData");
-    let mut eng = sha256::Hash::engine();
-    eng.input(tag.as_byte_array());
-    eng.input(tag.as_byte_array());
-    eng.input(&state);
-    let state_hash = sha256::Hash::from_engine(eng);
+    let state_hash = tap_data_hash(&state);
 
     // Build taproot tree with hidden leaf
     let builder = TaprootBuilder::new()
@@ -125,6 +119,7 @@ mod bytes32_tr_tests {
     use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
     use simplicityhl::elements::{self, AssetId, OutPoint, Script, Txid};
     use simplicityhl::simplicity::elements::taproot::ControlBlock;
+    use simplicityhl::simplicity::hashes::Hash as _;
     use simplicityhl::simplicity::jet::elements::ElementsEnv;
 
     #[test]

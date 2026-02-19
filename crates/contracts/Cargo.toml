@@ -10,8 +10,7 @@ keywords = ["simplicity", "liquid", "bitcoin", "elements", "contracts"]
 categories = ["cryptography::cryptocurrencies"]
 
 [features]
-default = ["sdk-basic", "finance-options", "finance-dcd", "finance-option-offer", "simple-storage", "bytes32-tr-storage", "array-tr-storage", "smt-storage"]
-sdk-basic = []
+default = ["finance-options", "finance-dcd", "finance-option-offer", "simple-storage", "bytes32-tr-storage", "array-tr-storage", "smt-storage"]
 finance-options = []
 finance-dcd = []
 finance-option-offer = []
@@ -28,14 +27,14 @@ bincode = "2.0.1"
 
 thiserror = "2"
 
-ring = { workspace = true }
-sha2 = { workspace = true }
-
 hex = { workspace = true }
 
 simplicityhl = { workspace = true }
-
-simplicityhl-core = { workspace = true }
+wallet-abi = { path = "../wallet-abi" }
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 anyhow = "1"
+bitcoincore-rpc = "0.19.0"
+lwk_test_util = { git = "https://github.com/Blockstream/lwk", rev = "4074c527fcc1268eb26953af397eecc6c1444293", package = "lwk_test_util" }

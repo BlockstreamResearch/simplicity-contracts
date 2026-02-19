@@ -200,14 +200,16 @@ fn expiry_path(sig: Signature) {
 }
 
 fn main() {
+    let signature: Signature = witness::USER_SIGHASH_ALL;
+
     match witness::PATH {
         Left(params: (u64, bool)) => {
             let (collateral_amount, is_change_needed): (u64, bool) = params;
             exercise_path(collateral_amount, is_change_needed)
         },
-        Right(withdraw_or_expiry: Either<Signature, Signature>) => match withdraw_or_expiry {
-            Left(sig: Signature) => withdraw_path(sig),
-            Right(sig: Signature) => expiry_path(sig),
+        Right(withdraw_or_expiry: Either<(), ()>) => match withdraw_or_expiry {
+            Left(params: ()) => withdraw_path(signature),
+            Right(params: ()) => expiry_path(signature),
         },
     }
 }

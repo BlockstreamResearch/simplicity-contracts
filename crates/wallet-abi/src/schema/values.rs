@@ -101,11 +101,11 @@ pub enum RuntimeSimfWitness {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SimfWitness {
     pub resolved: WitnessValues,
-    pub runtime_arguments: HashMap<String, RuntimeSimfWitness>,
+    pub runtime_arguments: Vec<RuntimeSimfWitness>,
 }
 
 /// Convert compiled Simplicity witness into bytes.
-pub fn serialize_witness(witness: &SimfArguments) -> Result<Vec<u8>, WalletAbiError> {
+pub fn serialize_witness(witness: &SimfWitness) -> Result<Vec<u8>, WalletAbiError> {
     Ok(serde_json::to_vec(witness)?)
 }
 
@@ -122,7 +122,7 @@ pub fn resolve_witness(
     let keypair = runtime.signer_keypair()?;
     let sighash_all = Message::from_digest(env.c_tx_env().sighash_all().to_byte_array());
 
-    for (_name, value) in simf_arguments.runtime_arguments {
+    for value in simf_arguments.runtime_arguments {
         match value {
             RuntimeSimfWitness::SigHashAll { name, public_key } => {
                 assert_eq!(keypair.x_only_public_key().0, public_key);

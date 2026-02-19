@@ -1,16 +1,15 @@
 use std::sync::Arc;
 
 use simplicityhl::simplicity::bitcoin::secp256k1;
-use simplicityhl::simplicity::elements::hashes::HashEngine as _;
 use simplicityhl::simplicity::elements::taproot::{LeafVersion, TaprootBuilder, TaprootSpendInfo};
 use simplicityhl::simplicity::elements::{Script, Transaction};
-use simplicityhl::simplicity::hashes::{Hash, sha256};
+use simplicityhl::simplicity::hashes::sha256;
 use simplicityhl::simplicity::jet::Elements;
 use simplicityhl::simplicity::jet::elements::ElementsEnv;
-use simplicityhl::simplicity::{Cmr, RedeemNode, leaf_version};
+use simplicityhl::simplicity::{Cmr, RedeemNode};
 use simplicityhl::tracker::TrackerLogLevel;
 use simplicityhl::{Arguments, CompiledProgram, TemplateProgram};
-use simplicityhl_core::{ProgramError, run_program};
+use wallet_abi::{ProgramError, run_program, simplicity_leaf_version, tap_data_hash};
 
 mod build_witness;
 
@@ -57,20 +56,19 @@ pub fn execute_array_tr_storage_program(
 }
 
 fn array_tr_storage_script_ver(cmr: Cmr) -> (Script, LeafVersion) {
-    (Script::from(cmr.as_ref().to_vec()), leaf_version())
+    (
+        Script::from(cmr.as_ref().to_vec()),
+        simplicity_leaf_version(),
+    )
 }
 
 #[must_use]
 pub fn compute_tapdata_tagged_hash_of_the_state(state: &State) -> sha256::Hash {
-    let tag = sha256::Hash::hash(b"TapData");
-    let mut eng = sha256::Hash::engine();
-    eng.input(tag.as_byte_array());
-    eng.input(tag.as_byte_array());
-
-    for item in state.limbs {
-        eng.input(&item);
+    let mut state_bytes = Vec::with_capacity(state.limbs.len() * 32);
+    for item in &state.limbs {
+        state_bytes.extend_from_slice(item);
     }
-    sha256::Hash::from_engine(eng)
+    tap_data_hash(&state_bytes)
 }
 
 /// Given a Simplicity CMR and an internal key, computes the [`TaprootSpendInfo`]
@@ -119,6 +117,7 @@ mod array_tr_storage_tests {
     use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
     use simplicityhl::elements::{AssetId, BlockHash, OutPoint, Script, Txid};
     use simplicityhl::simplicity::elements::taproot::ControlBlock;
+    use simplicityhl::simplicity::hashes::Hash as _;
     use simplicityhl::simplicity::jet::elements::{ElementsEnv, ElementsUtxo};
 
     #[rustfmt::skip] // mangles byte vectors

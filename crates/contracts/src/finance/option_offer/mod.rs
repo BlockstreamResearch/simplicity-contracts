@@ -12,7 +12,6 @@ pub mod build_witness;
 pub use build_arguments::OptionOfferArguments;
 
 pub const OPTION_OFFER_SOURCE: &str = include_str!("source_simf/option_offer.simf");
-pub const OPTION_OFFER_URI: &str = include_str!("source_simf/option_offer.wallet.schema.json");
 
 /// Get the option offer template program for instantiation.
 ///
@@ -70,97 +69,378 @@ pub fn get_compiled_option_offer_program(arguments: &OptionOfferArguments) -> Co
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::test_setup::{RuntimeFundingAsset, ensure_node_running, fund_runtime};
-    use serde_json::Value;
-    use std::collections::BTreeMap;
-    use wallet_abi::{AssetVariant, InputSchema, LockVariant, OutputIntent, OutputSchema};
 
-    use wallet_abi::runtime::params::RuntimeParamsEnvelope;
-    use wallet_abi::runtime::{WalletRuntimeConfig, create_tx_v1};
+    use crate::test_setup::{
+        RuntimeFundingAsset, ensure_node_running, fund_runtime, get_esplora_url, mine_blocks,
+    };
+    use anyhow::Context;
+
+    use simplicityhl::elements::{AssetId, LockTime, OutPoint, Sequence, Txid};
+
+    use wallet_abi::{
+        FinalizerSpec, InputBlinder, InputSchema, OutputSchema, RuntimeParams, UTXOSource,
+    };
+
+    use crate::option_offer::build_witness::{
+        OptionOfferSimfBranch, build_option_offer_simf_witness,
+    };
+    use wallet_abi::runtime::WalletRuntimeConfig;
     use wallet_abi::schema::tx_create::{TX_CREATE_ABI_VERSION, TxCreateRequest};
+    use wallet_abi::schema::values::{serialize_arguments, serialize_witness};
     use wallet_abi::taproot_pubkey_gen::TaprootPubkeyGen;
 
-    const TEST_MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    const COLLATERAL_PER_CONTRACT: u64 = 100;
+    const PREMIUM_PER_COLLATERAL: u64 = 10;
+    const EXPIRY_TIME: u32 = 1_700_000_000;
+
+    struct RuntimeFixture {
+        runtime_config: WalletRuntimeConfig,
+        collateral_asset_id: AssetId,
+        premium_asset_id: AssetId,
+        settlement_asset_id: AssetId,
+        args: OptionOfferArguments,
+        tap: TaprootPubkeyGen,
+    }
+
+    pub fn wallet_data_root() -> std::path::PathBuf {
+        std::env::var_os("SIMPLICITY_CLI_WALLET_DATA_DIR").map_or_else(
+            || std::path::PathBuf::from(".cache/wallet"),
+            std::path::PathBuf::from,
+        )
+    }
+
+    impl RuntimeFixture {
+        fn setup() -> anyhow::Result<Self> {
+            ensure_node_running()?;
+
+            let mut runtime_config = WalletRuntimeConfig::build_random(
+                Network::LocaltestLiquid,
+                &get_esplora_url()?,
+                wallet_data_root(),
+            )?;
+
+            let (collateral_asset_id, _, _) =
+                fund_runtime(&mut runtime_config, RuntimeFundingAsset::Lbtc)?;
+            let (premium_asset_id, _, _) =
+                fund_runtime(&mut runtime_config, RuntimeFundingAsset::NewAsset)?;
+            let (settlement_asset_id, _, _) =
+                fund_runtime(&mut runtime_config, RuntimeFundingAsset::NewAsset)?;
+
+            let args = OptionOfferArguments::new(
+                collateral_asset_id,
+                premium_asset_id,
+                settlement_asset_id,
+                COLLATERAL_PER_CONTRACT,
+                PREMIUM_PER_COLLATERAL,
+                EXPIRY_TIME,
+                runtime_config.signer_x_only_public_key()?.serialize(),
+            );
+            let tap =
+                TaprootPubkeyGen::from(&args, Network::LocaltestLiquid, &get_option_offer_address)?;
+
+            Ok(Self {
+                runtime_config,
+                collateral_asset_id,
+                premium_asset_id,
+                settlement_asset_id,
+                args,
+                tap,
+            })
+        }
+
+        fn premium_amount(&self, collateral_amount: u64) -> anyhow::Result<u64> {
+            collateral_amount
+                .checked_mul(self.args.premium_per_collateral())
+                .context("premium amount overflow")
+        }
+
+        fn settlement_amount(&self, collateral_amount: u64) -> anyhow::Result<u64> {
+            collateral_amount
+                .checked_mul(self.args.collateral_per_contract())
+                .context("settlement amount overflow")
+        }
+
+        fn get_base_finalizer_spec(
+            &self,
+            witness: &OptionOfferSimfBranch,
+        ) -> anyhow::Result<FinalizerSpec> {
+            Ok(FinalizerSpec::Simf {
+                source_simf: OPTION_OFFER_SOURCE.to_string(),
+                internal_key: Box::new(self.tap.clone()),
+                arguments: serialize_arguments(&self.args.build_simf_arguments())?,
+                witness: serialize_witness(&build_option_offer_simf_witness(
+                    witness,
+                    self.runtime_config.signer_x_only_public_key()?,
+                ))?,
+            })
+        }
+
+        fn build_request(
+            id: &str,
+            inputs: Vec<InputSchema>,
+            outputs: Vec<OutputSchema>,
+            locktime: Option<LockTime>,
+        ) -> TxCreateRequest {
+            TxCreateRequest {
+                abi_version: TX_CREATE_ABI_VERSION.to_string(),
+                request_id: format!("request-{id}"),
+                network: Network::LocaltestLiquid,
+                params: RuntimeParams {
+                    inputs,
+                    outputs,
+                    fee_rate_sat_vb: None,
+                    locktime,
+                },
+                broadcast: true,
+            }
+        }
+
+        fn build_deposit_request(
+            &self,
+            collateral_deposit_amount: u64,
+        ) -> anyhow::Result<TxCreateRequest> {
+            let premium_deposit_amount = self.premium_amount(collateral_deposit_amount)?;
+
+            Ok(Self::build_request(
+                "option_offer.deposit",
+                vec![InputSchema::new("input0"), InputSchema::new("input1")],
+                vec![
+                    OutputSchema::from_script(
+                        "out0",
+                        self.collateral_asset_id,
+                        collateral_deposit_amount,
+                        self.tap.address.script_pubkey(),
+                    ),
+                    OutputSchema::from_script(
+                        "out1",
+                        self.premium_asset_id,
+                        premium_deposit_amount,
+                        self.tap.address.script_pubkey(),
+                    ),
+                ],
+                None,
+            ))
+        }
+
+        fn build_exercise_request(
+            &self,
+            creation_tx_id: Txid,
+            collateral_amount: u64,
+            is_change_needed: bool,
+        ) -> anyhow::Result<TxCreateRequest> {
+            let premium_amount = self.premium_amount(collateral_amount)?;
+            let settlement_amount = self.settlement_amount(collateral_amount)?;
+
+            let finalizer = self.get_base_finalizer_spec(&OptionOfferSimfBranch::Exercise {
+                collateral_amount,
+                is_change_needed,
+            })?;
+
+            let receiver = self.runtime_config.signer_receive_address()?;
+
+            Ok(Self::build_request(
+                "option_offer.exercise",
+                vec![
+                    InputSchema {
+                        id: "input0".to_string(),
+                        utxo_source: UTXOSource::Provided {
+                            outpoint: OutPoint::new(creation_tx_id, 0),
+                        },
+                        blinder: InputBlinder::Explicit,
+                        sequence: Sequence::default(),
+                        issuance: None,
+                        finalizer: finalizer.clone(),
+                    },
+                    InputSchema {
+                        id: "input1".to_string(),
+                        utxo_source: UTXOSource::Provided {
+                            outpoint: OutPoint::new(creation_tx_id, 1),
+                        },
+                        blinder: InputBlinder::Explicit,
+                        sequence: Sequence::default(),
+                        issuance: None,
+                        finalizer,
+                    },
+                    InputSchema::new("input2"),
+                ],
+                vec![
+                    OutputSchema::from_script(
+                        "out0",
+                        self.settlement_asset_id,
+                        settlement_amount,
+                        self.tap.address.script_pubkey(),
+                    ),
+                    OutputSchema::from_script(
+                        "out1",
+                        self.collateral_asset_id,
+                        collateral_amount,
+                        receiver.script_pubkey(),
+                    ),
+                    OutputSchema::from_script(
+                        "out2",
+                        self.premium_asset_id,
+                        premium_amount,
+                        receiver.script_pubkey(),
+                    ),
+                ],
+                None,
+            ))
+        }
+
+        fn build_withdraw_request(
+            &self,
+            exercise_tx_id: Txid,
+            settlement_amount: u64,
+        ) -> anyhow::Result<TxCreateRequest> {
+            let finalizer = self.get_base_finalizer_spec(&OptionOfferSimfBranch::Withdraw)?;
+
+            let receiver = self.runtime_config.signer_receive_address()?;
+
+            Ok(Self::build_request(
+                "option_offer.withdraw",
+                vec![InputSchema {
+                    id: "input0".to_string(),
+                    utxo_source: UTXOSource::Provided {
+                        outpoint: OutPoint::new(exercise_tx_id, 0),
+                    },
+                    blinder: InputBlinder::Explicit,
+                    sequence: Sequence::default(),
+                    issuance: None,
+                    finalizer,
+                }],
+                vec![OutputSchema::from_script(
+                    "out0",
+                    self.settlement_asset_id,
+                    settlement_amount,
+                    receiver.script_pubkey(),
+                )],
+                None,
+            ))
+        }
+
+        fn build_expiry_request(
+            &self,
+            creation_tx_id: Txid,
+            collateral_amount: u64,
+            premium_amount: u64,
+        ) -> anyhow::Result<TxCreateRequest> {
+            let finalizer = self.get_base_finalizer_spec(&OptionOfferSimfBranch::Expiry)?;
+
+            let receiver = self.runtime_config.signer_receive_address()?;
+
+            Ok(Self::build_request(
+                "option_offer.expiry",
+                vec![
+                    InputSchema {
+                        id: "input0".to_string(),
+                        utxo_source: UTXOSource::Provided {
+                            outpoint: OutPoint::new(creation_tx_id, 0),
+                        },
+                        blinder: InputBlinder::Explicit,
+                        sequence: Sequence::ENABLE_LOCKTIME_NO_RBF,
+                        issuance: None,
+                        finalizer: finalizer.clone(),
+                    },
+                    InputSchema {
+                        id: "input1".to_string(),
+                        utxo_source: UTXOSource::Provided {
+                            outpoint: OutPoint::new(creation_tx_id, 1),
+                        },
+                        blinder: InputBlinder::Explicit,
+                        sequence: Sequence::ENABLE_LOCKTIME_NO_RBF,
+                        issuance: None,
+                        finalizer,
+                    },
+                ],
+                vec![
+                    OutputSchema::from_script(
+                        "out0",
+                        self.collateral_asset_id,
+                        collateral_amount,
+                        receiver.script_pubkey(),
+                    ),
+                    OutputSchema::from_script(
+                        "out1",
+                        self.premium_asset_id,
+                        premium_amount,
+                        receiver.script_pubkey(),
+                    ),
+                ],
+                Some(LockTime::from_time(self.args.expiry_time())?),
+            ))
+        }
+
+        fn assert_broadcast_happy_path(
+            &mut self,
+            request: &TxCreateRequest,
+        ) -> anyhow::Result<Txid> {
+            let response = self.runtime_config.process_request(request)?;
+
+            let Some(tx_info) = response.transaction else {
+                panic!("Expected a response broadcast info");
+            };
+
+            dbg!(&tx_info.txid);
+
+            Ok(tx_info.txid)
+        }
+    }
 
     #[test]
     fn test_option_offer_deposit() -> anyhow::Result<()> {
-        let mut runtime_config =
-            WalletRuntimeConfig::from_mnemonic(TEST_MNEMONIC, Network::LocaltestLiquid)?;
+        let mut fixture = RuntimeFixture::setup()?;
+        let request = fixture.build_deposit_request(1_000u64)?;
+        let _ = fixture.assert_broadcast_happy_path(&request)?;
+        Ok(())
+    }
 
-        ensure_node_running()?;
-        let (collateral_asset_id, _, _) =
-            fund_runtime(&mut runtime_config, RuntimeFundingAsset::Lbtc)?;
-        let (premium_asset_id, _, _) =
-            fund_runtime(&mut runtime_config, RuntimeFundingAsset::NewAsset)?;
-        let (settlement_asset_id, _, _) =
-            fund_runtime(&mut runtime_config, RuntimeFundingAsset::NewAsset)?;
+    #[test]
+    fn test_option_offer_exercise() -> anyhow::Result<()> {
+        let mut fixture = RuntimeFixture::setup()?;
+        let collateral_amount = 1_000u64;
+        let request = fixture.build_deposit_request(collateral_amount)?;
+        let creation_tx_id = fixture.assert_broadcast_happy_path(&request)?;
+        mine_blocks(1)?;
 
-        let args = OptionOfferArguments::new(
-            collateral_asset_id,
-            premium_asset_id,
-            settlement_asset_id,
-            100,
-            10,
-            1_700_000_000,
-            runtime_config.signer.xpub().to_x_only_pub().serialize(),
-        );
+        let request = fixture.build_exercise_request(creation_tx_id, collateral_amount, false)?;
+        let _ = fixture.assert_broadcast_happy_path(&request)?;
+        Ok(())
+    }
 
-        let tap =
-            TaprootPubkeyGen::from(&args, Network::LocaltestLiquid, &get_option_offer_address)?;
+    #[test]
+    fn test_option_offer_withdraw() -> anyhow::Result<()> {
+        let mut fixture = RuntimeFixture::setup()?;
+        let collateral_amount = 1_000u64;
+        let settlement_amount = fixture.settlement_amount(collateral_amount)?;
 
-        let collateral_deposit_amount = 1000u64;
-        let premium_deposit_amount = collateral_deposit_amount * args.premium_per_collateral();
+        let deposit_request = fixture.build_deposit_request(collateral_amount)?;
+        let creation_tx_id = fixture.assert_broadcast_happy_path(&deposit_request)?;
+        mine_blocks(1)?;
 
-        let mut extra: BTreeMap<String, Value> = BTreeMap::new();
-        extra.insert("arguments".to_string(), args.to_json()?);
-        extra.insert("internal_key".to_string(), tap.to_json()?);
+        let exercise_request =
+            fixture.build_exercise_request(creation_tx_id, collateral_amount, false)?;
+        let exercise_tx_id = fixture.assert_broadcast_happy_path(&exercise_request)?;
+        mine_blocks(1)?;
 
-        let response = create_tx_v1(
-            &TxCreateRequest {
-                abi_version: TX_CREATE_ABI_VERSION.to_string(),
-                request_type: "tx.create".to_string(),
-                request_id: "request-id".to_string(),
-                network: Network::LocaltestLiquid,
-                schema_uri: OPTION_OFFER_URI.to_string(),
-                branch: "option_offer.deposit".to_string(),
-                params: RuntimeParamsEnvelope {
-                    inputs: vec![InputSchema::new("input0"), InputSchema::new("input1")],
-                    outputs: vec![
-                        OutputSchema {
-                            id: "out0".to_string(),
-                            intent: OutputIntent::Transfer,
-                            asset: AssetVariant::AssetId {
-                                asset_id: collateral_asset_id,
-                            },
-                            amount_sat: collateral_deposit_amount,
-                            lock: LockVariant::Script {
-                                script: tap.address.script_pubkey(),
-                            },
-                            blinding_pubkey: None,
-                        },
-                        OutputSchema {
-                            id: "out1".to_string(),
-                            intent: OutputIntent::Transfer,
-                            asset: AssetVariant::AssetId {
-                                asset_id: premium_asset_id,
-                            },
-                            amount_sat: premium_deposit_amount,
-                            lock: LockVariant::Script {
-                                script: tap.address.script_pubkey(),
-                            },
-                            blinding_pubkey: None,
-                        },
-                    ],
-                    fee_rate_sat_vb: None,
-                    locktime: None,
-                    extra,
-                }
-                .to_request_params_value()?,
-                broadcast: true,
-            },
-            &runtime_config,
-        )?;
-        assert_eq!(response.branch, "option_offer.deposit");
+        let request = fixture.build_withdraw_request(exercise_tx_id, settlement_amount)?;
+        let _ = fixture.assert_broadcast_happy_path(&request)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_option_offer_expiry() -> anyhow::Result<()> {
+        let mut fixture = RuntimeFixture::setup()?;
+        let collateral_amount = 1_000u64;
+        let premium_amount = fixture.premium_amount(collateral_amount)?;
+
+        let deposit_request = fixture.build_deposit_request(collateral_amount)?;
+        let creation_tx_id = fixture.assert_broadcast_happy_path(&deposit_request)?;
+        mine_blocks(1)?;
+
+        let request =
+            fixture.build_expiry_request(creation_tx_id, collateral_amount, premium_amount)?;
+        let _ = fixture.assert_broadcast_happy_path(&request)?;
 
         Ok(())
     }

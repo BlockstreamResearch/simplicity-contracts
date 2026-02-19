@@ -8,6 +8,7 @@ use simplicityhl::num::U256;
 use simplicityhl::{Arguments, str::WitnessName, value::UIntValue};
 use std::collections::HashMap;
 use wallet_abi::WalletAbiError;
+use wallet_abi::schema::values::SimfArguments;
 
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq, Default)]
 pub struct OptionOfferArguments {
@@ -90,6 +91,14 @@ impl OptionOfferArguments {
                 simplicityhl::Value::from(UIntValue::U256(U256::from_byte_array(self.user_pubkey))),
             ),
         ]))
+    }
+
+    #[must_use]
+    pub fn build_simf_arguments(&self) -> SimfArguments {
+        SimfArguments {
+            resolved: self.build_arguments(),
+            runtime_arguments: HashMap::default(),
+        }
     }
 
     pub fn to_json(&self) -> Result<Value, WalletAbiError> {

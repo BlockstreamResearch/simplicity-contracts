@@ -1,7 +1,8 @@
 use simplicityhl::simplicity::elements::hashes::HashEngine as _;
 use simplicityhl::simplicity::hashes::{Hash, sha256};
+use wallet_abi::tap_data_hash;
 
-use crate::smt_storage::get_path_bits;
+use crate::state_management::smt_storage::get_path_bits;
 
 use super::build_witness::{DEPTH, u256};
 
@@ -134,15 +135,12 @@ impl SparseMerkleTree {
         hashes: &mut [u256],
     ) {
         if ind >= DEPTH {
-            let tag = sha256::Hash::hash(b"TapData");
-            let mut eng = sha256::Hash::engine();
-            eng.input(tag.as_byte_array());
-            eng.input(tag.as_byte_array());
-            eng.input(leaf);
-            eng.input(&[get_path_bits(path, true)]);
-
+            let mut tapdata_input = Vec::with_capacity(leaf.len() + 1);
+            tapdata_input.extend_from_slice(leaf);
+            tapdata_input.push(get_path_bits(path, true));
+            let leaf_hash = tap_data_hash(&tapdata_input);
             **root = TreeNode::Leaf {
-                leaf_hash: *sha256::Hash::from_engine(eng).as_byte_array(),
+                leaf_hash: *leaf_hash.as_byte_array(),
             };
             return;
         }

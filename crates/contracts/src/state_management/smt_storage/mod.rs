@@ -10,10 +10,11 @@ use simplicityhl::simplicity::elements::{Script, Transaction};
 use simplicityhl::simplicity::hashes::{Hash, sha256};
 use simplicityhl::simplicity::jet::Elements;
 use simplicityhl::simplicity::jet::elements::{ElementsEnv, ElementsUtxo};
-use simplicityhl::simplicity::{Cmr, RedeemNode, leaf_version};
+use simplicityhl::simplicity::{Cmr, RedeemNode};
 use simplicityhl::tracker::TrackerLogLevel;
 use simplicityhl::{Arguments, CompiledProgram, TemplateProgram};
-use simplicityhl_core::{ProgramError, SimplicityNetwork, run_program};
+use wallet_abi::{Network, ProgramError, run_program};
+use wallet_abi::{simplicity_leaf_version, tap_data_hash};
 
 mod build_witness;
 mod smt;
@@ -71,7 +72,10 @@ pub fn execute_smt_storage_program(
 
 #[must_use]
 pub fn smt_storage_script_ver(cmr: Cmr) -> (Script, LeafVersion) {
-    (Script::from(cmr.as_ref().to_vec()), leaf_version())
+    (
+        Script::from(cmr.as_ref().to_vec()),
+        simplicity_leaf_version(),
+    )
 }
 
 /// Computes the control block for the given CMR and spend info.
@@ -117,16 +121,11 @@ pub fn compute_tapdata_tagged_hash_of_the_state(
     leaf: &u256,
     path: &[(u256, bool); DEPTH],
 ) -> sha256::Hash {
-    let tag = sha256::Hash::hash(b"TapData");
-    let mut eng = sha256::Hash::engine();
-    eng.input(tag.as_byte_array());
-    eng.input(tag.as_byte_array());
-    eng.input(leaf);
-
     let raw_path: [bool; DEPTH] = std::array::from_fn(|i| path[i].1);
-    eng.input(&[get_path_bits(&raw_path, false)]);
-
-    let mut current_hash = sha256::Hash::from_engine(eng);
+    let mut tapdata_input = Vec::with_capacity(leaf.len() + 1);
+    tapdata_input.extend_from_slice(leaf);
+    tapdata_input.push(get_path_bits(&raw_path, false));
+    let mut current_hash = tap_data_hash(&tapdata_input);
 
     for (hash, is_right_direction) in path {
         let mut eng = sha256::Hash::engine();
@@ -187,10 +186,10 @@ pub fn get_and_verify_env(
     program: &CompiledProgram,
     spend_info: &TaprootSpendInfo,
     utxos: &[TxOut],
-    network: SimplicityNetwork,
+    network: Network,
     input_index: usize,
 ) -> Result<ElementsEnv<Arc<Transaction>>, ProgramError> {
-    let genesis_hash = network.genesis_block_hash();
+    let genesis_hash = network.genesis_hash();
     let cmr = program.commit().cmr();
 
     if utxos.len() <= input_index {
@@ -243,7 +242,7 @@ pub fn finalize_get_storage_transaction(
     storage_program: &CompiledProgram,
     utxos: &[TxOut],
     input_index: usize,
-    network: SimplicityNetwork,
+    network: Network,
     log_level: TrackerLogLevel,
 ) -> Result<Transaction, ProgramError> {
     let env = get_and_verify_env(

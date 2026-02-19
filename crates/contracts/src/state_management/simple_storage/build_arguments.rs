@@ -55,4 +55,4 @@ pub fn build_storage_arguments(args: &StorageArguments) -> Arguments {
     ]))
 }
 
-impl simplicityhl_core::Encodable for StorageArguments {}
+impl wallet_abi::Encodable for StorageArguments {}

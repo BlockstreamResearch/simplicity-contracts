@@ -3,7 +3,6 @@ use crate::taproot_pubkey_gen::TaprootPubkeyGen;
 
 use lwk_wollet::elements::LockTime;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 
 use simplicityhl::elements::secp256k1_zkp::{PublicKey, SecretKey};
 use simplicityhl::elements::{Address, AssetId, OutPoint, Script, Sequence};
@@ -18,8 +17,6 @@ pub struct RuntimeParams {
     pub fee_rate_sat_vb: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub locktime: Option<LockTime>,
-    #[serde(flatten, default)]
-    pub extra: BTreeMap<String, serde_json::Value>,
 }
 
 impl RuntimeParams {

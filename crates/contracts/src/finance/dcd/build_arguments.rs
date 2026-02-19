@@ -557,7 +557,7 @@ impl DCDArguments {
     }
 }
 
-impl simplicityhl_core::Encodable for DCDArguments {}
+impl wallet_abi::Encodable for DCDArguments {}
 
 fn u256_from_le_hex(hex_le: &str) -> U256 {
     let mut bytes = <[u8; 32]>::from_hex(hex_le).expect("expected 32 bytes hex");
