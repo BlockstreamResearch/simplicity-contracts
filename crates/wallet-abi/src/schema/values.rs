@@ -1,286 +1,163 @@
-use crate::schema::expression::RefExpression;
+use crate::WalletAbiError;
+use crate::runtime::WalletRuntimeConfig;
+use lwk_wollet::elements::Transaction;
+use lwk_wollet::elements::pset::PartiallySignedTransaction;
+use lwk_wollet::hashes::Hash;
+use lwk_wollet::secp256k1::{Message, XOnlyPublicKey};
+use serde::{Deserialize, Serialize};
+use simplicityhl::num::U256;
+use simplicityhl::simplicity::jet::elements::ElementsEnv;
+use simplicityhl::str::WitnessName;
+use simplicityhl::value::{UIntValue, ValueConstructible};
+use simplicityhl::{Arguments, Value, WitnessValues};
+use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 
-use std::fmt;
-
-use simplicityhl::ResolvedType;
-use simplicityhl::parse::ParseFromStr;
-
-use serde::de::{MapAccess, Visitor};
-use serde::ser::SerializeMap;
-use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ArgumentValue {
-    Argument(simplicityhl::Value),
-    Ref(RefExpression),
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum RuntimeSimfValue {
+    NewIssuanceAsset { input_index: u32 },
+    NewIssuanceToken { input_index: u32 },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum WitnessValue {
-    Witness(simplicityhl::Value),
-    Ref(RefExpression),
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SimfArguments {
+    pub resolved: simplicityhl::Arguments,
+    pub runtime_arguments: HashMap<String, RuntimeSimfValue>,
 }
 
-#[derive(Debug, Clone, Copy)]
-enum BindingKind {
-    Argument,
-    Witness,
-}
-
-impl BindingKind {
-    const fn kind_name(self) -> &'static str {
-        match self {
-            Self::Argument => "argument value",
-            Self::Witness => "witness value",
+impl SimfArguments {
+    pub fn new(static_arguments: simplicityhl::Arguments) -> Self {
+        Self {
+            resolved: static_arguments,
+            runtime_arguments: HashMap::new(),
         }
     }
 
-    const fn value_variant_name(self) -> &'static str {
-        match self {
-            Self::Argument => "Argument",
-            Self::Witness => "Witness",
-        }
+    pub fn append_runtime_simf_value(&mut self, name: &str, runtime_simf_value: RuntimeSimfValue) {
+        self.runtime_arguments
+            .insert(name.to_string(), runtime_simf_value);
     }
 }
 
-#[derive(Deserialize)]
-#[serde(field_identifier, rename_all = "snake_case")]
-enum BindingField {
-    Ref,
-    Value,
-    Type,
+/// Convert compiled Simplicity arguments into bytes.
+pub fn serialize_arguments(arguments: &SimfArguments) -> Result<Vec<u8>, WalletAbiError> {
+    Ok(serde_json::to_vec(arguments)?)
 }
 
-fn serialize_binding<S: Serializer>(
-    value: &simplicityhl::Value,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    let mut map = serializer.serialize_map(Some(2))?;
-    map.serialize_entry("value", &value.to_string())?;
-    map.serialize_entry("type", &value.ty().to_string())?;
-    map.end()
-}
+/// Convert compiled Simplicity arguments into bytes.
+pub fn resolve_arguments(
+    bytes: &[u8],
+    pst: &PartiallySignedTransaction,
+) -> Result<Arguments, WalletAbiError> {
+    let simf_arguments: SimfArguments = serde_json::from_slice(bytes)?;
 
-fn serialize_ref_binding<S: Serializer>(
-    reference: &RefExpression,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    let mut map = serializer.serialize_map(Some(1))?;
-    map.serialize_entry("ref", &reference.reference)?;
-    map.end()
-}
+    let mut final_arguments: HashMap<WitnessName, Value> = HashMap::<WitnessName, Value>::new();
 
-fn parse_ref_or_value_binding<'de, D: Deserializer<'de>>(
-    deserializer: D,
-    kind: BindingKind,
-) -> Result<(Option<RefExpression>, Option<simplicityhl::Value>), D::Error> {
-    struct BindingVisitor {
-        kind: BindingKind,
-    }
+    for (name, value) in simf_arguments.runtime_arguments {
+        match value {
+            RuntimeSimfValue::NewIssuanceAsset { input_index } => {
+                let (asset, _) = pst
+                    .inputs()
+                    .get(input_index as usize)
+                    .unwrap()
+                    .issuance_ids();
 
-    impl<'de> Visitor<'de> for BindingVisitor {
-        type Value = (Option<RefExpression>, Option<simplicityhl::Value>);
-
-        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(
-                formatter,
-                "{} object with either {{\"ref\": ...}} or {{\"value\": ..., \"type\": ...}}",
-                self.kind.kind_name()
-            )
-        }
-
-        fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
-            let mut reference: Option<String> = None;
-            let mut value: Option<String> = None;
-            let mut ty: Option<String> = None;
-
-            while let Some(key) = map.next_key::<BindingField>()? {
-                match key {
-                    BindingField::Ref => {
-                        if reference.is_some() {
-                            return Err(de::Error::duplicate_field("ref"));
-                        }
-                        reference = Some(map.next_value()?);
-                    }
-                    BindingField::Value => {
-                        if value.is_some() {
-                            return Err(de::Error::duplicate_field("value"));
-                        }
-                        value = Some(map.next_value()?);
-                    }
-                    BindingField::Type => {
-                        if ty.is_some() {
-                            return Err(de::Error::duplicate_field("type"));
-                        }
-                        ty = Some(map.next_value()?);
-                    }
-                }
+                final_arguments.insert(
+                    WitnessName::from_str_unchecked(&name),
+                    Value::from(UIntValue::U256(U256::from_byte_array(asset.into_inner().0))),
+                );
             }
+            RuntimeSimfValue::NewIssuanceToken { input_index } => {
+                let (_, token) = pst
+                    .inputs()
+                    .get(input_index as usize)
+                    .unwrap()
+                    .issuance_ids();
 
-            match (reference, value, ty) {
-                (Some(reference), None, None) => Ok((Some(RefExpression { reference }), None)),
-                (None, Some(value_str), Some(type_str)) => {
-                    let resolved_type =
-                        ResolvedType::parse_from_str(&type_str).map_err(|error| {
-                            de::Error::custom(format!(
-                                "invalid {} type '{}': {error}",
-                                self.kind.kind_name(),
-                                type_str
-                            ))
-                        })?;
-
-                    let parsed_value =
-                        simplicityhl::Value::parse_from_str(&value_str, &resolved_type).map_err(
-                            |error| {
-                                de::Error::custom(format!(
-                                    "invalid {} value '{}' for type '{}': {error}",
-                                    self.kind.kind_name(),
-                                    value_str,
-                                    type_str
-                                ))
-                            },
-                        )?;
-
-                    Ok((None, Some(parsed_value)))
-                }
-                (Some(_), Some(_), _) | (Some(_), _, Some(_)) => Err(de::Error::custom(format!(
-                    "{} must not contain both 'ref' and 'value'/'type'",
-                    self.kind.kind_name()
-                ))),
-                (None, Some(_), None) => Err(de::Error::custom(format!(
-                    "{} with 'value' must also include 'type'",
-                    self.kind.kind_name()
-                ))),
-                (None, None, Some(_)) => Err(de::Error::custom(format!(
-                    "{} with 'type' must also include 'value'",
-                    self.kind.kind_name()
-                ))),
-                (None, None, None) => Err(de::Error::custom(format!(
-                    "{} must include either 'ref' or both 'value' and 'type'",
-                    self.kind.kind_name()
-                ))),
+                final_arguments.insert(
+                    WitnessName::from_str_unchecked(&name),
+                    Value::from(UIntValue::U256(U256::from_byte_array(token.into_inner().0))),
+                );
             }
         }
     }
 
-    deserializer.deserialize_map(BindingVisitor { kind })
+    for static_arg in simf_arguments.resolved.iter() {
+        final_arguments.insert(static_arg.0.clone(), static_arg.1.clone());
+    }
+
+    Ok(Arguments::from(final_arguments))
 }
 
-impl Serialize for ArgumentValue {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        match self {
-            Self::Argument(value) => serialize_binding(value, serializer),
-            Self::Ref(reference) => serialize_ref_binding(reference, serializer),
-        }
-    }
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum RuntimeSimfWitness {
+    SigHashAll {
+        name: String,
+        public_key: XOnlyPublicKey,
+    },
 }
 
-impl<'de> Deserialize<'de> for ArgumentValue {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let (reference, value) = parse_ref_or_value_binding(deserializer, BindingKind::Argument)?;
-        if let Some(reference) = reference {
-            return Ok(Self::Ref(reference));
-        }
-        if let Some(value) = value {
-            return Ok(Self::Argument(value));
-        }
-        Err(de::Error::custom(format!(
-            "{} must resolve to '{}' or '{}'",
-            BindingKind::Argument.kind_name(),
-            BindingKind::Argument.value_variant_name(),
-            "Ref"
-        )))
-    }
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SimfWitness {
+    pub resolved: WitnessValues,
+    pub runtime_arguments: HashMap<String, RuntimeSimfWitness>,
 }
 
-impl Serialize for WitnessValue {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        match self {
-            Self::Witness(value) => serialize_binding(value, serializer),
-            Self::Ref(reference) => serialize_ref_binding(reference, serializer),
-        }
-    }
+/// Convert compiled Simplicity witness into bytes.
+pub fn serialize_witness(witness: &SimfArguments) -> Result<Vec<u8>, WalletAbiError> {
+    Ok(serde_json::to_vec(witness)?)
 }
 
-impl<'de> Deserialize<'de> for WitnessValue {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let (reference, value) = parse_ref_or_value_binding(deserializer, BindingKind::Witness)?;
-        if let Some(reference) = reference {
-            return Ok(Self::Ref(reference));
+/// Convert compiled Simplicity witness into bytes.
+pub fn resolve_witness(
+    bytes: &[u8],
+    runtime: &WalletRuntimeConfig,
+    env: &ElementsEnv<Arc<Transaction>>,
+) -> Result<WitnessValues, WalletAbiError> {
+    let simf_arguments: SimfWitness = serde_json::from_slice(bytes)?;
+
+    let mut final_witness: HashMap<WitnessName, Value> = HashMap::<WitnessName, Value>::new();
+
+    let keypair = runtime.signer_keypair()?;
+    let sighash_all = Message::from_digest(env.c_tx_env().sighash_all().to_byte_array());
+
+    for (name, value) in simf_arguments.runtime_arguments {
+        match value {
+            RuntimeSimfWitness::SigHashAll { name, public_key } => {
+                assert_eq!(keypair.x_only_public_key().0, public_key);
+
+                final_witness.insert(
+                    WitnessName::from_str_unchecked(&name),
+                    Value::byte_array(keypair.sign_schnorr(sighash_all).serialize()),
+                );
+            }
         }
-        if let Some(value) = value {
-            return Ok(Self::Witness(value));
-        }
-        Err(de::Error::custom(format!(
-            "{} must resolve to '{}' or '{}'",
-            BindingKind::Witness.kind_name(),
-            BindingKind::Witness.value_variant_name(),
-            "Ref"
-        )))
     }
+
+    for static_arg in simf_arguments.resolved.iter() {
+        final_witness.insert(static_arg.0.clone(), static_arg.1.clone());
+    }
+
+    Ok(WitnessValues::from(final_witness))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn argument_value_roundtrip_ref() {
-        let value = ArgumentValue::Ref(RefExpression {
-            reference: "params.arguments.foo".to_string(),
-        });
-        let json = serde_json::to_value(&value).expect("serialize");
-        assert_eq!(json, serde_json::json!({ "ref": "params.arguments.foo" }));
-
-        let decoded: ArgumentValue = serde_json::from_value(json).expect("deserialize");
-        assert_eq!(decoded, value);
+/// Build request params `extra` map with required arguments/internal key
+/// and optional branch payload.
+///
+/// Separation of concerns:
+/// - schema owns branch defaults and static path structure
+/// - callers only provide dynamic branches or explicit overrides
+#[must_use]
+pub fn build_params_extra(
+    arguments: serde_json::Value,
+    internal_key: serde_json::Value,
+    branch: Option<serde_json::Value>,
+) -> BTreeMap<String, serde_json::Value> {
+    let mut extra = BTreeMap::new();
+    extra.insert("arguments".to_string(), arguments);
+    extra.insert("internal_key".to_string(), internal_key);
+    if let Some(branch) = branch {
+        extra.insert("branch".to_string(), branch);
     }
-
-    #[test]
-    fn witness_value_roundtrip_constant() {
-        let value = WitnessValue::Witness(simplicityhl::Value::from(false));
-        let json = serde_json::to_value(&value).expect("serialize");
-        assert_eq!(
-            json,
-            serde_json::json!({
-                "value": "false",
-                "type": "bool"
-            })
-        );
-
-        let decoded: WitnessValue = serde_json::from_value(json).expect("deserialize");
-        assert_eq!(decoded, value);
-    }
-
-    #[test]
-    fn argument_value_rejects_mixed_ref_and_value_keys() {
-        let err = serde_json::from_value::<ArgumentValue>(serde_json::json!({
-            "ref": "params.a",
-            "value": "1",
-            "type": "u8"
-        }))
-        .expect_err("mixed keys must fail");
-        let message = err.to_string();
-        assert!(message.contains("must not contain both 'ref' and 'value'/'type'"));
-    }
-
-    #[test]
-    fn witness_value_rejects_missing_type() {
-        let err = serde_json::from_value::<WitnessValue>(serde_json::json!({
-            "value": "1"
-        }))
-        .expect_err("value without type must fail");
-        let message = err.to_string();
-        assert!(message.contains("with 'value' must also include 'type'"));
-    }
-
-    #[test]
-    fn argument_value_rejects_unknown_key() {
-        let err = serde_json::from_value::<ArgumentValue>(serde_json::json!({
-            "foo": "bar"
-        }))
-        .expect_err("unknown key must fail");
-        let message = err.to_string();
-        assert!(message.contains("unknown field `foo`"));
-    }
+    extra
 }

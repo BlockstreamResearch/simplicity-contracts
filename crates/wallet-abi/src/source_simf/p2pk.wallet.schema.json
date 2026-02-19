@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "schema_id": "p2pk-wallet",
+  "schema_version": "2.0.0",
+  "sources": {
+    "p2pk.simf": "fn main() {\n    jet::bip_0340_verify((param::PUBLIC_KEY, jet::sig_all_hash()), witness::SIGNATURE)\n}"
+  },
+  "branches": {
+    "p2pk.spend": {
+      "params_schema": { "type": "object" },
+      "contract_inputs": [
+        {
+          "id": "contract_in0",
+          "utxo_source": "provided",
+          "selector": {
+            "role": "contract_in0"
+          },
+          "finalizer": {
+            "type": "simf",
+            "source_simf": "p2pk.simf",
+            "arguments": {
+              "PUBLIC_KEY": { "ref": "tx.signer_xonly_pubkey" }
+            },
+            "witness": {
+              "SIGNATURE": { "ref": "tx.sign_sighash_all" }
+            }
+          }
+        }
+      ],
+      "contract_outputs": []
+    },
+    "basic.transfer_native": {
+      "params_schema": { "type": "object" },
+      "contract_inputs": [
+        {
+          "id": "contract_in0",
+          "utxo_source": "provided",
+          "selector": {
+            "role": "contract_in0"
+          },
+          "finalizer": {
+            "type": "simf",
+            "source_simf": "p2pk.simf",
+            "arguments": {
+              "PUBLIC_KEY": { "ref": "tx.signer_xonly_pubkey" }
+            },
+            "witness": {
+              "SIGNATURE": { "ref": "tx.sign_sighash_all" }
+            }
+          }
+        }
+      ],
+      "contract_outputs": []
+    },
+    "basic.split_native": {
+      "params_schema": { "type": "object" },
+      "contract_inputs": [
+        {
+          "id": "contract_in0",
+          "utxo_source": "provided",
+          "selector": {
+            "role": "contract_in0"
+          },
+          "finalizer": {
+            "type": "simf",
+            "source_simf": "p2pk.simf",
+            "arguments": {
+              "PUBLIC_KEY": { "ref": "tx.signer_xonly_pubkey" }
+            },
+            "witness": {
+              "SIGNATURE": { "ref": "tx.sign_sighash_all" }
+            }
+          }
+        }
+      ],
+      "contract_outputs": []
+    },
+    "basic.transfer_asset": {
+      "params_schema": { "type": "object" },
+      "contract_inputs": [
+        {
+          "id": "contract_in0",
+          "utxo_source": "provided",
+          "selector": {
+            "role": "contract_in0"
+          },
+          "finalizer": {
+            "type": "simf",
+            "source_simf": "p2pk.simf",
+            "arguments": {
+              "PUBLIC_KEY": { "ref": "tx.signer_xonly_pubkey" }
+            },
+            "witness": {
+              "SIGNATURE": { "ref": "tx.sign_sighash_all" }
+            }
+          }
+        }
+      ],
+      "contract_outputs": []
+    },
+    "basic.issue_asset": {
+      "params_schema": { "type": "object" },
+      "contract_inputs": [
+        {
+          "id": "contract_in0",
+          "utxo_source": "provided",
+          "selector": {
+            "role": "contract_in0"
+          },
+          "finalizer": {
+            "type": "simf",
+            "source_simf": "p2pk.simf",
+            "arguments": {
+              "PUBLIC_KEY": { "ref": "tx.signer_xonly_pubkey" }
+            },
+            "witness": {
+              "SIGNATURE": { "ref": "tx.sign_sighash_all" }
+            }
+          }
+        }
+      ],
+      "contract_outputs": []
+    },
+    "basic.reissue_asset": {
+      "params_schema": { "type": "object" },
+      "contract_inputs": [
+        {
+          "id": "contract_in0",
+          "utxo_source": "provided",
+          "selector": {
+            "role": "contract_in0"
+          },
+          "finalizer": {
+            "type": "simf",
+            "source_simf": "p2pk.simf",
+            "arguments": {
+              "PUBLIC_KEY": { "ref": "tx.signer_xonly_pubkey" }
+            },
+            "witness": {
+              "SIGNATURE": { "ref": "tx.sign_sighash_all" }
+            }
+          }
+        }
+      ],
+      "contract_outputs": []
+    }
+  }
+}

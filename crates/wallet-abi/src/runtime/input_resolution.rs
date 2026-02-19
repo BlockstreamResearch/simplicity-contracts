@@ -45,11 +45,8 @@
 //!
 
 use crate::runtime::params::RuntimeParamsEnvelope;
-use crate::runtime::WalletRuntimeConfig;
-use crate::{
-    AmountFilter, AssetFilter, AssetVariant, InputBlinder, InputIssuance, InputIssuanceKind,
-    InputSchema, LockFilter, UTXOSource, WalletAbiError, WalletSourceFilter,
-};
+use crate::runtime::{get_finalizer_spec_key, WalletRuntimeConfig};
+use crate::{AmountFilter, AssetFilter, AssetVariant, FinalizerSpec, InputBlinder, InputIssuance, InputIssuanceKind, InputSchema, LockFilter, UTXOSource, WalletAbiError, WalletSourceFilter};
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -541,6 +538,7 @@ impl WalletRuntimeConfig {
             apply_issuance_to_pset_input(&mut pset_input, issuance, &material.secrets)?;
         }
 
+        pset_input.proprietary.insert(get_finalizer_spec_key(), input.finalizer.encode());
         pst.add_input(pset_input);
 
         Ok(())
@@ -695,9 +693,11 @@ impl WalletRuntimeConfig {
             )));
         }
 
+        // TODO: use wollet cache here instead of fetching.
         let tx_out = self.fetch_tx_out(&selected.outpoint)?;
         let mut pset_input = Input::from_prevout(selected.outpoint);
         pset_input.witness_utxo = Some(tx_out);
+        pset_input.proprietary.insert(get_finalizer_spec_key(), FinalizerSpec::Wallet.encode());
         pst.add_input(pset_input);
 
         add_balance(

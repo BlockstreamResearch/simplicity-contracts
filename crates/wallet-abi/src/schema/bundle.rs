@@ -1,6 +1,4 @@
 use crate::WalletAbiError;
-use crate::schema::expression::RefExpression;
-use crate::schema::values::{ArgumentValue, WitnessValue};
 use crate::taproot_pubkey_gen::TaprootPubkeyGen;
 
 use std::collections::BTreeMap;
@@ -9,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use simplicityhl::elements::secp256k1_zkp::{PublicKey, SecretKey};
 use simplicityhl::elements::{Address, AssetId, OutPoint, Script, Sequence};
+use simplicityhl::WitnessValues;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SchemaBundle {
@@ -39,7 +38,7 @@ impl SchemaBundle {
 
         Ok(bundle)
     }
-    
+
     pub fn get_branch(&self, branch: &str) -> Result<&BranchSchema, WalletAbiError> {
         self
             .branch(branch)
@@ -143,10 +142,20 @@ pub enum FinalizerSpec {
     Wallet,
     Simf {
         source_simf: String,
-        internal_key: Box<Option<TaprootPubkeyGen>>,
-        arguments: BTreeMap<String, ArgumentValue>,
-        witness: BTreeMap<String, WitnessValue>,
+        internal_key: Box<TaprootPubkeyGen>,
+        arguments: Vec<u8>,
+        witness: Vec<u8>,
     },
+}
+
+impl FinalizerSpec {
+    pub fn encode(&self) -> Vec<u8> {
+        serde_json::to_vec(self).unwrap()
+    }
+
+    pub fn decode(bytes: &[u8]) -> Result<Self, WalletAbiError> {
+        serde_json::from_slice(bytes).map_err(Into::into)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -197,10 +206,6 @@ pub enum OutputIntent {
 pub enum LockVariant {
     Script {
         script: Script,
-    },
-    Ref {
-        #[serde(flatten)]
-        reference: RefExpression,
     },
     Finalizer {
         finalizer: Box<FinalizerSpec>,
