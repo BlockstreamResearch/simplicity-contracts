@@ -10,9 +10,9 @@ use wallet_abi::schema::tx_create::{TX_CREATE_ABI_VERSION, TxCreateRequest};
 use wallet_abi::schema::values::{serialize_arguments, serialize_witness};
 use wallet_abi::taproot_pubkey_gen::TaprootPubkeyGen;
 use wallet_abi::{
-    AssetVariant, BlinderVariant, FinalizerSpec, InputBlinder, InputSchema, LockVariant, Network,
-    OutputSchema, ProgramError, RuntimeParams, UTXOSource, WalletAbiError, create_p2tr_address,
-    load_program,
+    AssetVariant, BlinderVariant, FinalizerSpec, InputBlinder, InputSchema, InternalKeySource,
+    LockVariant, Network, OutputSchema, ProgramError, RuntimeParams, UTXOSource, WalletAbiError,
+    create_p2tr_address, load_program,
 };
 
 use simplicityhl::elements::{Address, LockTime, OutPoint, Sequence, Txid};
@@ -144,7 +144,9 @@ impl OptionOfferRuntime {
     ) -> Result<FinalizerSpec, WalletAbiError> {
         Ok(FinalizerSpec::Simf {
             source_simf: OPTION_OFFER_SOURCE.to_string(),
-            internal_key: Box::new(self.tap.clone()),
+            internal_key: InternalKeySource::External {
+                key: Box::new(self.tap.clone()),
+            },
             arguments: serialize_arguments(&self.args.build_simf_arguments())?,
             witness: serialize_witness(&build_option_offer_witness(
                 witness,

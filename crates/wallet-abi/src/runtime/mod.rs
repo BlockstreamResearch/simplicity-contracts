@@ -26,33 +26,37 @@ mod output_resolution;
 use crate::error::WalletAbiError;
 use crate::schema::tx_create::{TransactionInfo, TxCreateRequest, TxCreateResponse};
 use crate::{FinalizerSpec, InputSchema, LockFilter, RuntimeParams, UTXOSource};
-use std::collections::HashMap;
 
+use crate::runtime::utils::to_lwk_wollet_network;
+use crate::schema::values::{resolve_arguments, resolve_witness};
+
+use std::collections::HashMap;
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use crate::runtime::utils::to_lwk_wollet_network;
-use crate::schema::values::{resolve_arguments, resolve_witness};
 use lwk_common::{Bip, Network, Signer};
 use lwk_signer::SwSigner;
 use lwk_signer::bip39::rand::thread_rng;
+
 use lwk_simplicity::runner::run_program;
 use lwk_simplicity::scripts::{control_block, load_program};
 use lwk_simplicity::signer::get_and_verify_env;
+
 use lwk_wollet::asyncr::EsploraClient;
 use lwk_wollet::bitcoin::bip32::{DerivationPath, Xpriv};
 use lwk_wollet::elements::hex::ToHex;
 use lwk_wollet::elements::pset::PartiallySignedTransaction;
 use lwk_wollet::elements::pset::raw::ProprietaryKey;
 use lwk_wollet::elements::{Address, BlockHash, OutPoint, Script, TxOut, TxOutSecrets};
-use lwk_wollet::elements_miniscript::ToPublicKey;
 use lwk_wollet::elements_miniscript::psbt::PsbtExt;
 use lwk_wollet::hashes::Hash;
 use lwk_wollet::secp256k1::{Keypair, XOnlyPublicKey};
 use lwk_wollet::{EC, Wollet, WolletDescriptor};
+
 use simplicityhl::elements::{Transaction, encode};
 use simplicityhl::tracker::TrackerLogLevel;
+
 use tokio::sync::Mutex;
 
 /// Maximum number of fee fixed-point iterations before failing.
@@ -470,7 +474,7 @@ impl WalletRuntimeConfig {
                     let env = get_and_verify_env(
                         &pst.extract_tx()?,
                         &program,
-                        &internal_key.pubkey.to_x_only_pubkey(),
+                        &internal_key.get_x_only_pubkey(),
                         &utxos,
                         self.network,
                         input_index,
@@ -488,7 +492,7 @@ impl WalletRuntimeConfig {
                         simplicity_witness_bytes,
                         simplicity_program_bytes,
                         cmr.as_ref().to_vec(),
-                        control_block(cmr, internal_key.pubkey.to_x_only_pubkey()).serialize(),
+                        control_block(cmr, internal_key.get_x_only_pubkey()).serialize(),
                     ]);
                 }
             }

@@ -341,13 +341,14 @@ fn resolve_output_asset(
 /// - `Script` uses caller-provided script directly.
 /// - `Finalizer::Wallet` uses signer receive script.
 /// - `Finalizer::Simf` uses internal taproot script from finalizer metadata.
-fn resolve_output_lock_script(lock: &LockVariant, signer_address: &Address) -> Script {
+fn resolve_output_lock_script(
+    lock: &LockVariant,
+    pst: &PartiallySignedTransaction,
+    network: lwk_common::Network,
+) -> Result<Script, WalletAbiError> {
     match lock {
-        LockVariant::Script { script } => script.clone(),
-        LockVariant::Finalizer { finalizer } => match finalizer.as_ref() {
-            FinalizerSpec::Wallet => signer_address.script_pubkey(),
-            FinalizerSpec::Simf { internal_key, .. } => internal_key.address.script_pubkey(),
-        },
+        LockVariant::Script { script } => Ok(script.clone()),
+        LockVariant::Finalizer { finalizer } => finalizer.try_resolve_script_pubkey(pst, network),
     }
 }
 
@@ -405,12 +406,13 @@ fn materialize_requested_outputs(
     pst: &mut PartiallySignedTransaction,
     params: &RuntimeParams,
     signer_address: &Address,
+    network: lwk_common::Network,
 ) -> Result<Option<usize>, WalletAbiError> {
     let mut fee_output_index = None;
 
     for output in &params.outputs {
         let asset_id = resolve_output_asset(&output.id, &output.asset, pst, params)?;
-        let script = resolve_output_lock_script(&output.lock, signer_address);
+        let script = resolve_output_lock_script(&output.lock, pst, network)?;
 
         let blinding_key: Option<PublicKey> = match output.blinder {
             BlinderVariant::Wallet => Some(
@@ -568,7 +570,8 @@ impl WalletRuntimeConfig {
     ) -> Result<PartiallySignedTransaction, WalletAbiError> {
         let signer_address = self.signer_receive_address()?;
         let wallet_input_indices = wallet_input_indices(&pst)?;
-        let fee_output_index = materialize_requested_outputs(&mut pst, params, &signer_address)?;
+        let fee_output_index =
+            materialize_requested_outputs(&mut pst, params, &signer_address, self.network)?;
 
         apply_fee_target(
             &mut pst,

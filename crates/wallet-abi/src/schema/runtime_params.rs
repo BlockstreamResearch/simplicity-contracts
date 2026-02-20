@@ -4,9 +4,15 @@
 //! enum variants are serialized in `snake_case` across this schema.
 
 use crate::WalletAbiError;
-use crate::taproot_pubkey_gen::TaprootPubkeyGen;
+use crate::schema::values::resolve_arguments;
+use crate::taproot_pubkey_gen::{TaprootPubkeyGen, generate_public_key_without_private};
 
+use lwk_simplicity::scripts::{create_p2tr_address, load_program};
+
+use lwk_wollet::bitcoin::XOnlyPublicKey;
 use lwk_wollet::elements::LockTime;
+use lwk_wollet::elements::pset::PartiallySignedTransaction;
+
 use serde::{Deserialize, Serialize};
 
 use simplicityhl::elements::secp256k1_zkp::{PublicKey, SecretKey};
@@ -113,6 +119,33 @@ pub struct InputIssuance {
     pub entropy: [u8; 32],
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum InternalKeySource {
+    Local { key: PublicKey },
+    External { key: Box<TaprootPubkeyGen> },
+}
+
+impl Default for InternalKeySource {
+    fn default() -> Self {
+        let (deterministic_pubkey, _) = generate_public_key_without_private();
+
+        Self::Local {
+            key: deterministic_pubkey.inner,
+        }
+    }
+}
+
+impl InternalKeySource {
+    #[must_use]
+    pub fn get_x_only_pubkey(&self) -> XOnlyPublicKey {
+        match self {
+            Self::Local { key } => key.x_only_public_key().0,
+            Self::External { key } => key.pubkey.inner.x_only_public_key().0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum FinalizerSpec {
@@ -120,10 +153,47 @@ pub enum FinalizerSpec {
     Wallet,
     Simf {
         source_simf: String,
-        internal_key: Box<TaprootPubkeyGen>,
+        internal_key: InternalKeySource,
         arguments: Vec<u8>,
         witness: Vec<u8>,
     },
+}
+
+impl FinalizerSpec {
+    pub fn try_resolve_script_pubkey(
+        &self,
+        pst: &PartiallySignedTransaction,
+        network: lwk_common::Network,
+    ) -> Result<Script, WalletAbiError> {
+        let Self::Simf {
+            source_simf,
+            internal_key,
+            arguments,
+            ..
+        } = self
+        else {
+            return Err(WalletAbiError::InvalidRequest(
+                "trying to get runtime key from non-simplicity".to_string(),
+            ));
+        };
+
+        let internal_key = match internal_key {
+            InternalKeySource::Local { key } => key,
+            InternalKeySource::External { key } => return Ok(key.address.script_pubkey()),
+        };
+
+        let arguments = resolve_arguments(arguments, pst)?;
+
+        let program = load_program(source_simf, arguments)?;
+
+        let p2tr = create_p2tr_address(
+            program.commit().cmr(),
+            &internal_key.x_only_public_key().0,
+            network.address_params(),
+        );
+
+        Ok(p2tr.script_pubkey())
+    }
 }
 
 impl FinalizerSpec {
