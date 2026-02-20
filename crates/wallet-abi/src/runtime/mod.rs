@@ -159,7 +159,7 @@ impl WalletRuntimeConfig {
     pub fn signer_receive_address(&self) -> Result<Address, WalletAbiError> {
         let descriptor = self.get_descriptor()?;
 
-        Ok(descriptor.address(0, self.network.address_params())?)
+        Ok(descriptor.address(1, self.network.address_params())?)
     }
 
     pub(crate) fn signer_keypair(&self) -> Result<Keypair, WalletAbiError> {
