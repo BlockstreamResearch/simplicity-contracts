@@ -22,36 +22,6 @@ pub enum ValidationError {
     },
 }
 
-/// Errors from taproot pubkey generation and verification.
-#[derive(Debug, thiserror::Error)]
-pub enum TaprootPubkeyGenError {
-    #[error("Invalid pubkey recovered: expected {expected}, got {actual}")]
-    InvalidPubkey { expected: String, actual: String },
-
-    #[error("Invalid address recovered: expected {expected}, got {actual}")]
-    InvalidAddress { expected: String, actual: String },
-
-    #[error(
-        "Invalid taproot pubkey gen string: expected 3 parts separated by ':', got {parts_count}"
-    )]
-    InvalidFormat { parts_count: usize },
-
-    #[error("Failed to decode seed hex: {0}")]
-    SeedHexDecode(#[from] hex::FromHexError),
-
-    #[error("Failed to parse public key: {0}")]
-    PublicKeyParse(#[from] simplicityhl::simplicity::bitcoin::key::ParsePublicKeyError),
-
-    #[error("Failed to parse address: {0}")]
-    AddressParse(#[from] simplicityhl::elements::address::AddressError),
-
-    #[error("Failed to create X-only public key from bytes: {0}")]
-    XOnlyPublicKey(#[from] simplicityhl::simplicity::bitcoin::secp256k1::Error),
-
-    #[error("Failed to generate address: {0}")]
-    AddressGeneration(#[from] simplicityhl_core::ProgramError),
-}
-
 /// Errors from transaction building operations.
 #[derive(Debug, thiserror::Error)]
 pub enum TransactionBuildError {
@@ -120,12 +90,6 @@ pub enum TransactionBuildError {
 
     #[error(transparent)]
     Validation(#[from] ValidationError),
-
-    #[error(transparent)]
-    TaprootPubkeyGen(#[from] TaprootPubkeyGenError),
-
-    #[error(transparent)]
-    IssuanceValidation(#[from] crate::sdk::IssuanceVerificationError),
 }
 
 /// Errors from extracting arguments from Arguments struct.
@@ -139,25 +103,4 @@ pub enum FromArgumentsError {
 
     #[error("Invalid asset ID bytes for {name}")]
     InvalidAssetId { name: String },
-}
-
-/// Errors from DCD ratio calculations.
-#[cfg(feature = "finance-dcd")]
-#[derive(Debug, thiserror::Error)]
-pub enum DCDRatioError {
-    #[error("Arithmetic overflow: {operation}")]
-    Overflow { operation: String },
-
-    #[error("Value exceeds u64: {value_name}")]
-    U64Overflow { value_name: String },
-
-    #[error("{dividend} must be divisible by {divisor}, remainder {remainder}")]
-    NotDivisible {
-        dividend: String,
-        divisor: String,
-        remainder: u64,
-    },
-
-    #[error("{value_name} must be non-zero")]
-    ZeroValue { value_name: String },
 }

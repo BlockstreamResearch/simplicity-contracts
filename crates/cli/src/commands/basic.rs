@@ -1,136 +1,87 @@
 use crate::modules::store::Store;
-use crate::modules::utils::derive_keypair;
 
-use anyhow::anyhow;
+use crate::modules::utils::execute_request;
 
-use crate::commands::NETWORK;
-use crate::explorer::{broadcast_tx, fetch_utxo};
+use anyhow::{Context, anyhow};
 
 use clap::Subcommand;
-use simplicityhl::elements::hashes::{Hash, sha256};
-use simplicityhl::elements::pset::serialize::Serialize;
-use simplicityhl::elements::secp256k1_zkp::SECP256K1;
-use simplicityhl::elements::{AssetId, ContractHash};
-use simplicityhl::simplicity::elements::{Address, OutPoint};
-use simplicityhl::simplicity::hex::DisplayHex;
 
-use simplicityhl::tracker::TrackerLogLevel;
-use simplicityhl_core::{
-    create_p2pk_signature, derive_public_blinder_key, finalize_p2pk_transaction, get_p2pk_address,
-    hash_script,
+use simplicityhl::elements::encode;
+use simplicityhl::elements::hashes::sha256::Midstate;
+use simplicityhl::elements::hex::ToHex;
+use simplicityhl::elements::pset::serialize::Serialize;
+use simplicityhl::elements::{Address, AssetId, Sequence, Transaction};
+
+use wallet_abi::runtime::WalletRuntimeConfig;
+use wallet_abi::schema::tx_create::{TX_CREATE_ABI_VERSION, TxCreateRequest};
+use wallet_abi::taproot_pubkey_gen::get_random_seed;
+use wallet_abi::{
+    AmountFilter, AssetFilter, AssetVariant, BlinderVariant, FinalizerSpec, InputBlinder,
+    InputIssuance, InputIssuanceKind, InputSchema, LockFilter, LockVariant, OutputSchema,
+    RuntimeParams, UTXOSource, WalletSourceFilter, get_new_asset_entropy,
 };
+
+fn decode_transaction(tx_hex: &str) -> anyhow::Result<Transaction> {
+    let tx_bytes = hex::decode(tx_hex).context("failed to decode transaction hex")?;
+    encode::deserialize(&tx_bytes).context("failed to decode transaction bytes")
+}
 
 #[derive(Subcommand, Debug)]
 pub enum Basic {
-    /// Print a deterministic Liquid testnet address derived from index
-    Address {
-        /// Address index (0-based)
-        index: u32,
-    },
-    /// Build tx transferring LBTC (explicit) to recipient
-    TransferNative {
-        /// Transaction id (hex) and output index (vout) of the UTXO you will spend
-        #[arg(long = "utxo")]
-        utxo_outpoint: OutPoint,
-        /// Recipient address (Liquid testnet bech32m)
+    /// Print a deterministic address
+    Address,
+    /// Print wallet balances grouped by asset id
+    Balance,
+    /// Build tx transferring an asset to recipient
+    Transfer {
+        /// Recipient Liquid address
         #[arg(long = "to-address")]
         to_address: Address,
-        /// Amount to send to the recipient in satoshis (LBTC)
+        /// Asset to send, LBTC by default
+        #[arg(long = "asset")]
+        asset: Option<AssetId>,
+        /// Amount to send to the recipient in satoshis
         #[arg(long = "send-sats")]
         amount_to_send: u64,
-        /// Miner fee in satoshis (LBTC)
-        #[arg(long = "fee-sats")]
-        fee_amount: u64,
-        /// Account that will pay for transaction fees and that owns a tokens to send
-        #[arg(long = "account-index", default_value_t = 0)]
-        account_index: u32,
         /// When set, broadcast the built transaction via Esplora and print txid
         #[arg(long = "broadcast")]
         broadcast: bool,
     },
-    /// Build tx splitting one LBTC UTXO into any number of UTXOs.
-    SplitNative {
-        /// Transaction id (hex) and output index (vout) of the UTXO you will split
-        #[arg(long = "fee-utxo")]
-        fee_utxo: OutPoint,
-        /// Number of UTXOs to split the LBTC UTXO into
+    /// Build tx splitting funds into multiple outputs.
+    Split {
+        /// Asset to split, LBTC by default
+        #[arg(long = "asset")]
+        asset: Option<AssetId>,
+        /// Number of UTXOs to split the UTXO into
         #[arg(long = "split-parts")]
         split_parts: u64,
-        /// Miner fee in satoshis (LBTC)
-        #[arg(long = "fee-amount")]
-        fee_amount: u64,
-        /// Account that will pay for transaction fees and that owns a tokens to split
-        #[arg(long = "account-index", default_value_t = 0)]
-        account_index: u32,
-        /// When set, broadcast the built transaction via Esplora and print txid
-        #[arg(long = "broadcast")]
-        broadcast: bool,
-    },
-    /// Build tx transferring an asset UTXO to recipient (LBTC UTXO pays fees)
-    TransferAsset {
-        /// Transaction id (hex) and output index (vout) of the ASSET UTXO you will spend
-        #[arg(long = "asset-utxo")]
-        asset_utxo: OutPoint,
-        /// Transaction id (hex) and output index (vout) of the LBTC UTXO used to pay fees
-        #[arg(long = "fee-utxo")]
-        fee_utxo: OutPoint,
-        /// Recipient address (Liquid testnet bech32m)
-        #[arg(long = "to-address")]
-        to_address: Address,
-        /// Amount to send of the asset in its smallest units (it does not account for decimals)
-        #[arg(long = "send-sats")]
-        send_amount: u64,
-        /// Miner fee in satoshis (LBTC)
-        #[arg(long = "fee-sats")]
-        fee_amount: u64,
-        /// Account that will pay for transaction fees and that owns a tokens to send
-        #[arg(long = "account-index", default_value_t = 0)]
-        account_index: u32,
+        /// Value of single split
+        #[arg(long = "part-amount")]
+        part_amount: u64,
         /// When set, broadcast the built transaction via Esplora and print txid
         #[arg(long = "broadcast")]
         broadcast: bool,
     },
     /// Build tx issuing an asset
     IssueAsset {
-        /// Transaction id (hex) and output index (vout) of the LBTC UTXO used to pay fees and issue the asset
-        #[arg(long = "fee-utxo")]
-        fee_utxo_outpoint: OutPoint,
         /// Asset name (this will be stored in the CLI's database only, so it will be not shown on the Esplora UI)
         #[arg(long = "asset-name")]
         asset_name: String,
         /// Amount to issue of the asset in its satoshi units
         #[arg(long = "issue-sats")]
         issue_amount: u64,
-        /// Miner fee in satoshis (LBTC)
-        #[arg(long = "fee-sats")]
-        fee_amount: u64,
-        /// Account that will pay for transaction fees and that owns a tokens to send
-        #[arg(long = "account-index", default_value_t = 0)]
-        account_index: u32,
         /// When set, broadcast the built transaction via Esplora and print txid
         #[arg(long = "broadcast")]
         broadcast: bool,
     },
     /// Reissue an asset
     ReissueAsset {
-        /// Transaction id (hex) and output index (vout) of the REISSUANCE ASSET UTXO you will spend
-        #[arg(long = "reissue-asset-utxo")]
-        reissue_asset_outpoint: OutPoint,
-        /// Transaction id (hex) and output index (vout) of the LBTC UTXO used to pay fees and reissue the asset
-        #[arg(long = "fee-utxo")]
-        fee_utxo_outpoint: OutPoint,
         /// Asset name (this will be stored in the CLI's database only, so it will be not shown on the Esplora UI)
         #[arg(long = "asset-name")]
         asset_name: String,
         /// Amount to reissue of the asset in its satoshi units
         #[arg(long = "reissue-sats")]
         reissue_amount: u64,
-        /// Miner fee in satoshis (LBTC)
-        #[arg(long = "fee-sats")]
-        fee_amount: u64,
-        /// Account that will pay for transaction fees and that owns a tokens to send
-        #[arg(long = "account-index", default_value_t = 0)]
-        account_index: u32,
         /// When set, broadcast the built transaction via Esplora and print txid
         #[arg(long = "broadcast")]
         broadcast: bool,
@@ -146,169 +97,163 @@ impl Basic {
     /// # Panics
     /// Panics if asset entropy conversion fails.
     #[expect(clippy::too_many_lines)]
-    pub async fn handle(&self) -> anyhow::Result<()> {
+    pub async fn handle(&self, runtime: WalletRuntimeConfig) -> anyhow::Result<()> {
+        let mut runtime = runtime;
+
         match self {
-            Self::Address { index } => {
-                let keypair = derive_keypair(*index);
+            Self::Address => {
+                let receiver_address = runtime.signer_receive_address()?;
 
-                let public_key = keypair.x_only_public_key().0;
-                let address = get_p2pk_address(&public_key, NETWORK)?;
+                let signer_address = runtime.signer_x_only_public_key()?;
 
-                let mut script_hash: [u8; 32] = hash_script(&address.script_pubkey());
-                script_hash.reverse();
-
-                println!("X Only Public Key: {public_key}");
-                println!("P2PK Address: {address}");
-                println!("Script hash: {}", hex::encode(script_hash));
+                println!("Receiver Address: {receiver_address}");
+                println!("Signer X Only Public Key: {signer_address}");
 
                 Ok(())
             }
-            Self::TransferNative {
-                utxo_outpoint,
+            Self::Balance => {
+                runtime.sync_wallet().await?;
+
+                let mut balances: std::collections::BTreeMap<AssetId, u64> =
+                    std::collections::BTreeMap::new();
+                for utxo in runtime.wollet.utxos()? {
+                    let entry = balances.entry(utxo.unblinded.asset).or_insert(0);
+                    *entry = entry
+                        .checked_add(utxo.unblinded.value)
+                        .ok_or_else(|| anyhow!("balance overflow while summing wallet UTXOs"))?;
+                }
+
+                if balances.is_empty() {
+                    println!("No available assets");
+                    return Ok(());
+                }
+
+                for (asset_id, amount_sat) in balances {
+                    println!("{asset_id}: {amount_sat}");
+                }
+
+                Ok(())
+            }
+            Self::Transfer {
+                asset,
                 to_address,
                 amount_to_send,
-                fee_amount,
-                account_index,
                 broadcast,
             } => {
-                let keypair = derive_keypair(*account_index);
+                let asset_to_send = asset.unwrap_or(*runtime.network.policy_asset());
 
-                let tx_out = fetch_utxo(*utxo_outpoint).await?;
+                let blinder = to_address
+                    .blinding_pubkey
+                    .map_or(BlinderVariant::Explicit, |blinder| {
+                        BlinderVariant::Provided { pubkey: blinder }
+                    });
 
-                let pst = contracts::sdk::transfer_native(
-                    (*utxo_outpoint, tx_out.clone()),
-                    to_address,
-                    *amount_to_send,
-                    *fee_amount,
-                )?;
+                let request = TxCreateRequest {
+                    abi_version: TX_CREATE_ABI_VERSION.to_string(),
+                    request_id: "request-basic.transfer".to_string(),
+                    network: runtime.network,
+                    params: RuntimeParams {
+                        inputs: vec![InputSchema {
+                            id: "input0".to_string(),
+                            utxo_source: UTXOSource::Wallet {
+                                filter: WalletSourceFilter {
+                                    asset: AssetFilter::Exact {
+                                        asset_id: asset_to_send,
+                                    },
+                                    amount: AmountFilter::default(),
+                                    lock: LockFilter::default(),
+                                },
+                            },
+                            blinder: InputBlinder::default(),
+                            sequence: Sequence::default(),
+                            issuance: None,
+                            finalizer: FinalizerSpec::default(),
+                        }],
+                        outputs: vec![OutputSchema {
+                            id: "to-recipient".to_string(),
+                            amount_sat: *amount_to_send,
+                            lock: LockVariant::Script {
+                                script: to_address.script_pubkey(),
+                            },
+                            asset: AssetVariant::AssetId {
+                                asset_id: asset_to_send,
+                            },
+                            blinder,
+                        }],
+                        fee_rate_sat_vb: Some(0.1),
+                        locktime: None,
+                    },
+                    broadcast: *broadcast,
+                };
 
-                let tx = pst.extract_tx()?;
-                let utxos = &[tx_out];
-
-                let x_only_public_key = keypair.x_only_public_key().0;
-                let signature = create_p2pk_signature(&tx, utxos, &keypair, 0, NETWORK)?;
-
-                let tx = finalize_p2pk_transaction(
-                    tx,
-                    utxos,
-                    &x_only_public_key,
-                    &signature,
-                    0,
-                    NETWORK,
-                    TrackerLogLevel::None,
-                )?;
-
-                if *broadcast {
-                    println!("Broadcasted txid: {}", broadcast_tx(&tx).await?);
-                } else {
-                    println!("{}", tx.serialize().to_lower_hex_string());
-                }
+                let _ = execute_request(&mut runtime, request).await?;
 
                 Ok(())
             }
-            Self::SplitNative {
+            Self::Split {
+                asset,
                 split_parts,
-                fee_utxo,
-                fee_amount,
-                account_index,
+                part_amount,
                 broadcast,
             } => {
-                let keypair = derive_keypair(*account_index);
+                let asset_to_split = asset.unwrap_or(*runtime.network.policy_asset());
 
-                let tx_out = fetch_utxo(*fee_utxo).await?;
-
-                let pst = contracts::sdk::split_native_any(
-                    (*fee_utxo, tx_out.clone()),
-                    *split_parts,
-                    *fee_amount,
-                )?;
-
-                let tx = pst.extract_tx()?;
-                let utxos = &[tx_out];
-
-                let x_only_public_key = keypair.x_only_public_key().0;
-                let signature = create_p2pk_signature(&tx, utxos, &keypair, 0, NETWORK)?;
-
-                let tx = finalize_p2pk_transaction(
-                    tx,
-                    utxos,
-                    &x_only_public_key,
-                    &signature,
-                    0,
-                    NETWORK,
-                    TrackerLogLevel::None,
-                )?;
-
-                if *broadcast {
-                    println!("Broadcasted txid: {}", broadcast_tx(&tx).await?);
-                } else {
-                    println!("{}", tx.serialize().to_lower_hex_string());
+                if *split_parts == 0 {
+                    return Err(anyhow!("split-parts must be > 0"));
                 }
 
-                Ok(())
-            }
-            Self::TransferAsset {
-                asset_utxo: asset_utxo_outpoint,
-                fee_utxo: fee_utxo_outpoint,
-                to_address,
-                send_amount,
-                fee_amount,
-                account_index,
-                broadcast,
-            } => {
-                let keypair = derive_keypair(*account_index);
+                let signer_address = runtime.signer_receive_address()?;
 
-                let asset_tx_out = fetch_utxo(*asset_utxo_outpoint).await?;
-                let fee_tx_out = fetch_utxo(*fee_utxo_outpoint).await?;
-
-                let pst = contracts::sdk::transfer_asset(
-                    (*asset_utxo_outpoint, asset_tx_out.clone()),
-                    (*fee_utxo_outpoint, fee_tx_out.clone()),
-                    to_address,
-                    *send_amount,
-                    *fee_amount,
-                )?;
-
-                let tx = pst.extract_tx()?;
-                let utxos = vec![asset_tx_out, fee_tx_out];
-                let x_only_public_key = keypair.x_only_public_key().0;
-
-                let signature_0 = create_p2pk_signature(&tx, &utxos, &keypair, 0, NETWORK)?;
-                let tx = finalize_p2pk_transaction(
-                    tx,
-                    &utxos,
-                    &x_only_public_key,
-                    &signature_0,
-                    0,
-                    NETWORK,
-                    TrackerLogLevel::None,
-                )?;
-
-                let signature_1 = create_p2pk_signature(&tx, &utxos, &keypair, 1, NETWORK)?;
-                let tx = finalize_p2pk_transaction(
-                    tx,
-                    &utxos,
-                    &x_only_public_key,
-                    &signature_1,
-                    1,
-                    NETWORK,
-                    TrackerLogLevel::None,
-                )?;
-
-                if *broadcast {
-                    println!("Broadcasted txid: {}", broadcast_tx(&tx).await?);
-                } else {
-                    println!("{}", tx.serialize().to_lower_hex_string());
+                let mut outputs = Vec::new();
+                for output_index in 0..*split_parts {
+                    outputs.push(OutputSchema {
+                        id: format!("out{output_index}"),
+                        amount_sat: *part_amount,
+                        lock: LockVariant::Script {
+                            script: signer_address.script_pubkey(),
+                        },
+                        asset: AssetVariant::AssetId {
+                            asset_id: asset_to_split,
+                        },
+                        blinder: BlinderVariant::Wallet,
+                    });
                 }
+
+                let request = TxCreateRequest {
+                    abi_version: TX_CREATE_ABI_VERSION.to_string(),
+                    request_id: "request-basic.split_native".to_string(),
+                    network: runtime.network,
+                    params: RuntimeParams {
+                        inputs: vec![InputSchema {
+                            id: "input0".to_string(),
+                            utxo_source: UTXOSource::Wallet {
+                                filter: WalletSourceFilter {
+                                    asset: AssetFilter::Exact {
+                                        asset_id: asset_to_split,
+                                    },
+                                    amount: AmountFilter::default(),
+                                    lock: LockFilter::default(),
+                                },
+                            },
+                            blinder: InputBlinder::default(),
+                            sequence: Sequence::default(),
+                            issuance: None,
+                            finalizer: FinalizerSpec::default(),
+                        }],
+                        outputs,
+                        fee_rate_sat_vb: Some(0.1),
+                        locktime: None,
+                    },
+                    broadcast: *broadcast,
+                };
+
+                let _ = execute_request(&mut runtime, request).await?;
 
                 Ok(())
             }
             Self::IssueAsset {
-                fee_utxo_outpoint,
                 asset_name,
                 issue_amount,
-                fee_amount,
-                account_index,
                 broadcast,
             } => {
                 let store = Store::load()?;
@@ -316,70 +261,93 @@ impl Basic {
                 if store.store.get(asset_name)?.is_some() {
                     return Err(anyhow!("Asset name already exists"));
                 }
+                let issuance_entropy = get_random_seed();
 
-                let keypair = derive_keypair(*account_index);
-                let blinding_keypair = derive_public_blinder_key();
+                let policy_asset = *runtime.network.policy_asset();
+                let signer_script = runtime.signer_receive_address()?.script_pubkey();
 
-                let fee_tx_out = fetch_utxo(*fee_utxo_outpoint).await?;
+                let request = TxCreateRequest {
+                    abi_version: TX_CREATE_ABI_VERSION.to_string(),
+                    request_id: "request-basic.issue_asset".to_string(),
+                    network: runtime.network,
+                    params: RuntimeParams {
+                        inputs: vec![InputSchema {
+                            id: "in0".to_string(),
+                            utxo_source: UTXOSource::Wallet {
+                                filter: WalletSourceFilter {
+                                    // TODO: really?
+                                    asset: AssetFilter::Exact {
+                                        asset_id: policy_asset,
+                                    },
+                                    amount: AmountFilter::default(),
+                                    lock: LockFilter::default(),
+                                },
+                            },
+                            blinder: InputBlinder::default(),
+                            sequence: Sequence::default(),
+                            issuance: Some(InputIssuance {
+                                kind: InputIssuanceKind::New,
+                                asset_amount_sat: *issue_amount,
+                                token_amount_sat: 1,
+                                entropy: issuance_entropy,
+                            }),
+                            finalizer: FinalizerSpec::default(),
+                        }],
+                        outputs: vec![
+                            OutputSchema {
+                                id: "out0".to_string(),
+                                amount_sat: 1,
+                                lock: LockVariant::Script {
+                                    script: signer_script.clone(),
+                                },
+                                asset: AssetVariant::NewIssuanceToken { input_index: 0 },
+                                blinder: BlinderVariant::Wallet,
+                            },
+                            OutputSchema {
+                                id: "out1".to_string(),
+                                amount_sat: *issue_amount,
+                                lock: LockVariant::Script {
+                                    script: signer_script,
+                                },
+                                asset: AssetVariant::NewIssuanceAsset { input_index: 0 },
+                                blinder: BlinderVariant::Wallet,
+                            },
+                        ],
+                        fee_rate_sat_vb: Some(0.1),
+                        locktime: None,
+                    },
+                    broadcast: *broadcast,
+                };
 
-                let pst = contracts::sdk::issue_asset(
-                    &blinding_keypair.public_key(),
-                    (*fee_utxo_outpoint, fee_tx_out.clone()),
-                    *issue_amount,
-                    *fee_amount,
-                )?;
+                let tx_info = execute_request(&mut runtime, request).await?;
 
-                let (asset_id, reissuance_asset_id) = pst.inputs()[0].issuance_ids();
-                let asset_entropy = pst.inputs()[0]
-                    .issuance_asset_entropy
-                    .expect("expected entropy");
-                let asset_entropy = AssetId::generate_asset_entropy(
-                    *fee_utxo_outpoint,
-                    ContractHash::from_byte_array(asset_entropy),
-                );
+                let tx = decode_transaction(&tx_info.tx_hex)?;
+                let input = tx
+                    .input
+                    .first()
+                    .ok_or_else(|| anyhow!("issued transaction is missing input[0]"))?;
+                let (asset_id, reissuance_asset_id) = input.issuance_ids();
 
-                let tx = pst.extract_tx()?;
-                let utxos = &[fee_tx_out];
-
-                let x_only_public_key = keypair.x_only_public_key().0;
-                let signature = create_p2pk_signature(&tx, utxos, &keypair, 0, NETWORK)?;
-
-                let tx = finalize_p2pk_transaction(
-                    tx,
-                    utxos,
-                    &x_only_public_key,
-                    &signature,
-                    0,
-                    NETWORK,
-                    TrackerLogLevel::None,
-                )?;
+                let asset_entropy = get_new_asset_entropy(&input.previous_output, issuance_entropy);
 
                 println!(
-                    "Asset id: {asset_id}, \
-                    Reissuance asset: {reissuance_asset_id}, \
-                    Asset entropy: {}",
-                    hex::encode(asset_entropy)
+                    "Asset id: {asset_id}, Reissuance asset: {reissuance_asset_id}, Asset entropy: {}",
+                    asset_entropy.to_hex()
                 );
-
-                if *broadcast {
-                    println!("Broadcasted txid: {}", broadcast_tx(&tx).await?);
-                } else {
-                    println!("{}", tx.serialize().to_lower_hex_string());
-                }
 
                 store
                     .store
-                    .insert(asset_name, hex::encode(asset_entropy).as_bytes())?;
+                    .insert(asset_name, &asset_entropy.to_byte_array())?;
+
+                store
+                    .store
+                    .insert(format!("re-{asset_name}"), reissuance_asset_id.serialize())?;
 
                 Ok(())
             }
             Self::ReissueAsset {
-                reissue_asset_outpoint,
-                fee_utxo_outpoint,
                 asset_name,
                 reissue_amount,
-                fee_amount,
-                account_index,
                 broadcast,
             } => {
                 let store = Store::load()?;
@@ -387,67 +355,69 @@ impl Basic {
                 let Some(asset_entropy) = store.store.get(asset_name)? else {
                     return Err(anyhow!("Asset name not found"));
                 };
-                let asset_entropy = String::from_utf8(asset_entropy.to_vec())?;
-                let asset_entropy = hex::decode(asset_entropy)?;
+                let Some(reissue_token_id) = store.store.get(format!("re-{asset_name}"))? else {
+                    return Err(anyhow!("Asset name not found"));
+                };
+                let asset_entropy = Midstate::from_slice(&asset_entropy)?;
+                let reissue_token_id = AssetId::from_slice(&reissue_token_id)?;
 
-                let asset_entropy_bytes: [u8; 32] =
-                    asset_entropy.try_into().expect("expected 32 bytes");
-                let asset_entropy = sha256::Midstate::from_byte_array(asset_entropy_bytes);
+                let signer_script = runtime.signer_receive_address()?.script_pubkey();
 
-                let keypair = derive_keypair(*account_index);
-                let blinding_keypair = derive_public_blinder_key();
+                let request = TxCreateRequest {
+                    abi_version: TX_CREATE_ABI_VERSION.to_string(),
+                    request_id: "request-basic.reissue_asset".to_string(),
+                    network: runtime.network,
+                    params: RuntimeParams {
+                        inputs: vec![InputSchema {
+                            id: "input0".to_string(),
+                            utxo_source: UTXOSource::Wallet {
+                                filter: WalletSourceFilter {
+                                    asset: AssetFilter::Exact {
+                                        asset_id: reissue_token_id,
+                                    },
+                                    amount: AmountFilter::Min { satoshi: 1 },
+                                    lock: LockFilter::None,
+                                },
+                            },
+                            blinder: InputBlinder::default(),
+                            sequence: Sequence::default(),
+                            issuance: Some(InputIssuance {
+                                kind: InputIssuanceKind::Reissue,
+                                asset_amount_sat: *reissue_amount,
+                                token_amount_sat: 0,
+                                entropy: asset_entropy.to_byte_array(),
+                            }),
+                            finalizer: FinalizerSpec::default(),
+                        }],
+                        outputs: vec![
+                            OutputSchema {
+                                id: "out0".to_string(),
+                                amount_sat: 1,
+                                lock: LockVariant::Script {
+                                    script: signer_script.clone(),
+                                },
+                                asset: AssetVariant::AssetId {
+                                    asset_id: reissue_token_id,
+                                },
+                                blinder: BlinderVariant::Wallet,
+                            },
+                            OutputSchema {
+                                id: "out1".to_string(),
+                                amount_sat: *reissue_amount,
+                                lock: LockVariant::Script {
+                                    script: signer_script,
+                                },
+                                asset: AssetVariant::ReIssuanceAsset { input_index: 0 },
+                                blinder: BlinderVariant::Wallet,
+                            },
+                        ],
+                        fee_rate_sat_vb: Some(0.1),
+                        locktime: None,
+                    },
+                    broadcast: *broadcast,
+                };
 
-                let reissue_tx_out = fetch_utxo(*reissue_asset_outpoint).await?;
-                let fee_tx_out = fetch_utxo(*fee_utxo_outpoint).await?;
-
-                let reissue_utxo_secrets =
-                    reissue_tx_out.unblind(SECP256K1, blinding_keypair.secret_key())?;
-
-                let pst = contracts::sdk::reissue_asset(
-                    &blinding_keypair.public_key(),
-                    (*reissue_asset_outpoint, reissue_tx_out.clone()),
-                    reissue_utxo_secrets,
-                    (*fee_utxo_outpoint, fee_tx_out.clone()),
-                    *reissue_amount,
-                    *fee_amount,
-                    asset_entropy,
-                )?;
-
-                let (asset_id, reissuance_asset_id) = pst.inputs()[0].issuance_ids();
-
-                let tx = pst.extract_tx()?;
-                let utxos = vec![reissue_tx_out, fee_tx_out];
-                let x_only_public_key = keypair.x_only_public_key().0;
-
-                let signature_0 = create_p2pk_signature(&tx, &utxos, &keypair, 0, NETWORK)?;
-                let tx = finalize_p2pk_transaction(
-                    tx,
-                    &utxos,
-                    &x_only_public_key,
-                    &signature_0,
-                    0,
-                    NETWORK,
-                    TrackerLogLevel::None,
-                )?;
-
-                let signature_1 = create_p2pk_signature(&tx, &utxos, &keypair, 1, NETWORK)?;
-                let tx = finalize_p2pk_transaction(
-                    tx,
-                    &utxos,
-                    &x_only_public_key,
-                    &signature_1,
-                    1,
-                    NETWORK,
-                    TrackerLogLevel::None,
-                )?;
-
-                println!("Asset id: {asset_id}, Reissuance id: {reissuance_asset_id}");
-
-                if *broadcast {
-                    println!("Broadcasted txid: {}", broadcast_tx(&tx).await?);
-                } else {
-                    println!("{}", tx.serialize().to_lower_hex_string());
-                }
+                let _ = execute_request(&mut runtime, request).await?;
 
                 Ok(())
             }

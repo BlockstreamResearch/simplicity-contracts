@@ -54,7 +54,9 @@ pub enum OptionBranch {
 /// Build witness values for options program execution.
 ///
 /// # Panics
-/// Panics if type parsing fails (should never happen with valid constants).
+///
+/// Panics if internal static type descriptors or generated witness values fail
+/// to parse.
 #[must_use]
 #[allow(clippy::too_many_lines)]
 pub fn build_option_witness(branch: &OptionBranch) -> WitnessValues {
