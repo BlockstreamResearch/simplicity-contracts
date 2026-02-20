@@ -1,9 +1,9 @@
-use std::collections::HashMap;
-
 use simplicityhl::{
     ResolvedType, WitnessValues, elements::TxOutSecrets, num::U256, parse::ParseFromStr,
     str::WitnessName, types::TypeConstructible,
 };
+use std::collections::HashMap;
+use wallet_abi::schema::values::SimfWitness;
 
 /// Extract (`asset_bf`, `value_bf`) as U256 from `TxOutSecrets`.
 #[must_use]
@@ -17,6 +17,7 @@ pub fn blinding_factors_from_secrets(secrets: &TxOutSecrets) -> (U256, U256) {
 #[derive(Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
 pub enum OptionBranch {
+    Creation,
     Funding {
         expected_asset_amount: u64,
         input_option_abf: U256,
@@ -59,7 +60,7 @@ pub enum OptionBranch {
 /// to parse.
 #[must_use]
 #[allow(clippy::too_many_lines)]
-pub fn build_option_witness(branch: &OptionBranch) -> WitnessValues {
+pub fn build_options_witness(branch: &OptionBranch) -> SimfWitness {
     let single =
         ResolvedType::parse_from_str("(u64, u256, u256, u256, u256, u256, u256, u256, u256)")
             .unwrap();
@@ -72,6 +73,12 @@ pub fn build_option_witness(branch: &OptionBranch) -> WitnessValues {
     let path_type = ResolvedType::either(left_type, right_type);
 
     let branch_str = match branch {
+        OptionBranch::Creation => {
+            return SimfWitness {
+                resolved: WitnessValues::default(),
+                runtime_arguments: vec![],
+            };
+        }
         OptionBranch::Funding {
             expected_asset_amount,
             input_option_abf,
@@ -114,12 +121,11 @@ pub fn build_option_witness(branch: &OptionBranch) -> WitnessValues {
         } => format!("Right(Right(({is_change_needed}, {amount_to_burn}, {collateral_amount})))"),
     };
 
-    let mut witness_map = HashMap::new();
-
-    witness_map.insert(
-        WitnessName::from_str_unchecked("PATH"),
-        simplicityhl::Value::parse_from_str(&branch_str, &path_type).unwrap(),
-    );
-
-    simplicityhl::WitnessValues::from(witness_map)
+    SimfWitness {
+        resolved: WitnessValues::from(HashMap::from([(
+            WitnessName::from_str_unchecked("PATH"),
+            simplicityhl::Value::parse_from_str(&branch_str, &path_type).unwrap(),
+        )])),
+        runtime_arguments: vec![],
+    }
 }
