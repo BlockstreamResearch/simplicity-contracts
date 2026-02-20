@@ -1,11 +1,14 @@
-use std::collections::HashMap;
+#![allow(clippy::missing_errors_doc)]
 
+use crate::error::FromArgumentsError;
+use crate::utils::arguments_helpers::{extract_u32, extract_u64, extract_u256_bytes};
+use serde_json::Value;
 use simplicityhl::elements::AssetId;
 use simplicityhl::num::U256;
 use simplicityhl::{Arguments, str::WitnessName, value::UIntValue};
-
-use crate::arguments_helpers::{extract_u32, extract_u64, extract_u256_bytes};
-use crate::error::FromArgumentsError;
+use std::collections::HashMap;
+use wallet_abi::WalletAbiError;
+use wallet_abi::schema::values::SimfArguments;
 
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq, Default)]
 pub struct OptionOfferArguments {
@@ -90,6 +93,18 @@ impl OptionOfferArguments {
         ]))
     }
 
+    #[must_use]
+    pub fn build_simf_arguments(&self) -> SimfArguments {
+        SimfArguments {
+            resolved: self.build_arguments(),
+            runtime_arguments: HashMap::default(),
+        }
+    }
+
+    pub fn to_json(&self) -> Result<Value, WalletAbiError> {
+        serde_json::to_value(self.build_arguments()).map_err(WalletAbiError::from)
+    }
+
     /// Returns the collateral per contract amount.
     #[must_use]
     pub const fn collateral_per_contract(&self) -> u64 {
@@ -150,13 +165,22 @@ impl OptionOfferArguments {
     ///
     /// Returns error if any required witness is missing, has wrong type, or has invalid value.
     pub fn from_arguments(args: &Arguments) -> Result<Self, FromArgumentsError> {
-        let collateral_asset_id = extract_u256_bytes(args, "COLLATERAL_ASSET_ID")?;
-        let premium_asset_id = extract_u256_bytes(args, "PREMIUM_ASSET_ID")?;
-        let settlement_asset_id = extract_u256_bytes(args, "SETTLEMENT_ASSET_ID")?;
-        let collateral_per_contract = extract_u64(args, "COLLATERAL_PER_CONTRACT")?;
-        let premium_per_collateral = extract_u64(args, "PREMIUM_PER_COLLATERAL")?;
-        let expiry_time = extract_u32(args, "EXPIRY_TIME")?;
-        let user_pubkey = extract_u256_bytes(args, "USER_PUBKEY")?;
+        let collateral_asset_id_name = WitnessName::from_str_unchecked("COLLATERAL_ASSET_ID");
+        let premium_asset_id_name = WitnessName::from_str_unchecked("PREMIUM_ASSET_ID");
+        let settlement_asset_id_name = WitnessName::from_str_unchecked("SETTLEMENT_ASSET_ID");
+        let collateral_per_contract_name =
+            WitnessName::from_str_unchecked("COLLATERAL_PER_CONTRACT");
+        let premium_per_collateral_name = WitnessName::from_str_unchecked("PREMIUM_PER_COLLATERAL");
+        let expiry_time_name = WitnessName::from_str_unchecked("EXPIRY_TIME");
+        let user_pubkey_name = WitnessName::from_str_unchecked("USER_PUBKEY");
+
+        let collateral_asset_id = extract_u256_bytes(args, &collateral_asset_id_name)?;
+        let premium_asset_id = extract_u256_bytes(args, &premium_asset_id_name)?;
+        let settlement_asset_id = extract_u256_bytes(args, &settlement_asset_id_name)?;
+        let collateral_per_contract = extract_u64(args, &collateral_per_contract_name)?;
+        let premium_per_collateral = extract_u64(args, &premium_per_collateral_name)?;
+        let expiry_time = extract_u32(args, &expiry_time_name)?;
+        let user_pubkey = extract_u256_bytes(args, &user_pubkey_name)?;
 
         Ok(Self {
             collateral_asset_id,
@@ -170,12 +194,24 @@ impl OptionOfferArguments {
     }
 }
 
-impl simplicityhl_core::Encodable for OptionOfferArguments {}
+impl wallet_abi::Encodable for OptionOfferArguments {}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use simplicityhl_core::Encodable;
+    use wallet_abi::Encodable;
+
+    fn make_full_args() -> anyhow::Result<OptionOfferArguments> {
+        Ok(OptionOfferArguments::new(
+            AssetId::from_slice(&[1u8; 32])?,
+            AssetId::from_slice(&[2u8; 32])?,
+            AssetId::from_slice(&[3u8; 32])?,
+            1000,
+            100,
+            1_700_000_000,
+            [4u8; 32],
+        ))
+    }
 
     #[test]
     fn test_serialize_deserialize_default() -> anyhow::Result<()> {
@@ -185,26 +221,35 @@ mod tests {
         let deserialized = OptionOfferArguments::decode(&serialized)?;
 
         assert_eq!(args, deserialized);
+        assert_eq!(deserialized.build_arguments().iter().count(), 7);
 
         Ok(())
     }
 
     #[test]
     fn test_serialize_deserialize_full() -> anyhow::Result<()> {
-        let args = OptionOfferArguments::new(
-            AssetId::from_slice(&[1u8; 32])?,
-            AssetId::from_slice(&[2u8; 32])?,
-            AssetId::from_slice(&[3u8; 32])?,
-            1000,
-            100,
-            1_700_000_000,
-            [4u8; 32],
-        );
+        let args = make_full_args()?;
 
         let serialized = args.encode()?;
         let deserialized = OptionOfferArguments::decode(&serialized)?;
 
         assert_eq!(args, deserialized);
+        assert_eq!(deserialized.collateral_per_contract(), 1000);
+        assert_eq!(deserialized.premium_per_collateral(), 100);
+        assert_eq!(deserialized.expiry_time(), 1_700_000_000);
+        assert_eq!(deserialized.user_pubkey(), [4u8; 32]);
+        assert_eq!(
+            deserialized.get_collateral_asset_id(),
+            AssetId::from_slice(&[1u8; 32])?
+        );
+        assert_eq!(
+            deserialized.get_premium_asset_id(),
+            AssetId::from_slice(&[2u8; 32])?
+        );
+        assert_eq!(
+            deserialized.get_settlement_asset_id(),
+            AssetId::from_slice(&[3u8; 32])?
+        );
 
         Ok(())
     }
@@ -223,20 +268,16 @@ mod tests {
 
     #[test]
     fn test_arguments_roundtrip_full() -> anyhow::Result<()> {
-        let original = OptionOfferArguments::new(
-            AssetId::from_slice(&[1u8; 32])?,
-            AssetId::from_slice(&[2u8; 32])?,
-            AssetId::from_slice(&[3u8; 32])?,
-            1000,
-            100,
-            1_700_000_000,
-            [4u8; 32],
-        );
+        let original = make_full_args()?;
         let arguments = original.build_arguments();
 
         let recovered = OptionOfferArguments::from_arguments(&arguments)?;
 
         assert_eq!(original, recovered);
+        assert_eq!(arguments.iter().count(), 7);
+        let simf_arguments = original.build_simf_arguments();
+        assert!(simf_arguments.runtime_arguments.is_empty());
+        assert_eq!(simf_arguments.resolved.iter().count(), 7);
 
         Ok(())
     }

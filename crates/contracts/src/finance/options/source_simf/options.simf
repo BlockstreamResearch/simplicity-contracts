@@ -1,18 +1,38 @@
 /*
  * Options
- * 
- * Important: Currently only the LBTC collateral is supported.
+ *
+ * Collateral and settlement assets are selected via contract parameters.
  *
  * Based on the https://blockstream.com/assets/downloads/pdf/options-whitepaper.pdf
  *
- * This contract implements cash-settled European-style options using covenant-locked collateral.
+ * This contract implements cash-settled options using covenant-locked collateral.
+ *
+ * Exercise/settlement timing nuance:
+ *
+ * Standard “European-style” (in finance) means the option is exercisable only at expiry.
+ *
+ * This implementation enforces only a  *no-early-exercise * rule: `exercise_path` and
+ * `settlement_path` require `check_lock_time(START_TIME)`, so they are valid at/after
+ * `START_TIME` (and are not, by themselves, restricted to only `EXPIRY_TIME`).
+ *
+ * What it most closely matches is a Bermudan-style (or “American-with-a-delay”) option:
+ * exercisable after a certain date/time (`START_TIME`), potentially up to some endpoint—
+ * though this code (as shown) does not enforce an upper bound like `EXPIRY_TIME` for exercise.
+ *
+ * `expiry_path` is gated by `check_lock_time(EXPIRY_TIME)` for post-expiry reclaim.
+ *
+ * Possible contract change to fit a particular style:
+ * - American-style: remove the `START_TIME` locktime requirement (or set `START_TIME` to the
+ *   funding time / 0, depending on your conventions).
+ * - European-style: require exercise only at expiry (add a check tying exercise to `EXPIRY_TIME`,
+ *   not `START_TIME`).
  *
  * Room for optimization:
  * - https://github.com/BlockstreamResearch/simplicity-contracts/issues/2 (Use input asset to determine option covenent type)
  * - https://github.com/BlockstreamResearch/simplicity-contracts/issues/3 (Simplify match token_branch in funding_path.)
  * - https://github.com/BlockstreamResearch/simplicity-contracts/issues/4 (why batching is hard to implement)
  * - https://github.com/BlockstreamResearch/simplicity-contracts/issues/5 (Reduce Contract Parameters)
- * - https://github.com/BlockstreamResearch/simplicity-contracts/issues/21 (explains why funding is limited)
+ * - https://github.com/BlockstreamResearch/simplicity-contracts/issues/21 (Explains why funding is limited)
  */
 
 /// Assert: a == b * expected_q, via divmod

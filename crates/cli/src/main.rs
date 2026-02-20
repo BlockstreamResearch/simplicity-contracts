@@ -1,21 +1,16 @@
 #![warn(clippy::all, clippy::pedantic)]
 
-//! Simplicity helper CLI for Liquid testnet.
-//!
-//! This binary exposes multiple subcommand groups to work with Liquid testnet:
-//! - `basic`: P2PK utilities such as deriving addresses and building simple transfers.
-//! - `options`: Utilities for the options contract.
-
-mod commands;
-mod explorer;
-mod modules;
+use cli::commands::basic::Basic;
+use cli::commands::option_offer::OptionOffer;
+use cli::modules::utils::{esplora_url_from_network, wallet_data_root};
 
 use anyhow::Result;
+
 use clap::{Parser, Subcommand};
 
-use crate::commands::basic::Basic;
-use crate::commands::options::Options;
-use crate::commands::smt_storage::SMTStorage;
+use wallet_abi::runtime::WalletRuntimeConfig;
+
+use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
 /// Command-line entrypoint for the Simplicity helper CLI.
 #[derive(Parser, Debug)]
@@ -27,33 +22,71 @@ use crate::commands::smt_storage::SMTStorage;
 struct Cli {
     #[command(subcommand)]
     command: Commands,
+    /// Network on which to send a transaction
+    #[arg(long = "network")]
+    network: lwk_common::Network,
+    #[arg(short, long, env = "MNEMONIC")]
+    mnemonic: Option<String>,
 }
 
 /// Top-level subcommand groups.
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// P2PK and simple transaction utilities
+    /// Simple transaction utilities
     Basic {
         #[command(subcommand)]
         basic: Box<Basic>,
     },
-    /// Options contract utilities
-    Options {
+    /// Option-offer contract utilities
+    OptionOffer {
         #[command(subcommand)]
-        options: Box<Options>,
+        option_offer: Box<OptionOffer>,
     },
-    /// Storage utilities
-    Storage {
-        #[command(subcommand)]
-        storage: Box<SMTStorage>,
-    },
+    // /// Options contract utilities
+    // Options {
+    //     #[command(subcommand)]
+    //     options: Box<Options>,
+    // },
+    // /// Storage utilities
+    // Storage {
+    //     #[command(subcommand)]
+    //     storage: Box<SMTStorage>,
+    // },
 }
+
+const TEST_MNEMONIC: &str =
+    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    match Cli::parse().command {
-        Commands::Basic { basic } => basic.handle().await,
-        Commands::Options { options } => options.handle().await,
-        Commands::Storage { storage } => storage.handle().await,
+    let _ = dotenvy::dotenv();
+
+    logging_init();
+
+    let parsed = Cli::parse();
+
+    let mnemonic = parsed.mnemonic.unwrap_or_else(|| TEST_MNEMONIC.to_string());
+
+    let runtime = WalletRuntimeConfig::from_mnemonic(
+        &mnemonic,
+        parsed.network,
+        &esplora_url_from_network(parsed.network),
+        wallet_data_root(),
+    )?;
+
+    match parsed.command {
+        Commands::Basic { basic } => basic.handle(runtime).await,
+        Commands::OptionOffer { option_offer } => Box::pin(option_offer.handle(runtime)).await,
+        // TODO: Commands::Options { options } => options.handle().await,
+        // TODO: Commands::Storage { storage } => storage.handle().await,
     }
+}
+
+fn logging_init() {
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+
+    tracing_subscriber::registry()
+        .with(fmt::layer().with_target(true))
+        .with(filter)
+        .init();
 }

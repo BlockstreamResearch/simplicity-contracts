@@ -1,0 +1,31 @@
+[package]
+name = "wallet-abi"
+version = "0.1.0"
+edition = "2024"
+description = "Schema-driven wallet create runtime for Simplicity contracts"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror = "2"
+
+bincode = "2.0.1"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+hex = { workspace = true }
+sha2 = { workspace = true }
+ring = { workspace = true }
+
+simplicityhl = { workspace = true }
+
+lwk_wollet = { git = "https://github.com/Blockstream/lwk", rev = "4074c527fcc1268eb26953af397eecc6c1444293", package = "lwk_wollet", default-features = false, features = ["electrum", "esplora"] }
+lwk_signer = { git = "https://github.com/Blockstream/lwk", rev = "4074c527fcc1268eb26953af397eecc6c1444293", package = "lwk_signer", default-features = false }
+lwk_common = { git = "https://github.com/Blockstream/lwk", rev = "4074c527fcc1268eb26953af397eecc6c1444293", package = "lwk_common", default-features = false }
+lwk_simplicity = { git = "https://github.com/Blockstream/lwk", rev = "4074c527fcc1268eb26953af397eecc6c1444293", package = "lwk_simplicity" }
+
+tokio = { version = "1", features = ["sync"] }

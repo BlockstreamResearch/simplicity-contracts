@@ -1,7 +1,9 @@
 [workspace]
 resolver = "3"
 members = [
-    "crates/*"
+    "crates/cli",
+    "crates/contracts",
+    "crates/wallet-abi",
 ]
 
 [workspace.package]
@@ -21,7 +23,9 @@ tracing = { version = "0.1.41" }
 minreq = { version = "2.14.1", features = ["https", "json-using-serde"]}
 
 simplicityhl = { version = "0.4.0" }
-simplicityhl-core = { version = "0.4.2", features = ["encoding"] }
 
 [patch.crates-io]
-simplicity-sys = { git = "https://github.com/BlockstreamResearch/rust-simplicity", tag = "simplicity-sys-0.6.1" }
+lwk_common = { git = "https://github.com/Blockstream/lwk", rev = "4074c527fcc1268eb26953af397eecc6c1444293", package = "lwk_common" }
+lwk_signer = { git = "https://github.com/Blockstream/lwk", rev = "4074c527fcc1268eb26953af397eecc6c1444293", package = "lwk_signer" }
+lwk_simplicity = { git = "https://github.com/Blockstream/lwk", rev = "4074c527fcc1268eb26953af397eecc6c1444293", package = "lwk_simplicity" }
+lwk_wollet = { git = "https://github.com/Blockstream/lwk", rev = "4074c527fcc1268eb26953af397eecc6c1444293", package = "lwk_wollet" }

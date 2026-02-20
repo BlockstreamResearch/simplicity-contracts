@@ -1,35 +1,30 @@
-# Simplicity Contracts
+# Simplicity Contracts Workspace
 
-This repository is a reference for how you can interact and work with [Simplicity HL](https://github.com/BlockstreamResearch/simfony) contracts.
+This workspace contains reference implementations and tooling for working with [Simplicity HL](https://github.com/BlockstreamResearch/simfony) contracts on Elements/Liquid.
 
-The only crate published to crates.io is `simplicity-contracts`, so read its [README](crates/contracts/README.md) to understand more about how to use it.
+## Workspace Crates
+
+- [`contracts`](crates/contracts): Contract templates and helpers (finance + state management modules).
+- [`wallet-abi`](crates/wallet-abi): Schema-first wallet runtime and ABI layer used by contract flows.
+- [`cli`](crates/cli): `simplicity-cli` binary crate for wallet and option-offer command flows.
 
 ## Repository Structure
 
-If you are new to contract development with Simplicity HL, below you will find a step-by-step workflow for how a contract can be developed, deployed, and used.
+- Simplicity sources: [`crates/contracts/src/**/source_simf/*.simf`](crates/contracts/src)
+- Contract-side Rust helpers: [`crates/contracts/src`](crates/contracts/src)
+- Wallet runtime and schemas: [`crates/wallet-abi/src/runtime`](crates/wallet-abi/src/runtime), [`crates/wallet-abi/src/schema`](crates/wallet-abi/src/schema)
+- CLI entrypoint and commands: [`crates/cli/src/main.rs`](crates/cli/src/main.rs), [`crates/cli/src/commands`](crates/cli/src/commands)
 
-Everything starts with the actual Simplicity HL code. See the [.simf files](crates/contracts/src), especially the [Options contract](crates/contracts/src/options/source_simf/options.simf) as the most structured example. Check the issues referenced in the contract for better understanding of development implications.
+## Getting Started
 
-You can use tools like [`hal-simplicity`](https://github.com/BlockstreamResearch/hal-simplicity) for ad-hoc interaction and manual testing.
+- Contract crate usage and module overview: [contracts README](crates/contracts/README.md)
+- CLI usage and command examples: [CLI README](crates/cli/README.md)
 
-If you want to build an application or service around your new contract, take a look at the relevant builders of arguments and witness. See the [Options contract](crates/contracts/src/options/mod.rs) for how to write Rust functions to build those — it is well tested.
+## Notes
 
-The next step after writing helper functions to build args and witness is to do actual testing. Again, see [mod.rs](crates/contracts/src/options/mod.rs) as the best example.
+This repository is reference-oriented. Copying and adapting modules into your own project is expected while Simplicity tooling/import ergonomics are still evolving.
 
-Here you could also take a look at how relevant SDK functions in [options](crates/contracts/src/sdk/options) are structured, and what their responsibilities are.
+## Old structure 
 
-The last step is actual transaction publishing on the chain. This part can be found in the [CLI README](crates/cli/README.md).
-
-## How to Use
-
-You can install the [contracts crate](crates/contracts/Cargo.toml) to build services/SDK around available contracts.
-
-Though this repository provides only examples, and because the basic Simplicity compiler does not support imports, you can just copy paste the code into your project.
-
-## Important Concepts
-
-It is recommended to study the [options.simf](crates/contracts/src/options/source_simf/options.simf) and related issues on GitHub to understand better how to write such contracts securely.
-
-You can see how to use the storage for 32 bytes in the [bytes32_tr_storage.simf](crates/contracts/src/bytes32_tr_storage/source_simf/bytes32_tr_storage.simf) file.  
-For a more general case, see the [array_tr_storage.simf](crates/contracts/src/array_tr_storage/source_simf/array_tr_storage.simf) file.  
-You can find a more detailed explanation of how it works in the first file.
+Use [this version (116b0eb)](https://github.com/BlockstreamResearch/simplicity-contracts/commit/116b0eb17c3fd84e302d5288ea884c46ba702b77) 
+of the repo to interact with the pre-wallet-abi introduction (the last version of simplicityhl-core is here)

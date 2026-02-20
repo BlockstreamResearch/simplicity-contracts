@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   test:
-    name: Build and test (matrix)
+    name: Build and test (matrix, non-regtest)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -36,7 +36,57 @@ jobs:
       - name: Build
         run: cargo build --workspace --all-features --verbose
 
-      - name: Test
-        run: cargo test --workspace --all-features --no-fail-fast --verbose
+      - name: Targeted wallet-abi library tests
+        run: cargo test -p wallet-abi --lib --verbose
 
+      - name: Targeted CLI unit tests
+        run: cargo test -p cli --lib --verbose
 
+      - name: Test (excluding regtest-dependent contracts)
+        run: cargo test --workspace --all-features --exclude contracts --no-fail-fast --verbose
+
+  contracts-regtest:
+    name: Contracts regtest tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust (stable)
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Setup regtest binaries
+        run: |
+          set -euo pipefail
+          BIN_DIR="$RUNNER_TEMP/lwk-bin"
+          mkdir -p "$BIN_DIR"
+          cd "$BIN_DIR"
+
+          ELECTRS_FILENAME="electrs_linux_esplora_027e38d3ebc2f85b28ae76f8f3448438ee4fc7b1_liquid.zip"
+          ELECTRS_SHA256="a63a314c16bc6642fc060bbc19bd1d54ebf86b42188ff2a11c705177c1eb22f7"
+          wget "https://github.com/RCasatta/electrsd/releases/download/electrs_releases/${ELECTRS_FILENAME}"
+          echo "${ELECTRS_SHA256}  ${ELECTRS_FILENAME}" | sha256sum -c -
+          unzip -o "${ELECTRS_FILENAME}"
+          chmod +x "${BIN_DIR}/electrs"
+
+          ELEMENTSD_VERSION="23.3.1"
+          ELEMENTSD_FILENAME="elements-${ELEMENTSD_VERSION}-x86_64-linux-gnu.tar.gz"
+          ELEMENTSD_SHA256="864e3a8240137c4e948ecae7c526ccb363771351ea68737a14c682025d5fedaa"
+          curl -Ls "https://github.com/ElementsProject/elements/releases/download/elements-${ELEMENTSD_VERSION}/${ELEMENTSD_FILENAME}" -o "${ELEMENTSD_FILENAME}"
+          echo "${ELEMENTSD_SHA256}  ${ELEMENTSD_FILENAME}" | sha256sum -c -
+          tar -xzf "${ELEMENTSD_FILENAME}"
+          chmod +x "${BIN_DIR}/elements-${ELEMENTSD_VERSION}/bin/elementsd"
+
+          echo "ELECTRS_LIQUID_EXEC=${BIN_DIR}/electrs" >> "$GITHUB_ENV"
+          echo "ELEMENTSD_EXEC=${BIN_DIR}/elements-${ELEMENTSD_VERSION}/bin/elementsd" >> "$GITHUB_ENV"
+
+      - name: Test contracts (regtest)
+        run: cargo test -p contracts --all-features --no-fail-fast --verbose -- --test-threads=1
