@@ -1,0 +1,60 @@
+{
+  "name": "@simplicity-contracts/wallet-abi-sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for wallet-create-0.1 request/runtime payloads",
+  "license": "MIT OR Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "unbuild",
+    "clean": "rm -rf dist",
+    "lint": "bunx eslint . --max-warnings=0",
+    "lint:fix": "bunx eslint . --max-warnings=0 --fix",
+    "format": "bunx prettier . --write",
+    "format:check": "bunx prettier . --check",
+    "check": "bun run typecheck && bun run lint && bun run format:check && bun test",
+    "ts-fix": "bun run lint:fix && bun run format",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20",
+    "bun": ">=1.3.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BlockstreamResearch/simplicity-contracts.git",
+    "directory": "sdk/wallet-abi-ts"
+  },
+  "keywords": [
+    "wallet-abi",
+    "simplicity",
+    "liquid",
+    "typescript",
+    "sdk"
+  ],
+  "devDependencies": {
+    "@eslint/js": "^9.36.0",
+    "bun-types": "^1.3.9",
+    "eslint": "^9.36.0",
+    "eslint-config-prettier": "^10.1.8",
+    "lwk_wasm": "file:../../../lwk/lwk_wasm/pkg_node",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.44.1",
+    "unbuild": "^3.6.1"
+  }
+}

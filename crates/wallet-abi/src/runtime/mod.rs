@@ -30,6 +30,7 @@ use crate::{FinalizerSpec, InputSchema, LockFilter, RuntimeParams, UTXOSource};
 use crate::runtime::utils::to_lwk_wollet_network;
 use crate::schema::values::{resolve_arguments, resolve_witness};
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::Path;
 use std::str::FromStr;
@@ -39,7 +40,6 @@ use lwk_common::{Bip, Network, Signer};
 use lwk_signer::SwSigner;
 use lwk_signer::bip39::rand::thread_rng;
 
-use lwk_simplicity::runner::run_program;
 use lwk_simplicity::scripts::{control_block, load_program};
 use lwk_simplicity::signer::get_and_verify_env;
 
@@ -55,12 +55,93 @@ use lwk_wollet::secp256k1::{Keypair, XOnlyPublicKey};
 use lwk_wollet::{EC, Wollet, WolletDescriptor};
 
 use simplicityhl::elements::{Transaction, encode};
-use simplicityhl::tracker::TrackerLogLevel;
+use simplicityhl::simplicity::BitMachine;
+use simplicityhl::simplicity::RedeemNode;
+use simplicityhl::simplicity::jet::Elements;
+use simplicityhl::simplicity::jet::elements::ElementsEnv;
+use simplicityhl::tracker::DefaultTracker;
+use simplicityhl::{CompiledProgram, Value as SimplicityValue, WitnessValues};
 
 use tokio::sync::Mutex;
 
 /// Maximum number of fee fixed-point iterations before failing.
 const MAX_FEE_ITERS: usize = 8;
+const MAX_TRACKER_TRACE_LINES: usize = 128;
+const MAX_TRACKER_TRACE_LINE_CHARS: usize = 512;
+const MAX_TRACKER_TRACE_CHARS: usize = 16 * 1024;
+
+fn push_tracker_trace_line(trace_lines: &RefCell<Vec<String>>, mut line: String) {
+    if line.len() > MAX_TRACKER_TRACE_LINE_CHARS {
+        line.truncate(MAX_TRACKER_TRACE_LINE_CHARS);
+        line.push_str("...");
+    }
+
+    let mut lines = trace_lines.borrow_mut();
+    if lines.len() < MAX_TRACKER_TRACE_LINES {
+        lines.push(line);
+    }
+}
+
+fn format_jet_trace(
+    jet: Elements,
+    args: Option<&[SimplicityValue]>,
+    result: Option<SimplicityValue>,
+) -> String {
+    let args = args
+        .map(|args| {
+            args.iter()
+                .map(std::string::ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_else(|| "...".to_string());
+
+    match result {
+        Some(value) => format!("JET: {jet:?}({args}) = {value}"),
+        None => format!("JET: {jet:?}({args}) -> [failed]"),
+    }
+}
+
+fn render_tracker_trace(trace_lines: &[String]) -> String {
+    if trace_lines.is_empty() {
+        return String::new();
+    }
+
+    let mut rendered = String::from("\ntracker_trace:\n");
+    let mut used = 0usize;
+
+    for line in trace_lines {
+        let next = line.len() + 1;
+        if used + next > MAX_TRACKER_TRACE_CHARS {
+            rendered.push_str("[trace truncated]\n");
+            break;
+        }
+        rendered.push_str(line);
+        rendered.push('\n');
+        used += next;
+    }
+
+    rendered
+}
+
+fn render_jet_failure_diagnostics(error_message: &str) -> String {
+    if !error_message.contains("Jet failed during execution") {
+        return String::new();
+    }
+
+    let report = simplicityhl::simplicity::ffi::c_jets::sanity_check_report();
+    if report.is_empty() {
+        return String::new();
+    }
+
+    let mut rendered = String::from("\nsanity_check_report:\n");
+    for line in report {
+        rendered.push_str("- ");
+        rendered.push_str(&line);
+        rendered.push('\n');
+    }
+    rendered
+}
 
 pub(crate) fn get_finalizer_spec_key() -> ProprietaryKey {
     ProprietaryKey::from_pset_pair(1, b"finalizer-spec".to_vec())
@@ -482,7 +563,7 @@ impl WalletRuntimeConfig {
 
                     let witness = resolve_witness(&witness, self, &env)?;
 
-                    let pruned = run_program(&program, witness, &env, TrackerLogLevel::None)?.0;
+                    let pruned = Self::run_program_with_captured_trace(&program, witness, &env)?;
 
                     let (simplicity_program_bytes, simplicity_witness_bytes) =
                         pruned.to_vec_with_witness();
@@ -499,6 +580,68 @@ impl WalletRuntimeConfig {
         }
 
         Ok(pst)
+    }
+
+    fn run_program_with_captured_trace(
+        program: &CompiledProgram,
+        witness_values: WitnessValues,
+        env: &ElementsEnv<Arc<Transaction>>,
+    ) -> Result<Arc<RedeemNode<Elements>>, WalletAbiError> {
+        let trace_lines = RefCell::new(Vec::new());
+
+        let satisfied = program.satisfy(witness_values).map_err(|error| {
+            WalletAbiError::ProgramTrace(format!("Failed to satisfy witness: {error}"))
+        })?;
+
+        let mut tracker = DefaultTracker::new(satisfied.debug_symbols())
+            .with_debug_sink({
+                let trace_lines = &trace_lines;
+                move |label, value| {
+                    push_tracker_trace_line(trace_lines, format!("DBG: {label} = {value}"));
+                }
+            })
+            .with_warning_sink({
+                let trace_lines = &trace_lines;
+                move |message| {
+                    push_tracker_trace_line(trace_lines, format!("WARN: {message}"));
+                }
+            })
+            .with_jet_trace_sink({
+                let trace_lines = &trace_lines;
+                move |jet, args, result| {
+                    push_tracker_trace_line(trace_lines, format_jet_trace(jet, args, result));
+                }
+            });
+
+        let pruned = satisfied
+            .redeem()
+            .prune_with_tracker(env, &mut tracker)
+            .map_err(|error| {
+                let error_text = error.to_string();
+                WalletAbiError::ProgramTrace(format!(
+                    "Failed to prune program: {error}{}",
+                    render_tracker_trace(trace_lines.borrow().as_slice())
+                        + &render_jet_failure_diagnostics(&error_text)
+                ))
+            })?;
+
+        let mut bit_machine = BitMachine::for_program(&pruned).map_err(|error| {
+            WalletAbiError::ProgramTrace(format!(
+                "Failed to construct a Bit Machine with enough space: {error}{}",
+                render_tracker_trace(trace_lines.borrow().as_slice())
+            ))
+        })?;
+
+        bit_machine.exec_with_tracker(&pruned, env, &mut tracker).map_err(|error| {
+            let error_text = error.to_string();
+            WalletAbiError::ProgramTrace(format!(
+                "Failed to execute program on the Bit Machine: {error}{}",
+                render_tracker_trace(trace_lines.borrow().as_slice())
+                    + &render_jet_failure_diagnostics(&error_text)
+            ))
+        })?;
+
+        Ok(pruned)
     }
 
     /// Pre-sync script-locked wallet filters before input resolution.

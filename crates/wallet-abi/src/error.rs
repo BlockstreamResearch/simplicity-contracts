@@ -39,6 +39,9 @@ pub enum WalletAbiError {
     #[error("Program error: {0}")]
     Program(#[from] lwk_simplicity::error::ProgramError),
 
+    #[error("Program error: {0}")]
+    ProgramTrace(String),
+
     #[error("esplora mutex poisoned: {0}")]
     EsploraPoisoned(String),
 

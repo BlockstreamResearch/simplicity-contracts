@@ -4,6 +4,11 @@ members = [
     "crates/cli",
     "crates/contracts",
     "crates/wallet-abi",
+    "crates/wallet-abi-bindings",
+    "crates/wallet-abi-transport",
+    "crates/wallet-abi-relayer",
+    "crates/wallet-abi-regtest-harness",
+    "crates/wallet-abi-qrgen",
 ]
 
 [workspace.package]
@@ -25,6 +30,7 @@ minreq = { version = "2.14.1", features = ["https", "json-using-serde"]}
 simplicityhl = { version = "0.4.0" }
 
 [patch.crates-io]
+simplicity-sys = { path = "../rust-simplicity/simplicity-sys" }
 lwk_common = { git = "https://github.com/Blockstream/lwk", rev = "4074c527fcc1268eb26953af397eecc6c1444293", package = "lwk_common" }
 lwk_signer = { git = "https://github.com/Blockstream/lwk", rev = "4074c527fcc1268eb26953af397eecc6c1444293", package = "lwk_signer" }
 lwk_simplicity = { git = "https://github.com/Blockstream/lwk", rev = "4074c527fcc1268eb26953af397eecc6c1444293", package = "lwk_simplicity" }

@@ -33,11 +33,26 @@ jobs:
         with:
           cache-on-failure: true
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.9"
+
+      - name: SDK build and test (Bun)
+        run: |
+          cd sdk/wallet-abi-ts
+          bun install --frozen-lockfile
+          bun run build
+          bun test
+
       - name: Build
         run: cargo build --workspace --all-features --verbose
 
       - name: Targeted wallet-abi library tests
         run: cargo test -p wallet-abi --lib --verbose
+
+      - name: Targeted wallet-abi-bindings tests
+        run: cargo test -p wallet-abi-bindings --lib --verbose
 
       - name: Targeted CLI unit tests
         run: cargo test -p cli --lib --verbose
@@ -88,5 +103,38 @@ jobs:
           echo "ELECTRS_LIQUID_EXEC=${BIN_DIR}/electrs" >> "$GITHUB_ENV"
           echo "ELEMENTSD_EXEC=${BIN_DIR}/elements-${ELEMENTSD_VERSION}/bin/elementsd" >> "$GITHUB_ENV"
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.9"
+
+      - name: SDK regtest integration flows (Bun)
+        run: |
+          cd sdk/wallet-abi-ts
+          bun install --frozen-lockfile
+          bun test test/integration/regtest-flows.test.ts
+
+      - name: Assert no leaked regtest nodes after SDK flows
+        if: always()
+        run: |
+          set -euo pipefail
+          leaks="$(ps -eo pid=,comm=,args= | awk '$2=="elementsd" || $2=="electrs" {print}')"
+          if [ -n "$leaks" ]; then
+            echo "Leaked regtest node processes after SDK regtest flows:"
+            echo "$leaks"
+            exit 1
+          fi
+
       - name: Test contracts (regtest)
         run: cargo test -p contracts --all-features --no-fail-fast --verbose -- --test-threads=1
+
+      - name: Assert no leaked regtest nodes after contracts tests
+        if: always()
+        run: |
+          set -euo pipefail
+          leaks="$(ps -eo pid=,comm=,args= | awk '$2=="elementsd" || $2=="electrs" {print}')"
+          if [ -n "$leaks" ]; then
+            echo "Leaked regtest node processes after contracts regtest tests:"
+            echo "$leaks"
+            exit 1
+          fi

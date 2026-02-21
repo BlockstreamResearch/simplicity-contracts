@@ -58,7 +58,9 @@ pub struct OptionRuntime {
     runtime: WalletRuntimeConfig,
     args: OptionsArguments,
     resolved_tap: Option<TaprootPubkeyGen>,
+    #[allow(dead_code)]
     resolved_option_ids: Option<(AssetId, AssetId)>,
+    #[allow(dead_code)]
     resolved_grantor_ids: Option<(AssetId, AssetId)>,
 }
 
@@ -104,7 +106,11 @@ impl OptionRuntime {
             .expect("expected to be called after the creation tx")
     }
 
-    /// TODO: docs
+    /// Returns a deterministic secret key used as public blinder in tests/examples.
+    ///
+    /// # Panics
+    ///
+    /// Panics only if the fixed 32-byte constant cannot be parsed as a secp256k1 secret key.
     #[must_use]
     pub fn get_public_blinder() -> SecretKey {
         SecretKey::from_slice([1; 32].as_ref()).unwrap()
@@ -122,7 +128,11 @@ impl OptionRuntime {
         })
     }
 
-    /// TODO: docs
+    /// Build the options contract creation transaction request.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if finalizer argument/witness serialization fails.
     pub fn build_creation_request(&self) -> Result<TxCreateRequest, WalletAbiError> {
         Ok(TxCreateRequest {
             abi_version: TX_CREATE_ABI_VERSION.to_string(),
@@ -134,10 +144,7 @@ impl OptionRuntime {
                         id: "in0".to_string(),
                         utxo_source: UTXOSource::Wallet {
                             filter: WalletSourceFilter {
-                                // TODO: really?
-                                asset: AssetFilter::Exact {
-                                    asset_id: *self.runtime().network.policy_asset(),
-                                },
+                                asset: AssetFilter::default(),
                                 amount: AmountFilter::default(),
                                 lock: LockFilter::default(),
                             },
@@ -158,10 +165,7 @@ impl OptionRuntime {
                         id: "in1".to_string(),
                         utxo_source: UTXOSource::Wallet {
                             filter: WalletSourceFilter {
-                                // TODO: really?
-                                asset: AssetFilter::Exact {
-                                    asset_id: *self.runtime().network.policy_asset(),
-                                },
+                                asset: AssetFilter::default(),
                                 amount: AmountFilter::default(),
                                 lock: LockFilter::default(),
                             },
@@ -385,7 +389,7 @@ mod test {
         )?;
 
         let collateral_funding = fund_runtime(&runtime_config, RuntimeFundingAsset::Lbtc)?;
-        let _ = fund_runtime(&runtime_config, RuntimeFundingAsset::Lbtc)?;
+        // let _ = fund_runtime(&runtime_config, RuntimeFundingAsset::Lbtc)?;
         let settlement_funding = fund_runtime(&runtime_config, RuntimeFundingAsset::NewAsset)?;
 
         let args = OptionsArguments::new(

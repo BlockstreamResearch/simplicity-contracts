@@ -1,7 +1,7 @@
 #![allow(clippy::missing_errors_doc)]
 
 use std::str::FromStr;
-use std::sync::{Arc, Mutex, OnceLock, RwLock};
+use std::sync::{Arc, LazyLock, Mutex, OnceLock, RwLock};
 
 use anyhow::{Context, anyhow};
 use bitcoincore_rpc::{Auth, Client, RpcApi};
@@ -13,8 +13,9 @@ use wallet_abi::runtime::WalletRuntimeConfig;
 
 const DEFAULT_FUND_AMOUNT_SAT: u64 = 1_000_000;
 
-static TEST_ENV: OnceLock<Arc<RwLock<TestEnv>>> = OnceLock::new();
+static TEST_ENV: LazyLock<Mutex<Option<Arc<RwLock<TestEnv>>>>> = LazyLock::new(|| Mutex::new(None));
 static TEST_ENV_INIT_LOCK: Mutex<()> = Mutex::new(());
+static SHUTDOWN_HOOK_REGISTRATION: OnceLock<Result<(), String>> = OnceLock::new();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RuntimeFundingAsset {
@@ -29,15 +30,49 @@ pub struct RuntimeFundingResult {
     pub funded_amount_sat: u64,
 }
 
+#[cfg(unix)]
+extern "C" fn shutdown_node_running_on_exit() {
+    let _ = shutdown_node_running();
+}
+
+fn ensure_shutdown_hook_registered() -> anyhow::Result<()> {
+    let registration = SHUTDOWN_HOOK_REGISTRATION.get_or_init(|| {
+        #[cfg(unix)]
+        {
+            // SAFETY: The callback uses C ABI and takes no arguments as required by `atexit`.
+            let status = unsafe { libc::atexit(shutdown_node_running_on_exit) };
+            if status != 0 {
+                return Err("failed to register regtest shutdown hook".to_string());
+            }
+        }
+
+        Ok(())
+    });
+
+    registration
+        .as_ref()
+        .map(|_| ())
+        .map_err(|message| anyhow!("{message}"))
+}
+
+fn test_env_slot() -> anyhow::Result<Option<Arc<RwLock<TestEnv>>>> {
+    let slot = TEST_ENV
+        .lock()
+        .map_err(|_| anyhow!("test env slot lock poisoned"))?;
+    Ok(slot.clone())
+}
+
 pub fn ensure_node_running() -> anyhow::Result<()> {
-    if TEST_ENV.get().is_some() {
+    ensure_shutdown_hook_registered()?;
+
+    if test_env_slot()?.is_some() {
         return Ok(());
     }
 
     let _init_guard = TEST_ENV_INIT_LOCK
         .lock()
         .map_err(|_| anyhow!("test env init lock poisoned"))?;
-    if TEST_ENV.get().is_some() {
+    if test_env_slot()?.is_some() {
         return Ok(());
     }
 
@@ -58,8 +93,24 @@ pub fn ensure_node_running() -> anyhow::Result<()> {
             )
         })?;
 
-    let _ = TEST_ENV.set(Arc::new(RwLock::new(env)));
+    {
+        let mut slot = TEST_ENV
+            .lock()
+            .map_err(|_| anyhow!("test env slot lock poisoned"))?;
+        *slot = Some(Arc::new(RwLock::new(env)));
+    }
 
+    Ok(())
+}
+
+pub fn shutdown_node_running() -> anyhow::Result<()> {
+    let test_env = {
+        let mut slot = TEST_ENV
+            .lock()
+            .map_err(|_| anyhow!("test env slot lock poisoned"))?;
+        slot.take()
+    };
+    drop(test_env);
     Ok(())
 }
 
@@ -76,10 +127,7 @@ pub fn wallet_data_root() -> std::path::PathBuf {
 
 fn test_env() -> anyhow::Result<Arc<RwLock<TestEnv>>> {
     ensure_node_running()?;
-    TEST_ENV
-        .get()
-        .cloned()
-        .ok_or_else(|| anyhow!("test env failed to initialize"))
+    test_env_slot()?.ok_or_else(|| anyhow!("test env failed to initialize"))
 }
 
 #[allow(clippy::cast_precision_loss)]

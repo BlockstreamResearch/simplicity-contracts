@@ -33,3 +33,8 @@ contracts = { path = "../contracts" }
 simplicityhl = { workspace = true }
 
 lwk_common = { git = "https://github.com/Blockstream/lwk", rev = "4074c527fcc1268eb26953af397eecc6c1444293", package = "lwk_common", default-features = false }
+
+[dev-dependencies]
+bitcoincore-rpc = "0.19.0"
+lwk_test_util = { git = "https://github.com/Blockstream/lwk", rev = "4074c527fcc1268eb26953af397eecc6c1444293", package = "lwk_test_util" }
+serde_json = "1"

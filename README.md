@@ -6,6 +6,8 @@ This workspace contains reference implementations and tooling for working with [
 
 - [`contracts`](crates/contracts): Contract templates and helpers (finance + state management modules).
 - [`wallet-abi`](crates/wallet-abi): Schema-first wallet runtime and ABI layer used by contract flows.
+- [`wallet-abi-transport`](crates/wallet-abi-transport): Shared `wa_v1` / `wa_resp_v1` / `wa_relay_v1` transport codecs and relay protocol types.
+- [`wallet-abi-relayer`](crates/wallet-abi-relayer): Local websocket relay service for encrypted web <-> phone Wallet ABI messaging.
 - [`cli`](crates/cli): `simplicity-cli` binary crate for wallet and option-offer command flows.
 
 ## Repository Structure

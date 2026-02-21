@@ -1,0 +1,23 @@
+[package]
+name = "wallet-abi-regtest-harness"
+version = "0.1.0"
+edition = "2024"
+description = "JSON stdin/stdout harness for wallet-abi TypeScript regtest integration"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = "1"
+bitcoincore-rpc = "0.19.0"
+lwk_test_util = { git = "https://github.com/Blockstream/lwk", rev = "4074c527fcc1268eb26953af397eecc6c1444293", package = "lwk_test_util" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
+libc = "0.2"
+
+hex = { workspace = true }
+simplicityhl = { workspace = true }
+wallet-abi = { path = "../wallet-abi" }

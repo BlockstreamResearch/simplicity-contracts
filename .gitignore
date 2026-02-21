@@ -1,5 +1,6 @@
 # Build output
 /target/
+crates/wallet-abi-bindings/android_bindings/build
 
 # IDE/editors (optional but common minimal)
 **/.DS_Store
@@ -7,7 +8,15 @@
 .vscode/
 .cache
 .env
+.gradle
 
 # Debugging data
 logs.md
 tmp_vendor
+
+# JS/TS package artifacts
+node_modules/
+**/dist/
+
+# Other
+crates/wallet-abi-bindings/android_bindings/lib

@@ -39,3 +39,4 @@ bitcoincore-rpc = "0.19.0"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "sync"] }
 lwk_common = { git = "https://github.com/Blockstream/lwk", rev = "4074c527fcc1268eb26953af397eecc6c1444293", package = "lwk_common" }
 lwk_test_util = { git = "https://github.com/Blockstream/lwk", rev = "4074c527fcc1268eb26953af397eecc6c1444293", package = "lwk_test_util" }
+libc = "0.2"

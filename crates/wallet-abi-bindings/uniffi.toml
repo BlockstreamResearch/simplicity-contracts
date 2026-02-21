@@ -1,0 +1,8 @@
+[bindings.kotlin]
+package_name = "walletabi"
+
+[bindings.swift]
+module_name = "walletabi"
+
+[bindings.python]
+cdylib_name = "walletabi"

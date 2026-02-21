@@ -182,7 +182,7 @@ impl wallet_abi::Encodable for OptionsArguments {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     use wallet_abi::Encodable;
 
     const NETWORK: ::wallet_abi::Network = ::wallet_abi::Network::TestnetLiquid;

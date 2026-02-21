@@ -1,0 +1,27 @@
+[package]
+name = "wallet-abi-bindings"
+version = "0.1.0"
+edition = "2024"
+description = "UniFFI bindings for wallet-abi"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+wallet-abi = { path = "../wallet-abi" }
+uniffi = { version = "0.28.2", features = ["bindgen-tests"] }
+thiserror = "2"
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "sync"] }
+
+[build-dependencies]
+uniffi = { version = "0.28.2", features = ["build"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lib]
+crate-type = ["staticlib", "cdylib", "rlib"]
+name = "walletabi"
