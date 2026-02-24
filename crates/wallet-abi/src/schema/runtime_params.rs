@@ -119,9 +119,11 @@ pub struct InputIssuance {
     pub entropy: [u8; 32],
 }
 
+// TODO: return newly generated deterministic seed
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum InternalKeySource {
+    // TODO: add BIP-0341 unspendable key
     Local { key: PublicKey },
     External { key: Box<TaprootPubkeyGen> },
 }

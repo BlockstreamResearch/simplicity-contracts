@@ -52,7 +52,7 @@
 //! - Arithmetic overflow fails with `InvalidRequest`.
 //! - Unclosable deficits fail with `Funding`.
 
-use crate::runtime::{WalletRuntimeConfig, get_finalizer_spec_key, get_secrets_spec_key};
+use crate::runtime::{get_finalizer_spec_key, get_secrets_spec_key, WalletRuntimeConfig};
 use crate::{
     AmountFilter, AssetFilter, AssetVariant, FinalizerSpec, InputBlinder, InputIssuance,
     InputIssuanceKind, InputSchema, LockFilter, RuntimeParams, UTXOSource, WalletAbiError,
@@ -65,8 +65,8 @@ use lwk_wollet::bitcoin::bip32::{ChildNumber, DerivationPath};
 use lwk_wollet::elements::confidential::{Asset, AssetBlindingFactor, Value, ValueBlindingFactor};
 use lwk_wollet::elements::hashes::Hash;
 use lwk_wollet::elements::pset::{Input, PartiallySignedTransaction};
-use lwk_wollet::elements::{AssetId, ContractHash, OutPoint, TxOut, TxOutSecrets, secp256k1_zkp};
-use lwk_wollet::{Chain, EC, WalletTxOut};
+use lwk_wollet::elements::{secp256k1_zkp, AssetId, ContractHash, OutPoint, TxOut, TxOutSecrets};
+use lwk_wollet::{Chain, WalletTxOut, EC};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 type CandidateScore = (u64, u64, u64, String, u32);
@@ -89,6 +89,33 @@ enum BnbSelectionStatus {
     Exact,
     FallbackSingleLargestAboveTarget,
     FallbackLargestFirstAccumulation,
+}
+
+/// Diagnostics emitted from bounded exact subset search.
+#[derive(Clone, Debug)]
+struct BnbExactSubsetReport {
+    selected_indices: Option<Vec<usize>>,
+    nodes_visited: usize,
+    node_limit_hit: bool,
+}
+
+/// Diagnostics emitted from largest-first accumulation fallback.
+#[derive(Clone, Debug)]
+struct LargestFirstAccumulationReport {
+    selected_indices: Option<Vec<usize>>,
+    accumulated_total_sat: u64,
+}
+
+/// Selection-attempt diagnostics used when auxiliary funding fails.
+#[derive(Default)]
+struct AuxiliarySelectionDiagnostics {
+    bnb_report: Option<BnbExactSubsetReport>,
+    single_largest_attempted: bool,
+    single_largest_selected_indices: Option<Vec<usize>>,
+    largest_first_report: Option<LargestFirstAccumulationReport>,
+    selected_status: Option<BnbSelectionStatus>,
+    selected_indices: Option<Vec<usize>>,
+    selected_total_sat: Option<u64>,
 }
 
 #[derive(Clone, Copy)]
@@ -396,21 +423,6 @@ fn score_candidate(
     ))
 }
 
-/// Sort candidates using the canonical deterministic order for `BnB` and fallbacks.
-///
-/// Order:
-/// 1. amount descending
-/// 2. txid lexicographic ascending
-/// 3. vout ascending
-fn sort_bnb_candidates(candidates: &mut [BnbCandidate]) {
-    candidates.sort_by(|a, b| {
-        b.amount_sat
-            .cmp(&a.amount_sat)
-            .then_with(|| a.txid_lex.cmp(&b.txid_lex))
-            .then_with(|| a.vout.cmp(&b.vout))
-    });
-}
-
 /// Build a comparable outpoint-key for one candidate subset.
 ///
 /// The key is sorted so subset order itself does not affect comparisons.
@@ -559,8 +571,8 @@ impl<'a> BnbSearch<'a> {
 /// Bounded depth-first Branch-and-Bound search for an exact subset sum.
 ///
 /// Returns:
-/// - `Some(indices)` on exact match
-/// - `None` if no exact match or node bound is reached
+/// - selected indices when an exact match is found
+/// - search diagnostics (`nodes_visited`, `node_limit_hit`) for failure analysis
 ///
 /// Pruning:
 /// - stop include branch when `sum > target`
@@ -569,28 +581,40 @@ fn bnb_exact_subset_indices(
     candidates: &[BnbCandidate],
     target_sat: u64,
     max_nodes: usize,
-) -> Result<Option<Vec<usize>>, WalletAbiError> {
+) -> Result<BnbExactSubsetReport, WalletAbiError> {
     if target_sat == 0 {
-        return Ok(Some(Vec::new()));
+        return Ok(BnbExactSubsetReport {
+            selected_indices: Some(Vec::new()),
+            nodes_visited: 0,
+            node_limit_hit: false,
+        });
     }
     if candidates.is_empty() {
-        return Ok(None);
+        return Ok(BnbExactSubsetReport {
+            selected_indices: None,
+            nodes_visited: 0,
+            node_limit_hit: false,
+        });
     }
 
     let suffix_sum_sat = build_bnb_suffix_sums(candidates)?;
     let mut search = BnbSearch::new(target_sat, candidates, &suffix_sum_sat, max_nodes);
     search.search(0, 0)?;
 
-    if search.node_limit_hit {
-        return Ok(None);
-    }
-
-    Ok(search.best)
+    Ok(BnbExactSubsetReport {
+        selected_indices: if search.node_limit_hit {
+            None
+        } else {
+            search.best
+        },
+        nodes_visited: search.nodes_visited,
+        node_limit_hit: search.node_limit_hit,
+    })
 }
 
 /// Deterministic fallback A: select one largest UTXO whose amount is `>= target`.
 ///
-/// Candidates are expected to be pre-sorted with `sort_bnb_candidates`.
+/// Candidates are expected to be sorted by amount desc, then txid asc, then vout asc.
 fn select_single_largest_above_target(
     candidates: &[BnbCandidate],
     target_sat: u64,
@@ -603,11 +627,11 @@ fn select_single_largest_above_target(
 
 /// Deterministic fallback B: accumulate largest-first until the target is reached.
 ///
-/// Candidates are expected to be pre-sorted with `sort_bnb_candidates`.
+/// Candidates are expected to be sorted by amount desc, then txid asc, then vout asc.
 fn select_largest_first_accumulation(
     candidates: &[BnbCandidate],
     target_sat: u64,
-) -> Result<Option<Vec<usize>>, WalletAbiError> {
+) -> Result<LargestFirstAccumulationReport, WalletAbiError> {
     let mut selected_indices = Vec::new();
     let mut sum_sat = 0u64;
 
@@ -619,11 +643,17 @@ fn select_largest_first_accumulation(
             )
         })?;
         if sum_sat >= target_sat {
-            return Ok(Some(selected_indices));
+            return Ok(LargestFirstAccumulationReport {
+                selected_indices: Some(selected_indices),
+                accumulated_total_sat: sum_sat,
+            });
         }
     }
 
-    Ok(None)
+    Ok(LargestFirstAccumulationReport {
+        selected_indices: None,
+        accumulated_total_sat: sum_sat,
+    })
 }
 
 /// Sum selected candidate amounts with overflow checks.
@@ -639,6 +669,287 @@ fn sum_selected_amount(
                 )
             })
     })
+}
+
+const fn bnb_selection_status_label(status: BnbSelectionStatus) -> &'static str {
+    match status {
+        BnbSelectionStatus::Exact => "exact",
+        BnbSelectionStatus::FallbackSingleLargestAboveTarget => {
+            "fallback_single_largest_above_target"
+        }
+        BnbSelectionStatus::FallbackLargestFirstAccumulation => {
+            "fallback_largest_first_accumulation"
+        }
+    }
+}
+
+fn format_asset_balances_json(map: &BTreeMap<AssetId, u64>) -> serde_json::Value {
+    serde_json::Value::Array(
+        map.iter()
+            .map(|(asset_id, amount_sat)| {
+                serde_json::json!({
+                    "asset_id": asset_id.to_string(),
+                    "amount_sat": amount_sat
+                })
+            })
+            .collect(),
+    )
+}
+
+fn format_used_outpoints_json(used_outpoints: &HashSet<OutPoint>) -> serde_json::Value {
+    let mut sorted_outpoints = used_outpoints.iter().cloned().collect::<Vec<_>>();
+    sorted_outpoints.sort_by_key(|outpoint| (outpoint.txid.to_string(), outpoint.vout));
+
+    serde_json::Value::Array(
+        sorted_outpoints
+            .iter()
+            .map(|outpoint| {
+                serde_json::json!({
+                    "txid": outpoint.txid.to_string(),
+                    "vout": outpoint.vout
+                })
+            })
+            .collect(),
+    )
+}
+
+fn format_selection_candidates_json(candidates: &[WalletTxOut]) -> serde_json::Value {
+    serde_json::Value::Array(
+        candidates
+            .iter()
+            .enumerate()
+            .map(|(index, candidate)| {
+                serde_json::json!({
+                    "index": index,
+                    "txid": candidate.outpoint.txid.to_string(),
+                    "vout": candidate.outpoint.vout,
+                    "asset_id": candidate.unblinded.asset.to_string(),
+                    "value_sat": candidate.unblinded.value,
+                    "ext_int": format!("{:?}", candidate.ext_int),
+                    "wildcard_index": candidate.wildcard_index
+                })
+            })
+            .collect(),
+    )
+}
+
+fn format_indices_json(indices: Option<&[usize]>) -> serde_json::Value {
+    match indices {
+        Some(indices) => serde_json::Value::Array(
+            indices
+                .iter()
+                .map(|index| serde_json::json!(index))
+                .collect(),
+        ),
+        None => serde_json::Value::Null,
+    }
+}
+
+fn add_sat_with_overflow_marker(total_sat: &mut u64, delta_sat: u64, overflowed: &mut bool) {
+    if let Some(next) = total_sat.checked_add(delta_sat) {
+        *total_sat = next;
+    } else {
+        *overflowed = true;
+        *total_sat = total_sat.saturating_add(delta_sat);
+    }
+}
+
+fn sum_candidate_values_with_overflow(
+    candidates: &[WalletTxOut],
+    indices: &[usize],
+) -> (u64, bool, Vec<usize>) {
+    let mut total_sat = 0u64;
+    let mut overflowed = false;
+    let mut invalid_indices = Vec::new();
+
+    for index in indices {
+        if let Some(candidate) = candidates.get(*index) {
+            add_sat_with_overflow_marker(
+                &mut total_sat,
+                candidate.unblinded.value,
+                &mut overflowed,
+            );
+        } else {
+            invalid_indices.push(*index);
+        }
+    }
+
+    (total_sat, overflowed, invalid_indices)
+}
+
+fn sum_all_candidate_values_with_overflow(candidates: &[WalletTxOut]) -> (u64, bool) {
+    let mut total_sat = 0u64;
+    let mut overflowed = false;
+    for candidate in candidates {
+        add_sat_with_overflow_marker(&mut total_sat, candidate.unblinded.value, &mut overflowed);
+    }
+    (total_sat, overflowed)
+}
+
+fn auxiliary_funding_failure_message(
+    reason: &str,
+    target_asset: AssetId,
+    target_missing: u64,
+    wallet_snapshot: &[WalletTxOut],
+    used_outpoints: &HashSet<OutPoint>,
+    demand_by_asset: &BTreeMap<AssetId, u64>,
+    supply_by_asset: &BTreeMap<AssetId, u64>,
+    selection_candidates: &[WalletTxOut],
+    diagnostics: &AuxiliarySelectionDiagnostics,
+) -> String {
+    let deficits_by_asset = current_deficits(demand_by_asset, supply_by_asset);
+
+    let wallet_utxo_count_total = wallet_snapshot.len();
+    let used_outpoints_count = used_outpoints.len();
+    let unused_utxo_count = wallet_snapshot
+        .iter()
+        .filter(|candidate| !used_outpoints.contains(&candidate.outpoint))
+        .count();
+
+    let mut target_total_count = 0usize;
+    let mut target_unused_count = 0usize;
+    let mut target_used_count = 0usize;
+    let mut target_total_amount_sat = 0u64;
+    let mut target_unused_amount_sat = 0u64;
+    let mut target_used_amount_sat = 0u64;
+    let mut target_total_amount_overflowed = false;
+    let mut target_unused_amount_overflowed = false;
+    let mut target_used_amount_overflowed = false;
+
+    for candidate in wallet_snapshot {
+        if candidate.unblinded.asset != target_asset {
+            continue;
+        }
+
+        target_total_count = target_total_count.saturating_add(1);
+        add_sat_with_overflow_marker(
+            &mut target_total_amount_sat,
+            candidate.unblinded.value,
+            &mut target_total_amount_overflowed,
+        );
+
+        if used_outpoints.contains(&candidate.outpoint) {
+            target_used_count = target_used_count.saturating_add(1);
+            add_sat_with_overflow_marker(
+                &mut target_used_amount_sat,
+                candidate.unblinded.value,
+                &mut target_used_amount_overflowed,
+            );
+        } else {
+            target_unused_count = target_unused_count.saturating_add(1);
+            add_sat_with_overflow_marker(
+                &mut target_unused_amount_sat,
+                candidate.unblinded.value,
+                &mut target_unused_amount_overflowed,
+            );
+        }
+    }
+
+    let (candidate_total_sat, candidate_total_overflowed) =
+        sum_all_candidate_values_with_overflow(selection_candidates);
+
+    let bnb_json = if let Some(report) = diagnostics.bnb_report.as_ref() {
+        let (bnb_selected_total_sat, bnb_selected_total_overflowed, bnb_invalid_indices) =
+            if let Some(indices) = report.selected_indices.as_deref() {
+                sum_candidate_values_with_overflow(selection_candidates, indices)
+            } else {
+                (0, false, Vec::new())
+            };
+        let bnb_selected_total_sat_json = if report.selected_indices.is_some() {
+            serde_json::json!(bnb_selected_total_sat)
+        } else {
+            serde_json::Value::Null
+        };
+
+        serde_json::json!({
+            "attempted": true,
+            "max_nodes": MAX_BNB_NODES,
+            "nodes_visited": report.nodes_visited,
+            "node_limit_hit": report.node_limit_hit,
+            "exact_match_found": report.selected_indices.is_some(),
+            "selected_indices": format_indices_json(report.selected_indices.as_deref()),
+            "selected_total_sat": bnb_selected_total_sat_json,
+            "selected_total_overflowed": bnb_selected_total_overflowed,
+            "invalid_selected_indices": bnb_invalid_indices
+        })
+    } else {
+        serde_json::json!({
+            "attempted": false
+        })
+    };
+
+    let single_selected_value_sat = diagnostics
+        .single_largest_selected_indices
+        .as_deref()
+        .and_then(|indices| indices.first())
+        .and_then(|index| selection_candidates.get(*index))
+        .map(|candidate| candidate.unblinded.value);
+
+    let single_largest_json = serde_json::json!({
+        "attempted": diagnostics.single_largest_attempted,
+        "found": diagnostics.single_largest_selected_indices.is_some(),
+        "selected_indices": format_indices_json(diagnostics.single_largest_selected_indices.as_deref()),
+        "selected_value_sat": single_selected_value_sat
+    });
+
+    let largest_first_json = if let Some(report) = diagnostics.largest_first_report.as_ref() {
+        let largest_selected_total_sat = report
+            .selected_indices
+            .as_ref()
+            .map(|_| report.accumulated_total_sat);
+        serde_json::json!({
+            "attempted": true,
+            "found": report.selected_indices.is_some(),
+            "selected_indices": format_indices_json(report.selected_indices.as_deref()),
+            "selected_total_sat": largest_selected_total_sat,
+            "accumulated_total_sat": report.accumulated_total_sat
+        })
+    } else {
+        serde_json::json!({
+            "attempted": false
+        })
+    };
+
+    let selected_status = diagnostics.selected_status.map(bnb_selection_status_label);
+    let diagnostics_json = serde_json::json!({
+        "reason": reason,
+        "target_asset": target_asset.to_string(),
+        "target_missing_sat": target_missing,
+        "current_deficits_by_asset": format_asset_balances_json(&deficits_by_asset),
+        "demand_by_asset": format_asset_balances_json(demand_by_asset),
+        "supply_by_asset": format_asset_balances_json(supply_by_asset),
+        "wallet_snapshot_stats": {
+            "wallet_utxo_count_total": wallet_utxo_count_total,
+            "used_outpoints_count": used_outpoints_count,
+            "unused_utxo_count": unused_utxo_count
+        },
+        "target_asset_stats": {
+            "target_asset_total_count": target_total_count,
+            "target_asset_total_amount_sat": target_total_amount_sat,
+            "target_asset_total_amount_overflowed": target_total_amount_overflowed,
+            "target_asset_unused_count": target_unused_count,
+            "target_asset_unused_amount_sat": target_unused_amount_sat,
+            "target_asset_unused_amount_overflowed": target_unused_amount_overflowed,
+            "target_asset_used_count": target_used_count,
+            "target_asset_used_amount_sat": target_used_amount_sat,
+            "target_asset_used_amount_overflowed": target_used_amount_overflowed
+        },
+        "used_outpoints": format_used_outpoints_json(used_outpoints),
+        "selection_candidates": format_selection_candidates_json(selection_candidates),
+        "selection_candidate_count": selection_candidates.len(),
+        "selection_candidate_total_sat": candidate_total_sat,
+        "selection_candidate_total_overflowed": candidate_total_overflowed,
+        "selection_attempts": {
+            "bnb_exact": bnb_json,
+            "single_largest_above_target": single_largest_json,
+            "largest_first_accumulation": largest_first_json
+        },
+        "selected_strategy": selected_status,
+        "selected_indices": format_indices_json(diagnostics.selected_indices.as_deref()),
+        "selected_total_sat": diagnostics.selected_total_sat
+    });
+
+    format!("unable to cover remaining deficits with wallet utxos: {diagnostics_json}")
 }
 
 impl WalletRuntimeConfig {
@@ -1014,9 +1325,12 @@ impl WalletRuntimeConfig {
     fn select_auxiliary_inputs_for_asset(
         wallet_snapshot: &[WalletTxOut],
         used_outpoints: &HashSet<OutPoint>,
+        demand_by_asset: &BTreeMap<AssetId, u64>,
+        supply_by_asset: &BTreeMap<AssetId, u64>,
         target_asset: AssetId,
         target_missing: u64,
     ) -> Result<(Vec<WalletTxOut>, BnbSelectionStatus), WalletAbiError> {
+        let mut diagnostics = AuxiliarySelectionDiagnostics::default();
         let mut wallet_candidates: Vec<WalletTxOut> = wallet_snapshot
             .iter()
             .filter(|candidate| {
@@ -1025,21 +1339,6 @@ impl WalletRuntimeConfig {
             })
             .cloned()
             .collect();
-        if wallet_candidates.is_empty() {
-            return Err(WalletAbiError::Funding(
-                "unable to cover remaining deficits with wallet utxos".to_string(),
-            ));
-        }
-
-        let mut bnb_candidates = wallet_candidates
-            .iter()
-            .map(|candidate| BnbCandidate {
-                amount_sat: candidate.unblinded.value,
-                txid_lex: candidate.outpoint.txid.to_string(),
-                vout: candidate.outpoint.vout,
-            })
-            .collect::<Vec<_>>();
-        sort_bnb_candidates(&mut bnb_candidates);
         wallet_candidates.sort_by(|a, b| {
             b.unblinded
                 .value
@@ -1053,32 +1352,87 @@ impl WalletRuntimeConfig {
                 .then_with(|| a.outpoint.vout.cmp(&b.outpoint.vout))
         });
 
-        let (selected_indices, status) = if let Some(exact) =
-            bnb_exact_subset_indices(&bnb_candidates, target_missing, MAX_BNB_NODES)?
-        {
+        if wallet_candidates.is_empty() {
+            let message = auxiliary_funding_failure_message(
+                "no_target_asset_candidates",
+                target_asset,
+                target_missing,
+                wallet_snapshot,
+                used_outpoints,
+                demand_by_asset,
+                supply_by_asset,
+                &wallet_candidates,
+                &diagnostics,
+            );
+            return Err(WalletAbiError::Funding(message));
+        }
+
+        let bnb_candidates = wallet_candidates
+            .iter()
+            .map(|candidate| BnbCandidate {
+                amount_sat: candidate.unblinded.value,
+                txid_lex: candidate.outpoint.txid.to_string(),
+                vout: candidate.outpoint.vout,
+            })
+            .collect::<Vec<_>>();
+        let bnb_report = bnb_exact_subset_indices(&bnb_candidates, target_missing, MAX_BNB_NODES)?;
+        diagnostics.bnb_report = Some(bnb_report.clone());
+
+        let (selected_indices, status) = if let Some(exact) = bnb_report.selected_indices.clone() {
             (exact, BnbSelectionStatus::Exact)
-        } else if let Some(single) =
-            select_single_largest_above_target(&bnb_candidates, target_missing)
-        {
-            (single, BnbSelectionStatus::FallbackSingleLargestAboveTarget)
-        } else if let Some(accumulated) =
-            select_largest_first_accumulation(&bnb_candidates, target_missing)?
-        {
-            (
-                accumulated,
-                BnbSelectionStatus::FallbackLargestFirstAccumulation,
-            )
         } else {
-            return Err(WalletAbiError::Funding(
-                "unable to cover remaining deficits with wallet utxos".to_string(),
-            ));
+            diagnostics.single_largest_attempted = true;
+            let single_largest_selected =
+                select_single_largest_above_target(&bnb_candidates, target_missing);
+            diagnostics.single_largest_selected_indices = single_largest_selected.clone();
+
+            if let Some(single) = single_largest_selected {
+                (single, BnbSelectionStatus::FallbackSingleLargestAboveTarget)
+            } else {
+                let largest_first_report =
+                    select_largest_first_accumulation(&bnb_candidates, target_missing)?;
+                diagnostics.largest_first_report = Some(largest_first_report.clone());
+
+                if let Some(accumulated) = largest_first_report.selected_indices {
+                    (
+                        accumulated,
+                        BnbSelectionStatus::FallbackLargestFirstAccumulation,
+                    )
+                } else {
+                    let message = auxiliary_funding_failure_message(
+                        "strategy_exhausted",
+                        target_asset,
+                        target_missing,
+                        wallet_snapshot,
+                        used_outpoints,
+                        demand_by_asset,
+                        supply_by_asset,
+                        &wallet_candidates,
+                        &diagnostics,
+                    );
+                    return Err(WalletAbiError::Funding(message));
+                }
+            }
         };
 
         let selected_total = sum_selected_amount(&bnb_candidates, &selected_indices)?;
+        diagnostics.selected_status = Some(status);
+        diagnostics.selected_indices = Some(selected_indices.clone());
+        diagnostics.selected_total_sat = Some(selected_total);
+
         if selected_total < target_missing {
-            return Err(WalletAbiError::Funding(
-                "unable to cover remaining deficits with wallet utxos".to_string(),
-            ));
+            let message = auxiliary_funding_failure_message(
+                "selected_total_below_target",
+                target_asset,
+                target_missing,
+                wallet_snapshot,
+                used_outpoints,
+                demand_by_asset,
+                supply_by_asset,
+                &wallet_candidates,
+                &diagnostics,
+            );
+            return Err(WalletAbiError::Funding(message));
         }
 
         let selected = selected_indices
@@ -1150,6 +1504,8 @@ impl WalletRuntimeConfig {
         let (selected_inputs, _status) = Self::select_auxiliary_inputs_for_asset(
             wallet_snapshot,
             &state.used_outpoints,
+            &state.demand_by_asset,
+            &state.supply_by_asset,
             target_asset,
             target_missing,
         )?;

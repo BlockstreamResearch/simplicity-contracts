@@ -457,7 +457,6 @@ pub fn build_option_offer_exercise_request(
                     issuance: None,
                     finalizer,
                 },
-                InputSchema::new("input2"),
             ],
             outputs,
             fee_rate_sat_vb: Some(input.fee_rate_sat_vb),

@@ -79,19 +79,9 @@ fi
 # iOS libs
 IPHONEOS_DEPLOYMENT_TARGET=12.0 MACOSX_DEPLOYMENT_TARGET=11.0 cargo build --release --target aarch64-apple-ios -p "$CRATE"
 IPHONEOS_DEPLOYMENT_TARGET=12.0 MACOSX_DEPLOYMENT_TARGET=11.0 cargo build --release --target aarch64-apple-ios-sim -p "$CRATE"
-IPHONEOS_DEPLOYMENT_TARGET=12.0 MACOSX_DEPLOYMENT_TARGET=11.0 cargo build --release --target x86_64-apple-ios -p "$CRATE"
-
-mkdir -p target/lipo-ios-sim/release
-lipo \
-  target/aarch64-apple-ios-sim/release/lib${LIB_NAME}.a \
-  target/x86_64-apple-ios/release/lib${LIB_NAME}.a \
-  -create -output target/lipo-ios-sim/release/lib${LIB_NAME}.a
 
 # Android shared libs
 cargo ndk -t aarch64-linux-android -o "$OUT_BASE/android/jniLibs" build -p "$CRATE"
-cargo ndk -t armv7-linux-androideabi -o "$OUT_BASE/android/jniLibs" build -p "$CRATE"
-cargo ndk -t i686-linux-android -o "$OUT_BASE/android/jniLibs" build -p "$CRATE"
-cargo ndk -t x86_64-linux-android -o "$OUT_BASE/android/jniLibs" build -p "$CRATE"
 
 # JVM native lib (macOS arm64)
 MACOSX_DEPLOYMENT_TARGET=11.0 cargo build --release --target aarch64-apple-darwin -p "$CRATE"
@@ -134,7 +124,7 @@ cp -a "$OUT_BASE/android/jniLibs"/* "$BINDINGS_DIR/androidMain/jniLibs/"
 mkdir -p "$BINDINGS_DIR/libs/ios-arm64"
 mkdir -p "$BINDINGS_DIR/libs/ios-simulator-arm64"
 cp "target/aarch64-apple-ios/release/lib${LIB_NAME}.a" "$BINDINGS_DIR/libs/ios-arm64/"
-cp "target/lipo-ios-sim/release/lib${LIB_NAME}.a" "$BINDINGS_DIR/libs/ios-simulator-arm64/"
+cp "target/aarch64-apple-ios-sim/release/lib${LIB_NAME}.a" "$BINDINGS_DIR/libs/ios-simulator-arm64/"
 
 mkdir -p "$BINDINGS_DIR/jvmMain/resources/darwin-aarch64"
 cp "target/aarch64-apple-darwin/release/lib${LIB_NAME}.dylib" "$BINDINGS_DIR/jvmMain/resources/darwin-aarch64/"

@@ -19,4 +19,11 @@ node_modules/
 **/dist/
 
 # Other
-crates/wallet-abi-bindings/android_bindings/lib
+# wallet-abi Android bindings generated artifacts
+crates/wallet-abi-bindings/android_bindings/lib/build/
+crates/wallet-abi-bindings/android_bindings/lib/src/androidMain/
+crates/wallet-abi-bindings/android_bindings/lib/src/commonMain/
+crates/wallet-abi-bindings/android_bindings/lib/src/jvmMain/
+crates/wallet-abi-bindings/android_bindings/lib/src/nativeMain/
+crates/wallet-abi-bindings/android_bindings/lib/src/libs/
+crates/wallet-abi-bindings/android_bindings/lib/src/nativeInterop/cinterop/headers/
