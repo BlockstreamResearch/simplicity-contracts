@@ -13,14 +13,17 @@ use simplicityhl::simplicity::jet::elements::{ElementsEnv, ElementsUtxo};
 use simplicityhl::simplicity::{Cmr, RedeemNode};
 use simplicityhl::tracker::TrackerLogLevel;
 use simplicityhl::{Arguments, CompiledProgram, TemplateProgram};
+use wallet_abi::simplicity_leaf_version;
 use wallet_abi::{Network, ProgramError, run_program};
-use wallet_abi::{simplicity_leaf_version, tap_data_hash};
 
 mod build_witness;
 mod smt;
 
 pub use build_witness::{DEPTH, SMTWitness, build_smt_storage_witness, u256};
 pub use smt::SparseMerkleTree;
+
+use crate::smt_storage::build_witness::LEAF_MIDSTATE;
+use crate::smt_storage::build_witness::NODE_MIDSTATE;
 
 #[must_use]
 pub fn get_path_bits(path: &[bool], reverse: bool) -> u8 {
@@ -91,6 +94,24 @@ pub fn control_block(cmr: Cmr, spend_info: &TaprootSpendInfo) -> ControlBlock {
         .expect("must get control block")
 }
 
+/// Create a SHA256 context, initialized with a specific `LEAF_TAG` constant and data
+///
+/// Based on the C implementation of the `tapdata_init` jet:
+/// <https://github.com/BlockstreamResearch/simplicity/blob/d190505509f4c04b1b9193c6739515f9faa18aac/C/jets.c#L1408>
+#[must_use]
+pub fn tap_leaf_hash(data: &[u8]) -> sha256::Hash {
+    let mut eng =
+        sha256::HashEngine::from_midstate(sha256::Midstate::from_byte_array(LEAF_MIDSTATE), 64);
+    eng.input(data);
+    sha256::Hash::from_engine(eng)
+}
+
+/// Returns a pre-initialized SHA256 engine with the double `NODE_TAG` already processed.
+#[must_use]
+pub fn node_hash_engine() -> sha256::HashEngine {
+    sha256::HashEngine::from_midstate(sha256::Midstate::from_byte_array(NODE_MIDSTATE), 64)
+}
+
 /// Computes the TapData-tagged hash of the Simplicity state (SMT Root).
 ///
 /// This involves hashing the tag "`TapData`" twice, followed by the leaf value
@@ -98,13 +119,17 @@ pub fn control_block(cmr: Cmr, spend_info: &TaprootSpendInfo) -> ControlBlock {
 ///
 /// # Security Note: Second Preimage Resistance
 ///
-/// The `raw_path` (bit representation of the path) is included in the initial hash of the leaf
-/// alongside the `leaf` data.
+/// This implementation employs a dual-layered defense mechanism against **second
+/// preimage attacks** (specifically, Merkle substitution attacks) using explicit
+/// domain separation and path binding:
 ///
-/// This is a defense mechanism against **second preimage attacks** (specifically, Merkle substitution attacks).
-/// In Merkle trees (especially those with variable depth), an attacker might try to present
-/// an internal node as a leaf, or vice versa. By including the path in the leaf's hash,
-/// we strictly bind the data to its specific position in the tree hierarchy.
+/// 1. **Domain Separation (`LEAF_TAG` vs `NODE_TAG`)**: An attacker might try to present
+///    an internal node as a leaf, or vice versa. By utilizing distinct tags for leaves
+///    and branches, the tree guarantees that a branch hash can never be mathematically
+///    parsed as a leaf hash.
+/// 2. **Path Binding**: The `raw_path` (bit representation of the path) is included
+///    in the initial hash of the leaf alongside the `leaf` data. This strictly binds
+///    the data to its exact position in the tree hierarchy.
 ///
 /// Although `DEPTH` is currently fixed (which mitigates some of these risks naturally),
 /// this explicit domain separation ensures that a valid proof for a leaf at one position
@@ -125,10 +150,10 @@ pub fn compute_tapdata_tagged_hash_of_the_state(
     let mut tapdata_input = Vec::with_capacity(leaf.len() + 1);
     tapdata_input.extend_from_slice(leaf);
     tapdata_input.push(get_path_bits(&raw_path, false));
-    let mut current_hash = tap_data_hash(&tapdata_input);
+    let mut current_hash = tap_leaf_hash(&tapdata_input);
 
     for (hash, is_right_direction) in path {
-        let mut eng = sha256::Hash::engine();
+        let mut eng = node_hash_engine();
 
         if *is_right_direction {
             eng.input(hash);
@@ -277,6 +302,7 @@ pub fn finalize_get_storage_transaction(
 #[cfg(test)]
 mod smt_storage_tests {
     use super::*;
+
     use anyhow::Result;
     use simplicityhl::elements::secp256k1_zkp::rand::{Rng, thread_rng};
     use std::sync::Arc;
@@ -309,6 +335,35 @@ mod smt_storage_tests {
 		    0x07, 0x8a, 0x5a, 0x0f, 0x28, 0xec, 0x96, 0xd5, 0x47, 0xbf, 0xee, 0x9a, 0xce, 0x80, 0x3a, 0xc0, 
 	    ])
         .expect("key should be valid")
+    }
+
+    #[test]
+    fn tap_leaf_midstate() {
+        let leaf_tag = b"SMT/1.0/leaf";
+        let tag = sha256::Hash::hash(leaf_tag);
+
+        let mut eng = sha256::Hash::engine();
+        eng.input(tag.as_byte_array());
+        eng.input(tag.as_byte_array());
+        dbg!(eng.midstate());
+        assert_eq!(
+            eng.midstate(),
+            sha256::Midstate::from_byte_array(LEAF_MIDSTATE)
+        );
+    }
+
+    #[test]
+    fn node_midstate() {
+        let node_tag = b"SMT/1.0/node";
+        let tag = sha256::Hash::hash(node_tag);
+
+        let mut eng = sha256::Hash::engine();
+        eng.input(tag.as_byte_array());
+        eng.input(tag.as_byte_array());
+        assert_eq!(
+            eng.midstate(),
+            sha256::Midstate::from_byte_array(NODE_MIDSTATE)
+        );
     }
 
     #[test]

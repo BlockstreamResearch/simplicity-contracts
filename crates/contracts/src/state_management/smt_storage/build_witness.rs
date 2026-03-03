@@ -14,6 +14,32 @@ pub type u256 = [u8; 32];
 /// and cannot dynamically resolve array lengths using `param::LEN`.
 pub const DEPTH: usize = 8;
 
+/// Precomputed SHA256 midstate for the `SMT/1.0/leaf` domain separation tag.
+///
+/// This is the result of double-hashing `b"SMT/1.0/leaf"` into a fresh SHA256 engine,
+/// stored in reversed byte order as required by [`sha256::Midstate`].
+/// 
+/// The `1.0` denotes the protocol version, allowing future SMT upgrades to safely
+/// alter hashing logic without risking backward-compatibility hash collisions.
+#[rustfmt::skip]
+pub const LEAF_MIDSTATE: [u8; 32] = [
+    0x64, 0x59, 0x25, 0x75, 0x94, 0x38, 0xdd, 0x53, 0xbc, 0x61, 0x54, 0x2a, 0x12, 0x77, 0x85, 0x3e,
+    0x62, 0x7e, 0x14, 0x80, 0xd7, 0xad, 0xf0, 0x5b, 0x78, 0x09, 0x93, 0x62, 0x70, 0x98, 0x24, 0xbf,
+];
+
+/// Precomputed SHA256 midstate for the `SMT/1.0/node` domain separation tag.
+///
+/// This is the result of double-hashing `b"SMT/1.0/node"` into a fresh SHA256 engine,
+/// stored in reversed byte order as required by [`sha256::Midstate`].
+///
+/// The `1.0` denotes the protocol version, allowing future SMT upgrades to safely
+/// alter hashing logic without risking backward-compatibility hash collisions
+#[rustfmt::skip]
+pub const NODE_MIDSTATE: [u8; 32] = [
+    0xe3, 0x4c, 0x71, 0xa4, 0x67, 0x56, 0x64, 0xaa, 0x91, 0x98, 0x37, 0x94, 0xe6, 0x30, 0x0c, 0xa0,
+    0xe2, 0x0d, 0xbb, 0xb2, 0xe6, 0x69, 0x03, 0x3f, 0x2b, 0x10, 0x20, 0xc9, 0x68, 0x55, 0x06, 0xe6,
+];
+
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq)]
 pub struct SMTWitness {
     /// The internal public key used for Taproot tweaking.

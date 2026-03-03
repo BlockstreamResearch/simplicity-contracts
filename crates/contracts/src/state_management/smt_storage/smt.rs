@@ -1,7 +1,7 @@
 use simplicityhl::simplicity::elements::hashes::HashEngine as _;
 use simplicityhl::simplicity::hashes::{Hash, sha256};
-use wallet_abi::tap_data_hash;
 
+use crate::smt_storage::{node_hash_engine, tap_leaf_hash};
 use crate::state_management::smt_storage::get_path_bits;
 
 use super::build_witness::{DEPTH, u256};
@@ -70,7 +70,7 @@ impl TreeNode {
 ///      at a higher level. Even if the data matches, the path/position will differ, changing the hash.
 ///
 /// 2. **Domain Separation**:
-///    The function initializes with `Hash(b"TapData")`.
+///    The function initializes with `Hash(LEAF_TAG)`, where `LEAF_TAG` is an internal constant.
 ///    * *Why?* This ensures that hashes generated for this SMT state cannot be confused with other
 ///      Bitcoin/Elements hashes (like `TapLeaf` or `TapBranch` hashes), preventing cross-context collisions.
 ///
@@ -93,13 +93,12 @@ impl SparseMerkleTree {
     #[must_use]
     pub fn new() -> Self {
         let mut precalculate_hashes = [[0u8; 32]; DEPTH];
-        let mut eng = sha256::Hash::engine();
         let zero = [0u8; 32];
-        eng.input(&zero);
-        precalculate_hashes[0] = *sha256::Hash::from_engine(eng).as_byte_array();
+        precalculate_hashes[0] = *tap_leaf_hash(&zero).as_byte_array();
 
         for i in 1..DEPTH {
-            let mut eng = sha256::Hash::engine();
+            let mut eng = node_hash_engine();
+
             eng.input(&precalculate_hashes[i - 1]);
             eng.input(&precalculate_hashes[i - 1]);
             precalculate_hashes[i] = *sha256::Hash::from_engine(eng).as_byte_array();
@@ -113,11 +112,13 @@ impl SparseMerkleTree {
         }
     }
 
-    /// Computes parent hash: `SHA256(left_child_hash || right_child_hash)`.
+    /// Computes parent hash using the globally cached double-tag midstate.
     fn calculate_hash(left: &TreeNode, right: &TreeNode) -> u256 {
-        let mut eng = sha256::Hash::engine();
+        let mut eng = node_hash_engine();
+
         eng.input(&left.get_hash());
         eng.input(&right.get_hash());
+
         *sha256::Hash::from_engine(eng).as_byte_array()
     }
 
@@ -138,7 +139,7 @@ impl SparseMerkleTree {
             let mut tapdata_input = Vec::with_capacity(leaf.len() + 1);
             tapdata_input.extend_from_slice(leaf);
             tapdata_input.push(get_path_bits(path, true));
-            let leaf_hash = tap_data_hash(&tapdata_input);
+            let leaf_hash = tap_leaf_hash(&tapdata_input);
             **root = TreeNode::Leaf {
                 leaf_hash: *leaf_hash.as_byte_array(),
             };

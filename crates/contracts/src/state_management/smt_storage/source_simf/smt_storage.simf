@@ -4,9 +4,10 @@
  * than Merkle Trees. By avoiding proof overhead like sibling hashes, we reduce 
  * witness size and simplify contract logic for small N.
  */
-fn hash_array_tr_storage_with_update(elem: (u256, bool), prev_hash: u256) -> u256 {
+fn hash_array_tr_storage_with_update(elem: (u256, bool), prev_hash_ctx: (u256, Ctx8)) -> (u256, Ctx8) {
     let (hash, is_right): (u256, bool) = dbg!(elem);
-    let ctx: Ctx8 = jet::sha_256_ctx_8_init();
+    let (prev_hash, ctx_node): (u256, Ctx8) = prev_hash_ctx;
+    let ctx: Ctx8 = ctx_node;
 
     let new_hash: Ctx8 = match is_right {
         true => {
@@ -19,18 +20,48 @@ fn hash_array_tr_storage_with_update(elem: (u256, bool), prev_hash: u256) -> u25
         }
     };
 
-    jet::sha_256_ctx_8_finalize(new_hash)
+    (jet::sha_256_ctx_8_finalize(new_hash), ctx_node)
+}
+
+// Use tag: SMT/1.0/leaf
+fn tapleaf_init() -> Ctx8 {
+    let doubled_tag_hash: [u8; 64] = [
+        0xb6, 0xc5, 0x7e, 0x7a, 0xa0, 0x8c, 0xd9, 0xe8, 0xc2, 0xfb, 0x65, 0xee, 0x31, 0x6d, 0x2f, 0xd9,
+        0xa2, 0x4b, 0xf4, 0xf4, 0x00, 0xc8, 0x6d, 0xe5, 0x5d, 0xcd, 0x8c, 0x4d, 0x38, 0x3d, 0x99, 0xd8,
+        0xb6, 0xc5, 0x7e, 0x7a, 0xa0, 0x8c, 0xd9, 0xe8, 0xc2, 0xfb, 0x65, 0xee, 0x31, 0x6d, 0x2f, 0xd9,
+        0xa2, 0x4b, 0xf4, 0xf4, 0x00, 0xc8, 0x6d, 0xe5, 0x5d, 0xcd, 0x8c, 0x4d, 0x38, 0x3d, 0x99, 0xd8,
+    ];
+
+    let ctx: Ctx8 = jet::sha_256_ctx_8_init();
+    jet::sha_256_ctx_8_add_64(ctx, doubled_tag_hash)
+}
+
+// Use tag: SMT/1.0/node
+fn tapnode_init() -> Ctx8 {
+    let doubled_tag_hash: [u8; 64] = [
+        0x1f, 0xa6, 0xe8, 0x92, 0x6a, 0x5f, 0x09, 0xa8, 0xf7, 0xb2, 0xe1, 0x57, 0x86, 0x68, 0x2f, 0xaa,
+        0xdc, 0xac, 0xee, 0x90, 0x95, 0x2f, 0xe4, 0x61, 0x28, 0x5c, 0x77, 0x8c, 0xb9, 0x5e, 0xb7, 0xb2,
+        0x1f, 0xa6, 0xe8, 0x92, 0x6a, 0x5f, 0x09, 0xa8, 0xf7, 0xb2, 0xe1, 0x57, 0x86, 0x68, 0x2f, 0xaa,
+        0xdc, 0xac, 0xee, 0x90, 0x95, 0x2f, 0xe4, 0x61, 0x28, 0x5c, 0x77, 0x8c, 0xb9, 0x5e, 0xb7, 0xb2,
+    ];
+
+    let ctx: Ctx8 = jet::sha_256_ctx_8_init();
+    jet::sha_256_ctx_8_add_64(ctx, doubled_tag_hash)
 }
 
 fn script_hash_for_input_script(key: u256, leaf: u256, path_bits: u8, merkle_data: [(u256, bool); 8]) -> u256 {
     let tap_leaf: u256 = jet::tapleaf_hash();
-    let ctx: Ctx8 = jet::tapdata_init();
+    let ctx: Ctx8 = tapleaf_init();
     let ctx: Ctx8 = jet::sha_256_ctx_8_add_32(ctx, leaf);
     let ctx: Ctx8 = jet::sha_256_ctx_8_add_1(ctx, path_bits);
 
     let hash_leaf: u256 = jet::sha_256_ctx_8_finalize(ctx);
 
-    let computed: u256 = array_fold::<hash_array_tr_storage_with_update, 8>(merkle_data, hash_leaf);
+    // Optimize node tag calculation
+    let ctx_node: Ctx8 = tapnode_init();
+    let (computed, _): (u256, Ctx8) = array_fold::<hash_array_tr_storage_with_update, 8>(
+        merkle_data, (hash_leaf, ctx_node)
+    );
     let tap_node: u256 = jet::build_tapbranch(tap_leaf, computed);
 
     let tweaked_key: u256 = jet::build_taptweak(key, tap_node);
