@@ -25,15 +25,24 @@ jobs:
           toolchain: stable
           components: clippy, rustfmt
 
+      - name: Install Simplex
+        run: |
+          export SIMPLEX_DIR="$HOME/.simplex"
+          curl -L https://raw.githubusercontent.com/BlockstreamResearch/smplx/master/simplexup/install | bash
+          echo "$SIMPLEX_DIR/bin" >> "$GITHUB_PATH"
+          "$SIMPLEX_DIR/bin/simplexup" --install v0.0.4 --platform linux --arch amd64
+
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
 
+      - name: Generate contract artifacts
+        working-directory: crates/contracts
+        run: simplex build
+
       - name: Format check
         run: cargo fmt --all --check
 
       - name: Clippy
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
-
-
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings -D clippy::all -D clippy::pedantic -D clippy::nursery -D clippy::cargo -A clippy::multiple_crate_versions
