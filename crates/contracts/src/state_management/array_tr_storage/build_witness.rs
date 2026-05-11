@@ -1,16 +1,16 @@
 use std::collections::HashMap;
 
-use simplicityhl::num::U256;
-use simplicityhl::types::UIntType;
-use simplicityhl::value::{UIntValue, ValueConstructible};
-use simplicityhl::{WitnessValues, str::WitnessName};
+use simplex::simplicityhl::num::U256;
+use simplex::simplicityhl::types::UIntType;
+use simplex::simplicityhl::value::{UIntValue, ValueConstructible};
+use simplex::simplicityhl::{WitnessValues, str::WitnessName};
 
 // Storage is represented as 3 u256 slots.
 // This is a constant because Simplicity cannot initialise an array using 'param'.
 // The value 3 enables us to demonstrate the efficiency of storage with a small number of elements.
 pub const MAX_VAL: usize = 3;
 
-#[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct State {
     pub limbs: [[u8; 32]; MAX_VAL],
 }
@@ -24,10 +24,12 @@ impl State {
     }
 
     #[must_use]
-    pub fn to_simplicity_values(&self) -> Vec<simplicityhl::Value> {
+    pub fn to_simplicity_values(&self) -> Vec<simplex::simplicityhl::Value> {
         self.limbs
             .iter()
-            .map(|value| simplicityhl::Value::from(UIntValue::U256(U256::from_byte_array(*value))))
+            .map(|value| {
+                simplex::simplicityhl::Value::from(UIntValue::U256(U256::from_byte_array(*value)))
+            })
             .collect()
     }
 
@@ -54,14 +56,14 @@ impl Default for State {
 pub fn build_array_tr_storage_witness(state: &State, changed_index: u16) -> WitnessValues {
     let values = state.to_simplicity_values();
 
-    simplicityhl::WitnessValues::from(HashMap::from([
+    simplex::simplicityhl::WitnessValues::from(HashMap::from([
         (
             WitnessName::from_str_unchecked("STATE"),
-            simplicityhl::Value::array(values, UIntType::U256.into()),
+            simplex::simplicityhl::Value::array(values, UIntType::U256.into()),
         ),
         (
             WitnessName::from_str_unchecked("CHANGED_INDEX"),
-            simplicityhl::Value::from(UIntValue::U16(changed_index)),
+            simplex::simplicityhl::Value::from(UIntValue::U16(changed_index)),
         ),
     ]))
 }

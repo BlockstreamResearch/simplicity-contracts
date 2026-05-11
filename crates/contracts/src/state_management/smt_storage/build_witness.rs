@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use simplicityhl::num::U256;
-use simplicityhl::types::{ResolvedType, TypeConstructible, UIntType};
-use simplicityhl::value::{UIntValue, ValueConstructible};
-use simplicityhl::{WitnessValues, str::WitnessName};
+use simplex::simplicityhl::num::U256;
+use simplex::simplicityhl::types::{ResolvedType, TypeConstructible, UIntType};
+use simplex::simplicityhl::value::{UIntValue, ValueConstructible};
+use simplex::simplicityhl::{WitnessValues, str::WitnessName};
 
 #[allow(non_camel_case_types)]
 pub type u256 = [u8; 32];
@@ -14,7 +14,7 @@ pub type u256 = [u8; 32];
 /// and cannot dynamically resolve array lengths using `param::LEN`.
 pub const DEPTH: usize = 8;
 
-#[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SMTWitness {
     /// The internal public key used for Taproot tweaking.
     ///
@@ -73,39 +73,41 @@ impl Default for SMTWitness {
 
 #[must_use]
 pub fn build_smt_storage_witness(witness: &SMTWitness) -> WitnessValues {
-    let values: Vec<simplicityhl::Value> = witness
+    let values: Vec<simplex::simplicityhl::Value> = witness
         .merkle_data
         .iter()
         .map(|(value, is_right)| {
             let hash_val =
-                simplicityhl::Value::from(UIntValue::U256(U256::from_byte_array(*value)));
-            let direction_val = simplicityhl::Value::from(*is_right);
+                simplex::simplicityhl::Value::from(UIntValue::U256(U256::from_byte_array(*value)));
+            let direction_val = simplex::simplicityhl::Value::from(*is_right);
 
-            simplicityhl::Value::product(hash_val, direction_val)
+            simplex::simplicityhl::Value::product(hash_val, direction_val)
         })
         .collect();
 
-    let element_type = simplicityhl::types::TypeConstructible::product(
+    let element_type = simplex::simplicityhl::types::TypeConstructible::product(
         UIntType::U256.into(),
         ResolvedType::boolean(),
     );
 
-    simplicityhl::WitnessValues::from(HashMap::from([
+    simplex::simplicityhl::WitnessValues::from(HashMap::from([
         (
             WitnessName::from_str_unchecked("KEY"),
-            simplicityhl::Value::from(UIntValue::U256(U256::from_byte_array(witness.key))),
+            simplex::simplicityhl::Value::from(UIntValue::U256(U256::from_byte_array(witness.key))),
         ),
         (
             WitnessName::from_str_unchecked("LEAF"),
-            simplicityhl::Value::from(UIntValue::U256(U256::from_byte_array(witness.leaf))),
+            simplex::simplicityhl::Value::from(UIntValue::U256(U256::from_byte_array(
+                witness.leaf,
+            ))),
         ),
         (
             WitnessName::from_str_unchecked("PATH_BITS"),
-            simplicityhl::Value::from(UIntValue::U8(witness.path_bits)),
+            simplex::simplicityhl::Value::from(UIntValue::U8(witness.path_bits)),
         ),
         (
             WitnessName::from_str_unchecked("MERKLE_DATA"),
-            simplicityhl::Value::array(values, element_type),
+            simplex::simplicityhl::Value::array(values, element_type),
         ),
     ]))
 }

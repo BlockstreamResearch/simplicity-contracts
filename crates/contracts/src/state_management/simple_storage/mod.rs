@@ -1,16 +1,19 @@
 use std::sync::Arc;
-use wallet_abi::{ProgramError, create_p2tr_address, load_program, run_program};
 
-use simplicityhl::simplicity::RedeemNode;
-use simplicityhl::simplicity::bitcoin::XOnlyPublicKey;
-use simplicityhl::simplicity::bitcoin::key::Keypair;
-use simplicityhl::simplicity::bitcoin::secp256k1;
-use simplicityhl::simplicity::elements::{Address, AddressParams, Transaction};
-use simplicityhl::simplicity::hashes::Hash;
-use simplicityhl::simplicity::jet::Elements;
-use simplicityhl::simplicity::jet::elements::ElementsEnv;
-use simplicityhl::tracker::TrackerLogLevel;
-use simplicityhl::{CompiledProgram, TemplateProgram};
+use crate::error::ProgramError;
+use crate::runner::run_program;
+use crate::scripts::{create_p2tr_address, load_program};
+
+use simplex::simplicityhl::simplicity::RedeemNode;
+use simplex::simplicityhl::simplicity::bitcoin::XOnlyPublicKey;
+use simplex::simplicityhl::simplicity::bitcoin::key::Keypair;
+use simplex::simplicityhl::simplicity::bitcoin::secp256k1;
+use simplex::simplicityhl::simplicity::elements::{Address, AddressParams, Transaction};
+use simplex::simplicityhl::simplicity::hashes::Hash as _;
+use simplex::simplicityhl::simplicity::jet::Elements;
+use simplex::simplicityhl::simplicity::jet::elements::ElementsEnv;
+use simplex::simplicityhl::tracker::TrackerLogLevel;
+use simplex::simplicityhl::{CompiledProgram, TemplateProgram};
 
 mod build_arguments;
 mod build_witness;
@@ -74,7 +77,8 @@ pub fn execute_storage_program(
     env: &ElementsEnv<Arc<Transaction>>,
     log_level: TrackerLogLevel,
 ) -> Result<Arc<RedeemNode<Elements>>, ProgramError> {
-    let sighash_all = secp256k1::Message::from_digest(env.c_tx_env().sighash_all().to_byte_array());
+    let sighash_all =
+        secp256k1::Message::from_digest(*env.c_tx_env().sighash_all().as_byte_array());
 
     let signature = keypair.sign_schnorr(sighash_all);
     let witness_values = build_storage_witness(new_value, &signature);
@@ -89,15 +93,15 @@ mod simple_storage_tests {
 
     use std::sync::Arc;
 
-    use simplicityhl::elements::confidential::{Asset, Value};
-    use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
-    use simplicityhl::elements::{self, AssetId, OutPoint, Script, Txid};
-    use simplicityhl::simplicity::bitcoin::key::Keypair;
-    use simplicityhl::simplicity::bitcoin::secp256k1;
-    use simplicityhl::simplicity::elements::taproot::ControlBlock;
-    use simplicityhl::simplicity::jet::elements::ElementsEnv;
+    use simplex::simplicityhl::elements::confidential::{Asset, Value};
+    use simplex::simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
+    use simplex::simplicityhl::elements::{self, AssetId, OutPoint, Script, Txid};
+    use simplex::simplicityhl::simplicity::bitcoin::key::Keypair;
+    use simplex::simplicityhl::simplicity::bitcoin::secp256k1;
+    use simplex::simplicityhl::simplicity::elements::taproot::ControlBlock;
+    use simplex::simplicityhl::simplicity::jet::elements::ElementsEnv;
 
-    use wallet_abi::Network;
+    use lwk_common::Network;
 
     const NETWORK: Network = Network::TestnetLiquid;
 
@@ -149,19 +153,19 @@ mod simple_storage_tests {
         let env = ElementsEnv::new(
             Arc::new(pst.extract_tx()?),
             vec![
-                simplicityhl::simplicity::jet::elements::ElementsUtxo {
+                simplex::simplicityhl::simplicity::jet::elements::ElementsUtxo {
                     script_pubkey: storage_address.script_pubkey(),
                     asset: Asset::Explicit(*NETWORK.policy_asset()),
                     value: Value::Explicit(old_value),
                 },
-                simplicityhl::simplicity::jet::elements::ElementsUtxo {
+                simplex::simplicityhl::simplicity::jet::elements::ElementsUtxo {
                     script_pubkey: storage_address.script_pubkey(),
                     asset: Asset::Explicit(AssetId::default()),
                     value: Value::Explicit(1),
                 },
             ],
             0,
-            simplicityhl::simplicity::Cmr::from_byte_array([0; 32]),
+            simplex::simplicityhl::simplicity::Cmr::from_byte_array([0; 32]),
             ControlBlock::from_slice(&[0xc0; 33])?,
             None,
             elements::BlockHash::all_zeros(),
@@ -223,13 +227,15 @@ mod simple_storage_tests {
 
         let env = ElementsEnv::new(
             Arc::new(pst.extract_tx()?),
-            vec![simplicityhl::simplicity::jet::elements::ElementsUtxo {
-                script_pubkey: storage_address.script_pubkey(),
-                asset: Asset::Explicit(*NETWORK.policy_asset()),
-                value: Value::Explicit(old_value),
-            }],
+            vec![
+                simplex::simplicityhl::simplicity::jet::elements::ElementsUtxo {
+                    script_pubkey: storage_address.script_pubkey(),
+                    asset: Asset::Explicit(*NETWORK.policy_asset()),
+                    value: Value::Explicit(old_value),
+                },
+            ],
             0,
-            simplicityhl::simplicity::Cmr::from_byte_array([0; 32]),
+            simplex::simplicityhl::simplicity::Cmr::from_byte_array([0; 32]),
             ControlBlock::from_slice(&[0xc0; 33])?,
             None,
             elements::BlockHash::all_zeros(),

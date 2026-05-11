@@ -1,14 +1,19 @@
 use std::sync::Arc;
 
-use simplicityhl::simplicity::bitcoin::secp256k1;
-use simplicityhl::simplicity::elements::taproot::{LeafVersion, TaprootBuilder, TaprootSpendInfo};
-use simplicityhl::simplicity::elements::{Script, Transaction};
-use simplicityhl::simplicity::jet::Elements;
-use simplicityhl::simplicity::jet::elements::ElementsEnv;
-use simplicityhl::simplicity::{Cmr, RedeemNode};
-use simplicityhl::tracker::TrackerLogLevel;
-use simplicityhl::{CompiledProgram, TemplateProgram};
-use wallet_abi::{ProgramError, run_program, simplicity_leaf_version, tap_data_hash};
+use crate::error::ProgramError;
+use crate::runner::run_program;
+use crate::scripts::{simplicity_leaf_version, tap_data_hash};
+
+use simplex::simplicityhl::simplicity::bitcoin::secp256k1;
+use simplex::simplicityhl::simplicity::elements::taproot::{
+    LeafVersion, TaprootBuilder, TaprootSpendInfo,
+};
+use simplex::simplicityhl::simplicity::elements::{Script, Transaction};
+use simplex::simplicityhl::simplicity::jet::Elements;
+use simplex::simplicityhl::simplicity::jet::elements::ElementsEnv;
+use simplex::simplicityhl::simplicity::{Cmr, RedeemNode};
+use simplex::simplicityhl::tracker::TrackerLogLevel;
+use simplex::simplicityhl::{CompiledProgram, TemplateProgram};
 
 mod build_witness;
 
@@ -36,7 +41,7 @@ pub fn get_bytes32_tr_compiled_program() -> CompiledProgram {
     let program = get_bytes32_tr_template_program();
 
     program
-        .instantiate(simplicityhl::Arguments::default(), true)
+        .instantiate(simplex::simplicityhl::Arguments::default(), true)
         .unwrap()
 }
 
@@ -115,12 +120,12 @@ mod bytes32_tr_tests {
     use anyhow::Result;
     use std::sync::Arc;
 
-    use simplicityhl::elements::confidential::{Asset, Value};
-    use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
-    use simplicityhl::elements::{self, AssetId, OutPoint, Script, Txid};
-    use simplicityhl::simplicity::elements::taproot::ControlBlock;
-    use simplicityhl::simplicity::hashes::Hash as _;
-    use simplicityhl::simplicity::jet::elements::ElementsEnv;
+    use simplex::simplicityhl::elements::confidential::{Asset, Value};
+    use simplex::simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
+    use simplex::simplicityhl::elements::{self, AssetId, OutPoint, Script, Txid};
+    use simplex::simplicityhl::simplicity::elements::taproot::ControlBlock;
+    use simplex::simplicityhl::simplicity::hashes::Hash as _;
+    use simplex::simplicityhl::simplicity::jet::elements::ElementsEnv;
 
     #[test]
     fn test_bytes32_tr_mint_path() -> Result<()> {
@@ -160,11 +165,13 @@ mod bytes32_tr_tests {
         // Set up environment
         let env = ElementsEnv::new(
             Arc::new(pst.extract_tx()?),
-            vec![simplicityhl::simplicity::jet::elements::ElementsUtxo {
-                script_pubkey: old_script_pubkey,
-                asset: Asset::default(),
-                value: Value::default(),
-            }],
+            vec![
+                simplex::simplicityhl::simplicity::jet::elements::ElementsUtxo {
+                    script_pubkey: old_script_pubkey,
+                    asset: Asset::default(),
+                    value: Value::default(),
+                },
+            ],
             0,
             cmr,
             ControlBlock::from_slice(&control_block.serialize())?, // Real control block

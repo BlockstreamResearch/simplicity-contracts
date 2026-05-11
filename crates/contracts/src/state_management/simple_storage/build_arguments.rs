@@ -1,11 +1,10 @@
 use std::collections::HashMap;
 
-use hex::FromHex;
+use simplex::simplicityhl::elements::hex::FromHex;
+use simplex::simplicityhl::num::U256;
+use simplex::simplicityhl::{Arguments, str::WitnessName, value::UIntValue};
 
-use simplicityhl::num::U256;
-use simplicityhl::{Arguments, str::WitnessName, value::UIntValue};
-
-#[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StorageArguments {
     public_key: [u8; 32],
     slot_asset: String,
@@ -46,13 +45,13 @@ pub fn build_storage_arguments(args: &StorageArguments) -> Arguments {
     Arguments::from(HashMap::from([
         (
             WitnessName::from_str_unchecked("SLOT_ID"),
-            simplicityhl::Value::from(UIntValue::U256(U256::from_byte_array(slot_id))),
+            simplex::simplicityhl::Value::from(UIntValue::U256(U256::from_byte_array(slot_id))),
         ),
         (
             WitnessName::from_str_unchecked("USER"),
-            simplicityhl::Value::from(UIntValue::U256(U256::from_byte_array(args.public_key))),
+            simplex::simplicityhl::Value::from(UIntValue::U256(U256::from_byte_array(
+                args.public_key,
+            ))),
         ),
     ]))
 }
-
-impl wallet_abi::Encodable for StorageArguments {}

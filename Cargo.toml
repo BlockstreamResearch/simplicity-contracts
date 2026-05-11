@@ -1,9 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
-    "crates/cli",
     "crates/contracts",
-    "crates/wallet-abi",
 ]
 
 [workspace.package]
@@ -14,18 +12,13 @@ edition = "2024"
 multiple_crate_versions = "allow"
 
 [workspace.dependencies]
-ring = "0.17.14"
-sha2 = { version = "0.10.9", features = ["compress"] }
+serde = "1"
+serde_json = "1"
 
-hex = "0.4.3"
 tracing = { version = "0.1.41" }
 
 minreq = { version = "2.14.1", features = ["https", "json-using-serde"]}
 
-simplicityhl = { version = "0.4.0" }
+smplx-std = { git = "https://github.com/BlockstreamResearch/smplx", branch = "dev" }
 
-[patch.crates-io]
-lwk_common = { git = "https://github.com/Blockstream/lwk", rev = "4074c527fcc1268eb26953af397eecc6c1444293", package = "lwk_common" }
-lwk_signer = { git = "https://github.com/Blockstream/lwk", rev = "4074c527fcc1268eb26953af397eecc6c1444293", package = "lwk_signer" }
-lwk_simplicity = { git = "https://github.com/Blockstream/lwk", rev = "4074c527fcc1268eb26953af397eecc6c1444293", package = "lwk_simplicity" }
-lwk_wollet = { git = "https://github.com/Blockstream/lwk", rev = "4074c527fcc1268eb26953af397eecc6c1444293", package = "lwk_wollet" }
+lwk_common = "0.17.0"
