@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        toolchain: ["1.90.0", "stable"]
+        toolchain: ["1.91.0", "stable"]
 
     steps:
       - name: Checkout
@@ -28,22 +28,27 @@ jobs:
         with:
           toolchain: ${{ matrix.toolchain }}
 
+      - name: Install Simplex
+        run: |
+          export SIMPLEX_DIR="$HOME/.simplex"
+          curl -L https://raw.githubusercontent.com/BlockstreamResearch/smplx/master/simplexup/install | bash
+          echo "$SIMPLEX_DIR/bin" >> "$GITHUB_PATH"
+          "$SIMPLEX_DIR/bin/simplexup" --install v0.0.4 --platform linux --arch amd64
+
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
 
+      - name: Generate contract artifacts
+        working-directory: crates/contracts
+        run: simplex build
+
       - name: Build
         run: cargo build --workspace --all-features --verbose
 
-      - name: Targeted wallet-abi library tests
-        run: cargo test -p wallet-abi --lib --verbose
-
-      - name: Targeted CLI unit tests
-        run: cargo test -p cli --lib --verbose
-
       - name: Test (excluding regtest-dependent contracts)
-        run: cargo test --workspace --all-features --exclude contracts --no-fail-fast --verbose
+        run: cargo test --workspace --all-features --lib --no-fail-fast --verbose
 
   contracts-regtest:
     name: Contracts regtest tests
@@ -58,10 +63,21 @@ jobs:
         with:
           toolchain: stable
 
+      - name: Install Simplex
+        run: |
+          export SIMPLEX_DIR="$HOME/.simplex"
+          curl -L https://raw.githubusercontent.com/BlockstreamResearch/smplx/master/simplexup/install | bash
+          echo "$SIMPLEX_DIR/bin" >> "$GITHUB_PATH"
+          "$SIMPLEX_DIR/bin/simplexup" --install v0.0.4 --platform linux --arch amd64
+
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+
+      - name: Generate contract artifacts
+        working-directory: crates/contracts
+        run: simplex build
 
       - name: Setup regtest binaries
         run: |
@@ -89,4 +105,4 @@ jobs:
           echo "ELEMENTSD_EXEC=${BIN_DIR}/elements-${ELEMENTSD_VERSION}/bin/elementsd" >> "$GITHUB_ENV"
 
       - name: Test contracts (regtest)
-        run: cargo test -p contracts --all-features --no-fail-fast --verbose -- --test-threads=1
+        run: simplex test

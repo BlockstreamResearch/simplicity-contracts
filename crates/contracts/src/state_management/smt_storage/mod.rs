@@ -1,20 +1,24 @@
 use std::sync::Arc;
 
-use simplicityhl::elements::TxInWitness;
-use simplicityhl::elements::TxOut;
-use simplicityhl::elements::taproot::ControlBlock;
-use simplicityhl::simplicity::bitcoin::secp256k1;
-use simplicityhl::simplicity::elements::hashes::HashEngine as _;
-use simplicityhl::simplicity::elements::taproot::{LeafVersion, TaprootBuilder, TaprootSpendInfo};
-use simplicityhl::simplicity::elements::{Script, Transaction};
-use simplicityhl::simplicity::hashes::{Hash, sha256};
-use simplicityhl::simplicity::jet::Elements;
-use simplicityhl::simplicity::jet::elements::{ElementsEnv, ElementsUtxo};
-use simplicityhl::simplicity::{Cmr, RedeemNode};
-use simplicityhl::tracker::TrackerLogLevel;
-use simplicityhl::{Arguments, CompiledProgram, TemplateProgram};
-use wallet_abi::{Network, ProgramError, run_program};
-use wallet_abi::{simplicity_leaf_version, tap_data_hash};
+use crate::error::ProgramError;
+use crate::runner::run_program;
+use crate::scripts::{simplicity_leaf_version, tap_data_hash};
+use lwk_common::Network;
+use simplex::simplicityhl::elements::TxInWitness;
+use simplex::simplicityhl::elements::TxOut;
+use simplex::simplicityhl::elements::taproot::ControlBlock;
+use simplex::simplicityhl::simplicity::bitcoin::secp256k1;
+use simplex::simplicityhl::simplicity::elements::hashes::HashEngine as _;
+use simplex::simplicityhl::simplicity::elements::taproot::{
+    LeafVersion, TaprootBuilder, TaprootSpendInfo,
+};
+use simplex::simplicityhl::simplicity::elements::{Script, Transaction};
+use simplex::simplicityhl::simplicity::hashes::{Hash, sha256};
+use simplex::simplicityhl::simplicity::jet::Elements;
+use simplex::simplicityhl::simplicity::jet::elements::{ElementsEnv, ElementsUtxo};
+use simplex::simplicityhl::simplicity::{Cmr, RedeemNode};
+use simplex::simplicityhl::tracker::TrackerLogLevel;
+use simplex::simplicityhl::{Arguments, CompiledProgram, TemplateProgram};
 
 mod build_witness;
 mod smt;
@@ -278,13 +282,13 @@ pub fn finalize_get_storage_transaction(
 mod smt_storage_tests {
     use super::*;
     use anyhow::Result;
-    use simplicityhl::elements::secp256k1_zkp::rand::{Rng, thread_rng};
+    use simplex::simplicityhl::elements::secp256k1_zkp::rand::{Rng, thread_rng};
     use std::sync::Arc;
 
-    use simplicityhl::elements::confidential::{Asset, Value};
-    use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
-    use simplicityhl::elements::{AssetId, BlockHash, OutPoint, Script, Txid};
-    use simplicityhl::simplicity::jet::elements::{ElementsEnv, ElementsUtxo};
+    use simplex::simplicityhl::elements::confidential::{Asset, Value};
+    use simplex::simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
+    use simplex::simplicityhl::elements::{AssetId, BlockHash, OutPoint, Script, Txid};
+    use simplex::simplicityhl::simplicity::jet::elements::{ElementsEnv, ElementsUtxo};
 
     fn add_elements(smt: &mut SparseMerkleTree, num: u64) -> (u256, [u256; DEPTH], [bool; DEPTH]) {
         let mut rng = thread_rng();

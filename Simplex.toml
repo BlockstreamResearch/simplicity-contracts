@@ -1,0 +1,4 @@
+[build]
+src_dir = "crates/contracts/simf"
+simf_files = ["**/*.simf"]
+out_dir = "crates/contracts/src/artifacts"

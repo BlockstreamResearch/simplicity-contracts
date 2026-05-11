@@ -1,6 +1,6 @@
-use simplicityhl::simplicity::elements::hashes::HashEngine as _;
-use simplicityhl::simplicity::hashes::{Hash, sha256};
-use wallet_abi::tap_data_hash;
+use crate::scripts::tap_data_hash;
+use simplex::simplicityhl::simplicity::elements::hashes::HashEngine as _;
+use simplex::simplicityhl::simplicity::hashes::{Hash, sha256};
 
 use crate::state_management::smt_storage::get_path_bits;
 
@@ -11,7 +11,7 @@ use super::build_witness::{DEPTH, u256};
 /// The tree is structured as a recursive binary tree where:
 /// - [`TreeNode::Leaf`] represents the bottom-most layer containing the actual data hash.
 /// - [`TreeNode::Branch`] represents an internal node containing the combined hash of its children.
-#[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum TreeNode {
     /// A leaf node at the bottom of the tree.
     ///
