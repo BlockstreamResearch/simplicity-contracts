@@ -18,3 +18,12 @@ This workspace contains reference implementations for working with [Simplicity H
 ## Notes
 
 This repository is reference-oriented. Copying and adapting modules into your own project is expected while Simplicity tooling/import ergonomics are still evolving.
+
+## SimplicityHL Core Package
+
+Reference: https://crates.io/crates/simplicityhl-core
+
+This package was previously used to help early adopters of Simplicity HL move faster when building with Simplicity. 
+It has now been yanked because most of its functionality is available and maintained in:
+- https://github.com/Blockstream/lwk
+- https://github.com/BlockstreamResearch/smplx
