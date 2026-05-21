@@ -15,6 +15,9 @@ Current contract modules in this crate:
   - [Options](src/programs/options.rs)
   - [Options Offer](src/programs/option_offer.rs)
 
+- Signatures:
+  - [Bitcoin Message ECDSA Verify](src/programs/bitcoin_message_ecdsa_verify/mod.rs)
+
 ## License
 
 Dual-licensed under either of:
