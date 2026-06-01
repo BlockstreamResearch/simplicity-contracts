@@ -115,7 +115,7 @@ impl Options {
     pub fn from_internal_key(internal_key: XOnlyPublicKey, parameters: OptionsParameters) -> Self {
         Self {
             program: OptionsProgram::new(OptionsArguments::from(parameters))
-                .with_pub_key(internal_key),
+                .with_taproot_pubkey(internal_key),
             parameters,
         }
     }

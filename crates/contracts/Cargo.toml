@@ -22,6 +22,9 @@ workspace = true
 [dependencies]
 thiserror = "2"
 
+proptest = { version = "1.11.0" }
+rand = { version = "0.10.1" }
+
 serde = { workspace = true }
 serde_json = { workspace = true }
 

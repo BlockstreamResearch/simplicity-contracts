@@ -45,7 +45,9 @@ fn script_hash_for_input_script(state_data: u256) -> u256 {
 fn main() {
     let state_data: u256 = witness::STATE;
     let (state1, state2, state3, state4): (u64, u64, u64, u64) = <u256>::into(state_data);
-    
+
+    let n1_b: bool = jet::eq_256(1, 1);
+    let n1: u32 = dbg!(111);
     // Assert that the input is correct, i.e. "load".
     assert!(jet::eq_256(
         script_hash_for_input_script(state_data),
@@ -55,12 +57,20 @@ fn main() {
     // Do a state update (and fail on 64-bit overflow even though we've got 192 other
     // bits we could be using..)
     let (carry, new_state4): (bool, u64) = jet::increment_64(state4);
+    let x2:bool = dbg!(jet::eq_1(<bool>::into(carry), 0));
+    let n2: u32 = dbg!(222);
+    let n2_b: bool = jet::eq_256(2, 2);
+
     assert!(jet::eq_1(<bool>::into(carry), 0));
-    
+
     let new_state: u256 = <(u64, u64, u64, u64)>::into((state1, state2, state3, new_state4));
     // Assert that the output is correct, i.e. "store".
-    assert!(jet::eq_256(
-        dbg!(script_hash_for_input_script(new_state)),
-        dbg!(unwrap(jet::output_script_hash(jet::current_index())))
-    ));
+    let n3: u32 = dbg!(333);
+    let n3_b: bool = jet::eq_256(3, 3);
+    assert!(dbg!(jet::eq_256(
+        script_hash_for_input_script(new_state),
+        unwrap(jet::output_script_hash(jet::current_index()))
+    )));
+    let n4_b: bool = jet::eq_256(4, 4);
+    let n4: u32 = dbg!(444);
 }

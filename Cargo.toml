@@ -19,6 +19,6 @@ tracing = { version = "0.1.41" }
 
 minreq = { version = "2.14.1", features = ["https", "json-using-serde"]}
 
-smplx-std = { git = "https://github.com/BlockstreamResearch/smplx", branch = "dev" }
+smplx-std = { path = "/Users/ikripaka/Documents/Work_dl/simplex_another_branch/crates/simplex" }
 
 lwk_common = "0.17.0"
