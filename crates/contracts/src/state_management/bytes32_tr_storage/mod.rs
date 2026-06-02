@@ -5,17 +5,17 @@ use crate::error::ProgramError;
 use crate::runner::run_program;
 use crate::scripts::{simplicity_leaf_version, tap_data_hash};
 
-use rand::{random, Rng};
+use rand::{Rng, random};
 use simplex::simplicityhl::simplicity::bitcoin::secp256k1;
 use simplex::simplicityhl::simplicity::elements::taproot::{
     LeafVersion, TaprootBuilder, TaprootSpendInfo,
 };
 use simplex::simplicityhl::simplicity::elements::{Script, Transaction};
-use simplex::simplicityhl::simplicity::jet::elements::ElementsEnv;
 use simplex::simplicityhl::simplicity::jet::Elements;
+use simplex::simplicityhl::simplicity::jet::elements::ElementsEnv;
 use simplex::simplicityhl::simplicity::{Cmr, RedeemNode};
 use simplex::simplicityhl::tracker::TrackerLogLevel;
-use simplex::simplicityhl::{elements, CompiledProgram, TemplateProgram};
+use simplex::simplicityhl::{CompiledProgram, TemplateProgram, elements};
 
 mod build_witness;
 
@@ -194,10 +194,10 @@ use proptest::prelude::*;
 use proptest::proptest;
 use simplex::simplicityhl::elements::{AssetId, OutPoint, TxOut, TxOutWitness, Txid};
 
+use crate::artifacts::bytes32_tr_storage::Bytes32TrStorageProgram;
 use crate::artifacts::bytes32_tr_storage::derived_bytes32_tr_storage::{
     Bytes32TrStorageArguments, Bytes32TrStorageWitness,
 };
-use crate::artifacts::bytes32_tr_storage::Bytes32TrStorageProgram;
 use simplex::constants::DUMMY_SIGNATURE;
 use simplex::either::Either;
 use simplex::simplicityhl::elements::confidential::{Asset, Value};
@@ -327,8 +327,8 @@ proptest! {
     }
 }
 
-use simplex::program::core::ProgramTrait;
 use simplex::program::WitnessTrait;
+use simplex::program::core::ProgramTrait;
 use simplex::provider::SimplicityNetwork;
 
 #[test]

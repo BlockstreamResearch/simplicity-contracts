@@ -1,28 +1,28 @@
+use contracts::artifacts::failure_test::FailureTestProgram;
 use contracts::artifacts::failure_test::derived_failure_test::{
     FailureTestArguments, FailureTestWitness,
 };
-use contracts::artifacts::failure_test::FailureTestProgram;
+use proptest::arbitrary::any;
+use proptest::prelude::Strategy;
+use proptest::prop_oneof;
+use simplex::either::Either;
 use simplex::program::{ProgramTrait, WitnessTrait};
 use simplex::provider::{ProviderError, ProviderTrait, SimplicityNetwork};
 use simplex::signer::Signer;
-use simplex::simplicityhl::elements::{Address, AssetId, OutPoint, Script, Transaction, TxOut, Txid};
+use simplex::simplicityhl::elements::hashes::Hash;
+use simplex::simplicityhl::elements::{
+    Address, AssetId, OutPoint, Script, Transaction, TxOut, Txid,
+};
 use simplex::transaction::{
     FinalTransaction, PartialInput, PartialOutput, ProgramInput, RequiredSignature, TxReceipt, UTXO,
 };
 use std::collections::HashMap;
 use std::fmt::Debug;
-use proptest::arbitrary::any;
-use proptest::prelude::{Just, Strategy};
-use proptest::prop_oneof;
-use simplex::either::Either;
-use contracts::artifacts::bytes32_tr_storage::derived_bytes32_tr_storage::{Bytes32TrStorageArguments, Bytes32TrStorageWitness};
 
 pub const DEFAULT_TEST_MNEMONIC: &str =
     "exist carry drive collect lend cereal occur much tiger just involve mean";
 const DEFAULT_FAUCET: u64 = 1_000_000;
 const DEFAULT_FEE: u64 = 1_000;
-
-
 
 pub fn arb_either<L: 'static + Debug, R: 'static + Debug>(
     left: impl Strategy<Value = L> + 'static,
@@ -158,16 +158,51 @@ pub fn build_failure_tx(
     (tx, program)
 }
 
-pub fn construct_executable_program(program: &FailureTestProgram, witness: &FailureTestWitness, tx: Transaction) -> FinalTransaction {
+pub fn construct_executable_program(
+    program: &FailureTestProgram,
+    witness: &FailureTestWitness,
+    tx: Transaction,
+) -> FinalTransaction {
     let mut ft = FinalTransaction::new();
 
-    let program_input : Box<dyn ProgramTrait> = Box::new(program.as_ref().clone());
+    let program_input: Box<dyn ProgramTrait> = Box::new(program.as_ref().clone());
     let witness_ref: Box<dyn WitnessTrait> = Box::new(witness.clone());
 
     ft.add_program_input(
         PartialInput::new(UTXO {
             outpoint: OutPoint::new(tx.txid(), 0),
             txout: tx.output[0].clone(),
+            secrets: None,
+        }),
+        ProgramInput::new(program_input, witness_ref),
+        RequiredSignature::None,
+    );
+
+    ft
+}
+
+pub fn construct_executable_program_2(
+    witness: &FailureTestWitness,
+    args: FailureTestArguments,
+    network: &SimplicityNetwork,
+) -> FinalTransaction {
+    let mut ft = FinalTransaction::new();
+
+    let (program, script) = get_failure_program(network, args);
+
+    let program_input: Box<dyn ProgramTrait> = Box::new(program.as_ref().clone());
+    let witness_ref: Box<dyn WitnessTrait> = Box::new(witness.clone());
+
+    let txout = {
+        let mut r = TxOut::new_fee(DEFAULT_FAUCET, network.policy_asset());
+        r.script_pubkey = script;
+        r
+    };
+
+    ft.add_program_input(
+        PartialInput::new(UTXO {
+            outpoint: OutPoint::new(Txid::all_zeros(), 0),
+            txout,
             secrets: None,
         }),
         ProgramInput::new(program_input, witness_ref),
@@ -196,5 +231,3 @@ pub fn spawn_input_tx(signer: &Signer, network: &SimplicityNetwork) -> Transacti
     let (tx, _) = signer.finalize_offline(&ft).unwrap();
     tx
 }
-
-

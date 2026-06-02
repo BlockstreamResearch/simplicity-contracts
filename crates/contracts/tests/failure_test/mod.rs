@@ -1,2 +1,2 @@
-mod prop_test;
 mod core;
+mod prop_test;
