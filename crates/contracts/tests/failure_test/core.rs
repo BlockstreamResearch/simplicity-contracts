@@ -2,6 +2,7 @@ use contracts::artifacts::failure_test::FailureTestProgram;
 use contracts::artifacts::failure_test::derived_failure_test::{
     FailureTestArguments, FailureTestWitness,
 };
+use contracts::programs::program::SimplexProgram2;
 use proptest::arbitrary::any;
 use proptest::prelude::Strategy;
 use proptest::prop_oneof;
@@ -23,6 +24,7 @@ pub const DEFAULT_TEST_MNEMONIC: &str =
     "exist carry drive collect lend cereal occur much tiger just involve mean";
 const DEFAULT_FAUCET: u64 = 1_000_000;
 const DEFAULT_FEE: u64 = 1_000;
+const DEFAULT_TARGET_BLOCKS: u32 = 6;
 
 pub fn arb_either<L: 'static + Debug, R: 'static + Debug>(
     left: impl Strategy<Value = L> + 'static,
@@ -115,8 +117,6 @@ impl ProviderTrait for MockProvider {
     }
 }
 
-//TODO: understand how ot emulate any kind of tx in order to pass seamlessly into a contract with only 1 step
-
 pub fn get_failure_program(
     network: &SimplicityNetwork,
     args: FailureTestArguments,
@@ -153,7 +153,7 @@ pub fn build_failure_tx(
         tx.output[0].value.explicit().unwrap() - DEFAULT_FEE,
         network.policy_asset(),
     ));
-    let (tx, sig) = signer.finalize_offline(&ft).unwrap();
+    let (tx, sig) = signer.finalize_strict(&ft, DEFAULT_TARGET_BLOCKS).unwrap();
 
     (tx, program)
 }
@@ -228,6 +228,6 @@ pub fn spawn_input_tx(signer: &Signer, network: &SimplicityNetwork) -> Transacti
         asset: network.policy_asset(),
         blinding_key: None,
     });
-    let (tx, _) = signer.finalize_offline(&ft).unwrap();
+    let (tx, _) = signer.finalize_strict(&ft, DEFAULT_TARGET_BLOCKS).unwrap();
     tx
 }
