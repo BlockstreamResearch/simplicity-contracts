@@ -22,21 +22,23 @@
 // }
 
 use crate::failure_test::core::{DEFAULT_TEST_MNEMONIC, MockProvider, arb_32_bytes};
-use contracts::artifacts::failure_test::FailureTestProgram;
 use contracts::artifacts::failure_test::derived_failure_test::{
     FailureTestArguments, FailureTestWitness,
 };
 use contracts::programs::program::SimplexProgram2;
 use proptest::strategy::{BoxedStrategy, Strategy};
 use proptest::test_runner::TestCaseError;
-use simplex::program::{ArgumentsTrait, ProgramTrait, WitnessTrait};
+use simplex::program::{ArgumentsTrait, ProgramError, ProgramTrait, WitnessTrait};
 use simplex::provider::SimplicityNetwork;
 use simplex::signer::{Signer, SignerError};
 use simplex::simplicityhl::elements::hashes::Hash;
 use simplex::simplicityhl::elements::{OutPoint, Script, Transaction, TxOut, Txid};
+use simplex::simplicityhl::simplicity::jet::Elements;
+use simplex::simplicityhl::simplicity::{RedeemNode, Value};
 use simplex::transaction::{FinalTransaction, PartialInput, ProgramInput, RequiredSignature, UTXO};
 use std::cell::RefCell;
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 pub struct FuzzContext {
     pub signer: Option<Signer>,
@@ -44,16 +46,7 @@ pub struct FuzzContext {
     pub network: SimplicityNetwork,
 }
 
-// impl FuzzableProgram<FailureTestProgram, FailureTestArguments> for FailureTestProgram {
-//     fn build_program(
-//         args: FailureTestArguments,
-//         network: &SimplicityNetwork,
-//     ) -> (Box<FailureTestProgram>, Script) {
-//         let failure_program = FailureTestProgram::new(args);
-//         let failure_script = failure_program.get_script_pubkey(network);
-//         (Box::new(failure_program), failure_script)
-//     }
-// }
+pub type ProgramExecResult = Result<(Arc<RedeemNode<Elements>>, Value), ProgramError>;
 
 pub trait FuzzableProgram<P: SimplexProgram2, Args: ArgumentsTrait>: SimplexProgram2 {
     fn build_program(args: Args, network: &SimplicityNetwork) -> (Box<P>, Script);
@@ -180,16 +173,13 @@ impl FuzzContext {
 }
 
 pub trait ProgramCheck {
-    fn call<
-        FuzzProgram: FuzzableProgram<FuzzProgram, Args>,
-        Args: ArgumentsTrait + Clone + 'static,
-        Wit: WitnessTrait + Clone + 'static,
-    >(
+    fn call<Args: ArgumentsTrait + Clone + 'static, Wit: WitnessTrait + Clone + 'static>(
         &self,
         ctx: &FuzzContext,
         tx: &Transaction,
-        program: Box<FuzzProgram>,
+        arguments: Box<dyn ArgumentsTrait>,
         witness: Box<dyn WitnessTrait>,
+        program_exec_result: ProgramExecResult,
     ) -> Result<(), String>;
 }
 
@@ -271,34 +261,46 @@ where
             let strategy = strategy_gen.get_strategy(&inner.fuzz_context);
 
             runner.new_rng();
-            runner
-                .run(&strategy, |(args, wit)| {
-                    let context = &inner.fuzz_context;
-                    let ft = base_gen.build_base_transaction(
-                        &context.network,
-                        args.clone(),
-                        wit.clone(),
+            match runner.run(&strategy, |(args, wit)| {
+                let context = &inner.fuzz_context;
+                let ft =
+                    base_gen.build_base_transaction(&context.network, args.clone(), wit.clone());
+                // TODO: maybe make a couple of modification for one ft if non-default used?
+                let tx = modifier
+                    .modify_transaction(&inner.fuzz_context.signer, ft, &args, &wit)
+                    .unwrap();
+
+                let (failure_program, _script) =
+                    FuzzProgram::build_program(args.clone(), &context.network);
+                let args_ref: Box<dyn ArgumentsTrait> = Box::new(args);
+                let witness_ref: Box<dyn WitnessTrait> = Box::new(wit.clone());
+
+                let pst =
+                    simplex::simplicityhl::elements::pset::PartiallySignedTransaction::from_tx(
+                        tx.clone(),
                     );
-                    // TODO: maybe make a couple of modification for one ft if non-default used?
-                    let tx = modifier
-                        .modify_transaction(&inner.fuzz_context.signer, ft, &args, &wit)
-                        .unwrap();
 
-                    let (failure_program, _script) =
-                        FuzzProgram::build_program(args.clone(), &context.network);
-                    let witness_ref: Box<dyn WitnessTrait> = Box::new(wit.clone());
+                let exec_result = failure_program.get_program().execute(
+                    &pst,
+                    &witness_ref.build_witness(),
+                    0,
+                    &context.network,
+                );
 
-                    match program_check_fn.call::<FuzzProgram, Args, Wit>(
-                        context,
-                        &tx,
-                        failure_program,
-                        witness_ref,
-                    ) {
-                        Ok(_) => Ok(()),
-                        Err(e) => Err(TestCaseError::fail(e)),
-                    }
-                })
-                .unwrap();
+                match program_check_fn.call::<Args, Wit>(
+                    context,
+                    &tx,
+                    args_ref,
+                    witness_ref,
+                    exec_result,
+                ) {
+                    Ok(_) => Ok(()),
+                    Err(e) => Err(TestCaseError::fail(e)),
+                }
+            }) {
+                Ok(()) => (),
+                Err(e) => ::core::panic!("{}\n{}", e, runner),
+            };
         }
     }
 }

@@ -166,7 +166,7 @@ fn test_failure_program(args: FailureTestArguments, wit: FailureTestWitness) -> 
 
     let ft = construct_executable_program(&program, &witness1, testing_tx);
     let (testing_pst, _map) = ft.extract_pst();
-    assert!(a
+    assert!(
         program
             .as_ref()
             .execute(&testing_pst, &witness1.build_witness(), 0, &network)

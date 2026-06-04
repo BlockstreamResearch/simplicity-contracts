@@ -1,18 +1,16 @@
-use crate::failure_test::core::{DEFAULT_TEST_MNEMONIC, MockProvider};
 use crate::failure_test::possible_interface::{
-    DefaultBaseContextGen, DefaultContextGen, FuzzContext, FuzzableProgram, ProgramCheck, Random,
-    SimplexFuzzEngine,
+    DefaultBaseContextGen, DefaultContextGen, FuzzContext, FuzzableProgram, ProgramCheck,
+    ProgramExecResult, Random, SimplexFuzzEngine,
 };
 use contracts::artifacts::failure_test::FailureTestProgram;
 use contracts::artifacts::failure_test::derived_failure_test::{
     FailureTestArguments, FailureTestWitness,
 };
 use contracts::programs::program::SimplexProgram2;
-use simplex::program::{ArgumentsTrait, Program, ProgramTrait, WitnessTrait};
+use simplex::program::{ArgumentsTrait, WitnessTrait};
 use simplex::provider::SimplicityNetwork;
 use simplex::simplicityhl::elements::Script;
 use simplex::simplicityhl::elements::Transaction;
-use std::fmt;
 use std::marker::PhantomData;
 
 impl FuzzableProgram<FailureTestProgram, FailureTestArguments> for FailureTestProgram {
@@ -29,29 +27,18 @@ impl FuzzableProgram<FailureTestProgram, FailureTestArguments> for FailureTestPr
 struct FailureTestCheck;
 
 impl ProgramCheck for FailureTestCheck {
-    fn call<
-        FuzzProgram: FuzzableProgram<FuzzProgram, Args>,
-        Args: ArgumentsTrait + Clone + 'static,
-        Wit: WitnessTrait + Clone + 'static,
-    >(
+    fn call<Args: ArgumentsTrait + Clone + 'static, Wit: WitnessTrait + Clone + 'static>(
         &self,
-        context: &FuzzContext,
-        tx: &Transaction,
-        program: Box<FuzzProgram>,
-        witness: Box<dyn WitnessTrait>,
+        _ctx: &FuzzContext,
+        _tx: &Transaction,
+        _arguments: Box<dyn ArgumentsTrait>,
+        _witness: Box<dyn WitnessTrait>,
+        program_exec_result: ProgramExecResult,
     ) -> Result<(), String> {
-        // fina; transaction
-        let pst =
-            simplex::simplicityhl::elements::pset::PartiallySignedTransaction::from_tx(tx.clone());
-        // move to inner context
-        match program
-            .get_program()
-            .execute(&pst, &witness.build_witness(), 0, &context.network)
-            // add user implemtation asset for error or not  (pst + witness + cmp somthing)
-        {
-            Ok(_) => Ok(()),
-            Err(e) => Err(format!("Execution failed: {:?}", e)),
+        if program_exec_result.is_err() {
+            return Err("Failed contract".into());
         }
+        Ok(())
     }
 }
 
