@@ -72,7 +72,7 @@ impl OptionOffer {
     ) -> Self {
         Self {
             program: OptionOfferProgram::new(OptionOfferArguments::from(parameters))
-                .with_pub_key(internal_key),
+                .with_taproot_pubkey(internal_key),
             parameters,
         }
     }
