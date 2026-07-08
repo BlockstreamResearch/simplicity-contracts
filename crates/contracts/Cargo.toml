@@ -10,11 +10,10 @@ keywords = ["simplicity", "liquid", "bitcoin", "elements", "contracts"]
 categories = ["cryptography::cryptocurrencies"]
 
 [features]
-default = ["simple-storage", "bytes32-tr-storage", "array-tr-storage", "smt-storage"]
+default = ["simple-storage", "bytes32-tr-storage", "array-tr-storage"]
 simple-storage = []
 bytes32-tr-storage = []
 array-tr-storage = []
-smt-storage = []
 
 [lints]
 workspace = true

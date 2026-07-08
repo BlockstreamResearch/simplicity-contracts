@@ -13,7 +13,5 @@ pub use state_management::array_tr_storage;
 pub use state_management::bytes32_tr_storage;
 #[cfg(feature = "simple-storage")]
 pub use state_management::simple_storage;
-#[cfg(feature = "smt-storage")]
-pub use state_management::smt_storage;
 
 pub use simplicityhl_core::*;
