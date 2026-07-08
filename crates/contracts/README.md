@@ -9,7 +9,15 @@ Current contract modules in this crate:
     - [Simple Storage](src/state_management/simple_storage)
     - [Bytes32 Taproot Storage](src/state_management/bytes32_tr_storage)
     - [Array Taproot Storage](src/state_management/array_tr_storage)
-    - [Sparse Merkle Tree Storage](src/state_management/smt_storage)
+
+> [!NOTE]
+> Sparse Merkle Tree Storage was removed from the crate. The implementation
+> with domain-separated `SMT/1.0/leaf` and `SMT/1.0/node` tagged hashes is
+> preserved in the
+> [`smt_storage` directory](https://github.com/BlockstreamResearch/simplicity-contracts/tree/24bdb8b4eed3b9ed311570c3143461d9c85e19ed/crates/contracts/src/state_management/smt_storage).
+>
+> For more details, see
+> [PR #72](https://github.com/BlockstreamResearch/simplicity-contracts/pull/72).
 
 - Finance:
   - [Options](src/programs/options.rs)
