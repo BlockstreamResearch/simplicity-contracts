@@ -30,7 +30,7 @@ jobs:
           export SIMPLEX_DIR="$HOME/.simplex"
           curl -L https://raw.githubusercontent.com/BlockstreamResearch/smplx/master/simplexup/install | bash
           echo "$SIMPLEX_DIR/bin" >> "$GITHUB_PATH"
-          "$SIMPLEX_DIR/bin/simplexup" --install v0.0.6 --platform linux --arch amd64
+          "$SIMPLEX_DIR/bin/simplexup" --install v0.0.8 --platform linux --arch amd64
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -40,6 +40,11 @@ jobs:
       - name: Generate contract artifacts
         working-directory: crates/contracts
         run: simplex build
+
+      - name: Check committed artifacts are up to date
+        run: |
+          git add -N crates/contracts/src/artifacts
+          git diff --exit-code -- crates/contracts/src/artifacts
 
       - name: Format check
         run: cargo fmt --all --check

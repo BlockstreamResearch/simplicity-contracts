@@ -54,20 +54,6 @@ pub fn filter_signer_utxos_by_asset_id(signer: &Signer, asset_id: AssetId) -> Ve
 }
 
 #[must_use]
-pub fn filter_signer_utxos_by_amount(
-    signer: &Signer,
-    amount: u64,
-    amount_filter: AmountFilter,
-) -> Vec<UTXO> {
-    signer
-        .get_utxos_filter(
-            &|utxo| matches_amount_filter(utxo.explicit_amount(), amount, amount_filter),
-            &|utxo| matches_amount_filter(utxo.unblinded_amount(), amount, amount_filter),
-        )
-        .unwrap()
-}
-
-#[must_use]
 pub fn find_utxo_by_asset_and_amount(
     utxos: &[UTXO],
     asset_id: AssetId,
@@ -134,4 +120,34 @@ const fn matches_amount_filter(utxo_amount: u64, amount: u64, amount_filter: Amo
         AmountFilter::GreaterThan => utxo_amount > amount,
         AmountFilter::EqualTo => utxo_amount == amount,
     }
+}
+
+/// Fetch the covenant UTXOs at `script_pubkey` and return the one matching
+/// asset and amount, failing with `missing_utxo_message` if absent.
+pub fn require_covenant_utxo(
+    context: &simplex::TestContext,
+    script_pubkey: &Script,
+    asset_id: AssetId,
+    amount: u64,
+    missing_utxo_message: &str,
+) -> anyhow::Result<UTXO> {
+    let utxos = context
+        .get_default_provider()
+        .fetch_scripthash_utxos(script_pubkey)?;
+    require_utxo_by_asset_and_amount(&utxos, asset_id, amount, missing_utxo_message)
+}
+
+/// Assert that a covenant UTXO with the given asset and amount exists at
+/// `script_pubkey`.
+pub fn assert_covenant_utxo(
+    context: &simplex::TestContext,
+    script_pubkey: &Script,
+    asset_id: AssetId,
+    amount: u64,
+) -> anyhow::Result<()> {
+    let utxos = context
+        .get_default_provider()
+        .fetch_scripthash_utxos(script_pubkey)?;
+    assert_has_utxo_by_asset_and_amount(&utxos, asset_id, amount);
+    Ok(())
 }

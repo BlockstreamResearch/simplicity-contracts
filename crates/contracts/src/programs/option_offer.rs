@@ -1,3 +1,6 @@
+//! Collateral-for-settlement offer contract with three spending branches:
+//! `Exercise`, `Withdraw`, and `Expiry`.
+
 use crate::artifacts::option_offer::OptionOfferProgram;
 use crate::artifacts::option_offer::derived_option_offer::{
     OptionOfferArguments, OptionOfferWitness,

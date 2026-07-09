@@ -12,13 +12,6 @@ edition = "2024"
 multiple_crate_versions = "allow"
 
 [workspace.dependencies]
-serde = "1"
-serde_json = "1"
-
-tracing = { version = "0.1.41" }
-
-minreq = { version = "2.14.1", features = ["https", "json-using-serde"]}
-
-smplx-std = { git = "https://github.com/BlockstreamResearch/smplx", branch = "dev" }
+smplx-std = "0.0.8"
 
 lwk_common = "0.17.0"

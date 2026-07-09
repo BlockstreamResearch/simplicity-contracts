@@ -1,16 +1,19 @@
+//! Stores a `u64` as an explicit output amount; updates are authorized by a
+//! fixed key and must mint (extra output) or burn (`OP_RETURN`) the
+//! difference.
 use std::sync::Arc;
 
 use crate::error::ProgramError;
 use crate::runner::run_program;
 use crate::scripts::{create_p2tr_address, load_program};
 
+use simplex::simplicityhl::ast::ElementsJetHinter;
 use simplex::simplicityhl::simplicity::RedeemNode;
 use simplex::simplicityhl::simplicity::bitcoin::XOnlyPublicKey;
 use simplex::simplicityhl::simplicity::bitcoin::key::Keypair;
 use simplex::simplicityhl::simplicity::bitcoin::secp256k1;
 use simplex::simplicityhl::simplicity::elements::{Address, AddressParams, Transaction};
 use simplex::simplicityhl::simplicity::hashes::Hash as _;
-use simplex::simplicityhl::simplicity::jet::Elements;
 use simplex::simplicityhl::simplicity::jet::elements::ElementsEnv;
 use simplex::simplicityhl::tracker::TrackerLogLevel;
 use simplex::simplicityhl::{CompiledProgram, TemplateProgram};
@@ -29,8 +32,8 @@ pub const SIMPLE_STORAGE_SOURCE: &str = include_str!("source_simf/simple_storage
 /// Panics if the embedded source fails to compile (should never happen).
 #[must_use]
 pub fn get_storage_template_program() -> TemplateProgram {
-    TemplateProgram::new(SIMPLE_STORAGE_SOURCE)
-        .expect("INTERNAL: expected to compile successfully.")
+    TemplateProgram::new(SIMPLE_STORAGE_SOURCE, Box::new(ElementsJetHinter))
+        .expect("embedded source should compile")
 }
 
 /// Derive P2TR address for a storage contract.
@@ -59,9 +62,7 @@ fn get_storage_program(args: &StorageArguments) -> Result<CompiledProgram, Progr
 /// Panics if program instantiation fails.
 #[must_use]
 pub fn get_storage_compiled_program(args: &StorageArguments) -> CompiledProgram {
-    let program = get_storage_template_program();
-
-    program
+    get_storage_template_program()
         .instantiate(build_storage_arguments(args), true)
         .unwrap()
 }
@@ -76,7 +77,7 @@ pub fn execute_storage_program(
     compiled_program: &CompiledProgram,
     env: &ElementsEnv<Arc<Transaction>>,
     log_level: TrackerLogLevel,
-) -> Result<Arc<RedeemNode<Elements>>, ProgramError> {
+) -> Result<Arc<RedeemNode>, ProgramError> {
     let sighash_all =
         secp256k1::Message::from_digest(*env.c_tx_env().sighash_all().as_byte_array());
 

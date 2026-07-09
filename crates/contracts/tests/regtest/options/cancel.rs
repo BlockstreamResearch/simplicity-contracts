@@ -1,95 +1,64 @@
-use crate::common::filters::{
-    assert_has_utxo_by_asset_and_amount, require_utxo_by_asset_and_amount,
-};
+use crate::common::filters::{assert_covenant_utxo, assert_has_utxo_by_asset_and_amount};
 use crate::common::signer::{ensure_exact_signer_utxo, finalize_and_broadcast, get_lbtc_utxo};
-use crate::program_builder::options::{create_options, fund_options, prepare_options};
+use crate::program_builder::options::{
+    CONTRACT_COUNT, TOTAL_COLLATERAL_AMOUNT, options_program_input, require_locked_collateral,
+    setup_funded_options,
+};
 
-use contracts::programs::options::{Options, OptionsBranch};
+use contracts::programs::options::OptionsBranch;
 use contracts::programs::program::SimplexProgram;
 
 use simplex::simplicityhl::elements::Script;
-use simplex::transaction::{
-    FinalTransaction, PartialInput, PartialOutput, ProgramInput, RequiredSignature,
-};
+use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
 
 #[simplex::test]
 fn cancel_options(context: simplex::TestContext) -> anyhow::Result<()> {
     let provider = context.get_default_provider();
     let signer = context.get_default_signer();
 
-    let total_collateral_amount = 1_000_u64;
-    let expected_settlement_amount = 500_u64;
-    let contract_count = 10_u64;
+    let funded = setup_funded_options(&context, -100, 1_000)?;
+    let parameters = &funded.options.parameters;
 
-    let prepared = prepare_options(
-        &context,
-        total_collateral_amount,
-        expected_settlement_amount,
-        contract_count,
-        -100,
-        1_000,
-    )?;
-    let created = create_options(&context, prepared)?;
-    let funded = fund_options(&context, created, total_collateral_amount, contract_count)?;
-
-    let option_token_input = ensure_exact_signer_utxo(
-        &context,
-        funded.options.parameters.option_token_asset,
-        contract_count,
-    )?;
-    let grantor_token_input = ensure_exact_signer_utxo(
-        &context,
-        funded.options.parameters.grantor_token_asset,
-        contract_count,
-    )?;
-
-    let program_utxos = provider.fetch_scripthash_utxos(&funded.options.get_script_pubkey())?;
-    let locked_collateral = require_utxo_by_asset_and_amount(
-        &program_utxos,
-        funded.options.parameters.collateral_asset_id,
-        total_collateral_amount,
-        "missing locked collateral covenant utxo",
-    )?;
+    let option_token_input =
+        ensure_exact_signer_utxo(&context, parameters.option_token_asset, CONTRACT_COUNT)?;
+    let grantor_token_input =
+        ensure_exact_signer_utxo(&context, parameters.grantor_token_asset, CONTRACT_COUNT)?;
+    let locked_collateral = require_locked_collateral(&context, &funded)?;
 
     let mut ft = FinalTransaction::new();
     ft.add_program_input(
         PartialInput::new(locked_collateral),
-        ProgramInput::new(
-            Box::new(funded.options.get_program().clone()),
-            Box::new(Options::get_witness(OptionsBranch::Cancel {
+        options_program_input(
+            &funded.options,
+            OptionsBranch::Cancel {
                 is_change_needed: false,
-                amount_to_burn: contract_count,
-                collateral_amount: total_collateral_amount,
-            })),
+                amount_to_burn: CONTRACT_COUNT,
+                collateral_amount: TOTAL_COLLATERAL_AMOUNT,
+            },
         ),
         RequiredSignature::None,
     );
-    ft.add_input(
-        PartialInput::new(option_token_input),
-        RequiredSignature::NativeEcdsa,
-    );
-    ft.add_input(
-        PartialInput::new(grantor_token_input),
-        RequiredSignature::NativeEcdsa,
-    );
-    ft.add_input(
-        PartialInput::new(get_lbtc_utxo(&context)?),
-        RequiredSignature::NativeEcdsa,
-    );
+    for input in [
+        option_token_input,
+        grantor_token_input,
+        get_lbtc_utxo(&context)?,
+    ] {
+        ft.add_input(PartialInput::new(input), RequiredSignature::NativeEcdsa);
+    }
     ft.add_output(PartialOutput::new(
         Script::new_op_return(b"burn"),
-        contract_count,
-        funded.options.parameters.option_token_asset,
+        CONTRACT_COUNT,
+        parameters.option_token_asset,
     ));
     ft.add_output(PartialOutput::new(
         Script::new_op_return(b"burn"),
-        contract_count,
-        funded.options.parameters.grantor_token_asset,
+        CONTRACT_COUNT,
+        parameters.grantor_token_asset,
     ));
     ft.add_output(PartialOutput::new(
         signer.get_address().script_pubkey(),
-        total_collateral_amount,
-        funded.options.parameters.collateral_asset_id,
+        TOTAL_COLLATERAL_AMOUNT,
+        parameters.collateral_asset_id,
     ));
 
     let cancel_txid = finalize_and_broadcast(&context, &ft)?;
@@ -105,18 +74,18 @@ fn cancel_options(context: simplex::TestContext) -> anyhow::Result<()> {
     );
     assert_eq!(
         transaction.output[2].asset.explicit(),
-        Some(funded.options.parameters.collateral_asset_id)
+        Some(parameters.collateral_asset_id)
     );
     assert_eq!(
         transaction.output[2].value.explicit(),
-        Some(total_collateral_amount)
+        Some(TOTAL_COLLATERAL_AMOUNT)
     );
 
     let signer_utxos = signer.get_utxos_txid(cancel_txid)?;
     assert_has_utxo_by_asset_and_amount(
         &signer_utxos,
-        funded.options.parameters.collateral_asset_id,
-        total_collateral_amount,
+        parameters.collateral_asset_id,
+        TOTAL_COLLATERAL_AMOUNT,
     );
 
     Ok(())
@@ -126,87 +95,64 @@ fn cancel_options(context: simplex::TestContext) -> anyhow::Result<()> {
 fn cancel_options_with_change(context: simplex::TestContext) -> anyhow::Result<()> {
     let provider = context.get_default_provider();
 
-    let total_collateral_amount = 1_000_u64;
-    let expected_settlement_amount = 500_u64;
-    let contract_count = 10_u64;
     let cancelled_contract_count = 6_u64;
     let returned_collateral_amount = 600_u64;
-    let remaining_collateral_amount = total_collateral_amount - returned_collateral_amount;
+    let remaining_collateral_amount = TOTAL_COLLATERAL_AMOUNT - returned_collateral_amount;
 
-    let prepared = prepare_options(
-        &context,
-        total_collateral_amount,
-        expected_settlement_amount,
-        contract_count,
-        -100,
-        1_000,
-    )?;
-    let created = create_options(&context, prepared)?;
-    let funded = fund_options(&context, created, total_collateral_amount, contract_count)?;
+    let funded = setup_funded_options(&context, -100, 1_000)?;
+    let parameters = &funded.options.parameters;
 
     let option_token_input = ensure_exact_signer_utxo(
         &context,
-        funded.options.parameters.option_token_asset,
+        parameters.option_token_asset,
         cancelled_contract_count,
     )?;
     let grantor_token_input = ensure_exact_signer_utxo(
         &context,
-        funded.options.parameters.grantor_token_asset,
+        parameters.grantor_token_asset,
         cancelled_contract_count,
     )?;
-
-    let program_utxos = provider.fetch_scripthash_utxos(&funded.options.get_script_pubkey())?;
-    let locked_collateral = require_utxo_by_asset_and_amount(
-        &program_utxos,
-        funded.options.parameters.collateral_asset_id,
-        total_collateral_amount,
-        "missing locked collateral covenant utxo",
-    )?;
+    let locked_collateral = require_locked_collateral(&context, &funded)?;
 
     let mut ft = FinalTransaction::new();
     ft.add_program_input(
         PartialInput::new(locked_collateral),
-        ProgramInput::new(
-            Box::new(funded.options.get_program().clone()),
-            Box::new(Options::get_witness(OptionsBranch::Cancel {
+        options_program_input(
+            &funded.options,
+            OptionsBranch::Cancel {
                 is_change_needed: true,
                 amount_to_burn: cancelled_contract_count,
                 collateral_amount: returned_collateral_amount,
-            })),
+            },
         ),
         RequiredSignature::None,
     );
-    ft.add_input(
-        PartialInput::new(option_token_input),
-        RequiredSignature::NativeEcdsa,
-    );
-    ft.add_input(
-        PartialInput::new(grantor_token_input),
-        RequiredSignature::NativeEcdsa,
-    );
-    ft.add_input(
-        PartialInput::new(get_lbtc_utxo(&context)?),
-        RequiredSignature::NativeEcdsa,
-    );
+    for input in [
+        option_token_input,
+        grantor_token_input,
+        get_lbtc_utxo(&context)?,
+    ] {
+        ft.add_input(PartialInput::new(input), RequiredSignature::NativeEcdsa);
+    }
     ft.add_output(PartialOutput::new(
         funded.options.get_script_pubkey(),
         remaining_collateral_amount,
-        funded.options.parameters.collateral_asset_id,
+        parameters.collateral_asset_id,
     ));
     ft.add_output(PartialOutput::new(
         Script::new_op_return(b"burn"),
         cancelled_contract_count,
-        funded.options.parameters.option_token_asset,
+        parameters.option_token_asset,
     ));
     ft.add_output(PartialOutput::new(
         Script::new_op_return(b"burn"),
         cancelled_contract_count,
-        funded.options.parameters.grantor_token_asset,
+        parameters.grantor_token_asset,
     ));
     ft.add_output(PartialOutput::new(
         context.get_default_signer().get_address().script_pubkey(),
         returned_collateral_amount,
-        funded.options.parameters.collateral_asset_id,
+        parameters.collateral_asset_id,
     ));
 
     let cancel_txid = finalize_and_broadcast(&context, &ft)?;
@@ -233,13 +179,12 @@ fn cancel_options_with_change(context: simplex::TestContext) -> anyhow::Result<(
         Some(returned_collateral_amount)
     );
 
-    let covenant_utxos_after_cancel =
-        provider.fetch_scripthash_utxos(&funded.options.get_script_pubkey())?;
-    assert_has_utxo_by_asset_and_amount(
-        &covenant_utxos_after_cancel,
-        funded.options.parameters.collateral_asset_id,
+    assert_covenant_utxo(
+        &context,
+        &funded.options.get_script_pubkey(),
+        parameters.collateral_asset_id,
         remaining_collateral_amount,
-    );
+    )?;
 
     Ok(())
 }
