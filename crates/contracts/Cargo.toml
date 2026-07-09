@@ -21,9 +21,6 @@ workspace = true
 [dependencies]
 thiserror = "2"
 
-serde = { workspace = true }
-serde_json = { workspace = true }
-
 smplx-std = { workspace = true }
 
 lwk_common = { workspace = true }

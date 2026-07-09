@@ -1,15 +1,15 @@
+//! Stores 32 bytes of state as a hidden taproot leaf next to the program
+//! leaf; spending reveals the old state and commits to the new one.
 use std::sync::Arc;
 
 use crate::error::ProgramError;
 use crate::runner::run_program;
-use crate::scripts::{simplicity_leaf_version, tap_data_hash};
+use crate::scripts::{state_taproot_spend_info, tap_data_hash};
 
+use simplex::simplicityhl::ast::ElementsJetHinter;
 use simplex::simplicityhl::simplicity::bitcoin::secp256k1;
-use simplex::simplicityhl::simplicity::elements::taproot::{
-    LeafVersion, TaprootBuilder, TaprootSpendInfo,
-};
-use simplex::simplicityhl::simplicity::elements::{Script, Transaction};
-use simplex::simplicityhl::simplicity::jet::Elements;
+use simplex::simplicityhl::simplicity::elements::Transaction;
+use simplex::simplicityhl::simplicity::elements::taproot::TaprootSpendInfo;
 use simplex::simplicityhl::simplicity::jet::elements::ElementsEnv;
 use simplex::simplicityhl::simplicity::{Cmr, RedeemNode};
 use simplex::simplicityhl::tracker::TrackerLogLevel;
@@ -24,12 +24,11 @@ pub const BYTES32_TR_STORAGE_SOURCE: &str = include_str!("source_simf/bytes32_tr
 /// Get the storage template program for instantiation.
 ///
 /// # Panics
-///
 /// Panics if the embedded source fails to compile (should never happen).
 #[must_use]
 pub fn get_bytes32_tr_template_program() -> TemplateProgram {
-    TemplateProgram::new(BYTES32_TR_STORAGE_SOURCE)
-        .expect("INTERNAL: expected to compile successfully.")
+    TemplateProgram::new(BYTES32_TR_STORAGE_SOURCE, Box::new(ElementsJetHinter))
+        .expect("embedded source should compile")
 }
 
 /// Get compiled storage program, panicking on failure.
@@ -38,9 +37,7 @@ pub fn get_bytes32_tr_template_program() -> TemplateProgram {
 /// Panics if program instantiation fails.
 #[must_use]
 pub fn get_bytes32_tr_compiled_program() -> CompiledProgram {
-    let program = get_bytes32_tr_template_program();
-
-    program
+    get_bytes32_tr_template_program()
         .instantiate(simplex::simplicityhl::Arguments::default(), true)
         .unwrap()
 }
@@ -54,64 +51,23 @@ pub fn execute_bytes32_tr_program(
     compiled_program: &CompiledProgram,
     env: &ElementsEnv<Arc<Transaction>>,
     log_level: TrackerLogLevel,
-) -> Result<Arc<RedeemNode<Elements>>, ProgramError> {
+) -> Result<Arc<RedeemNode>, ProgramError> {
     let witness_values = build_bytes32_tr_witness(state);
     Ok(run_program(compiled_program, witness_values, env, log_level)?.0)
 }
 
-/// The unspendable internal key specified in BIP-0341.
+/// Compute the [`TaprootSpendInfo`] for a tap tree committing to the program
+/// CMR and the `TapData`-tagged hash of the 32-byte state.
 ///
 /// # Panics
-///
-/// This function **panics** if the hard-coded 32-byte slice is not a valid
-/// x-only public key. The panic originates from
-/// `secp256k1::XOnlyPublicKey::from_slice(...).expect(...)`.
-/// The unspendable internal key specified in BIP-0341.
-#[rustfmt::skip] // mangles byte vectors
-#[must_use] 
-pub fn unspendable_internal_key() -> secp256k1::XOnlyPublicKey {
-	secp256k1::XOnlyPublicKey::from_slice(&[
-		0x50, 0x92, 0x9b, 0x74, 0xc1, 0xa0, 0x49, 0x54, 0xb7, 0x8b, 0x4b, 0x60, 0x35, 0xe9, 0x7a, 0x5e,
-		0x07, 0x8a, 0x5a, 0x0f, 0x28, 0xec, 0x96, 0xd5, 0x47, 0xbf, 0xee, 0x9a, 0xce, 0x80, 0x3a, 0xc0, 
-	])
-	.expect("key should be valid")
-}
-
-fn script_ver(cmr: Cmr) -> (Script, LeafVersion) {
-    (
-        Script::from(cmr.as_ref().to_vec()),
-        simplicity_leaf_version(),
-    )
-}
-
-/// Given a Simplicity CMR and an internal key, computes the [`TaprootSpendInfo`]
-/// for a Taptree with this CMR as its single leaf.
-///
-/// # Panics
-///
-/// This function **panics** if building the taproot tree fails (the calls to
-/// `TaprootBuilder::add_leaf_with_ver` or `.add_hidden` return `Err`) or if
-/// finalizing the builder fails. Those panics come from the `.expect(...)`
-/// calls on the builder methods.
+/// Panics if the tap tree cannot be built (never happens for a valid CMR).
 #[must_use]
 pub fn taproot_spend_info(
     internal_key: secp256k1::XOnlyPublicKey,
     state: [u8; 32],
     cmr: Cmr,
 ) -> TaprootSpendInfo {
-    let (script, version) = script_ver(cmr);
-    let state_hash = tap_data_hash(&state);
-
-    // Build taproot tree with hidden leaf
-    let builder = TaprootBuilder::new()
-        .add_leaf_with_ver(1, script, version)
-        .expect("tap tree should be valid")
-        .add_hidden(1, state_hash)
-        .expect("tap tree should be valid");
-
-    builder
-        .finalize(secp256k1::SECP256K1, internal_key)
-        .expect("tap tree should be valid")
+    state_taproot_spend_info(internal_key, tap_data_hash(&state), cmr)
 }
 
 #[cfg(test)]
@@ -119,6 +75,8 @@ mod bytes32_tr_tests {
     use super::*;
     use anyhow::Result;
     use std::sync::Arc;
+
+    use crate::scripts::{script_ver, unspendable_internal_key};
 
     use simplex::simplicityhl::elements::confidential::{Asset, Value};
     use simplex::simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
@@ -131,8 +89,7 @@ mod bytes32_tr_tests {
     fn test_bytes32_tr_mint_path() -> Result<()> {
         let old_state: [u8; 32] = [0u8; 32];
 
-        // Calculate new_state
-        // NOTE: Our example can be done with the line new_state[31] = 1
+        // Increment the last qword of the state by one.
         let mut new_state = old_state;
         let mut val = u64::from_be_bytes(new_state[24..].try_into().unwrap());
         val += 1;
@@ -147,7 +104,6 @@ mod bytes32_tr_tests {
         let new_spend_info = taproot_spend_info(unspendable_internal_key(), new_state, cmr);
         let new_script_pubkey = Script::new_v1_p2tr_tweaked(new_spend_info.output_key());
 
-        // Build transaction
         let mut pst = PartiallySignedTransaction::new_v2();
         let outpoint0 = OutPoint::new(Txid::from_slice(&[0; 32])?, 0);
         pst.add_input(Input::from_prevout(outpoint0));
@@ -162,7 +118,6 @@ mod bytes32_tr_tests {
             .control_block(&script_ver(cmr))
             .expect("Must retrieve control block for the script path");
 
-        // Set up environment
         let env = ElementsEnv::new(
             Arc::new(pst.extract_tx()?),
             vec![
@@ -174,7 +129,7 @@ mod bytes32_tr_tests {
             ],
             0,
             cmr,
-            ControlBlock::from_slice(&control_block.serialize())?, // Real control block
+            ControlBlock::from_slice(&control_block.serialize())?,
             None,
             elements::BlockHash::all_zeros(),
         );

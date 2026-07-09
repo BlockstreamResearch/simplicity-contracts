@@ -1,14 +1,24 @@
 # Simplicity Contracts
 
 This crate is a collection of contracts showcasing core possibilities of [Elements](https://docs.rs/elements)
-and [Simplicity HL](https://github.com/BlockstreamResearch/simfony).
+and [SimplicityHL](https://github.com/BlockstreamResearch/simfony).
+
+The generated [`src/artifacts`](src/artifacts) module is compiled from the
+SimplicityHL sources in [`simf/`](simf) and checked in; rerun `simplex build`
+in this directory after changing a `.simf` source (see
+[CONTRIBUTING.md](../../CONTRIBUTING.md) for setup).
 
 Current contract modules in this crate:
 
-- State management:
-    - [Simple Storage](src/state_management/simple_storage)
-    - [Bytes32 Taproot Storage](src/state_management/bytes32_tr_storage)
-    - [Array Taproot Storage](src/state_management/array_tr_storage)
+- Finance (Rust wrappers in [`src/programs`](src/programs), sources in [`simf/`](simf)):
+  - [Options](src/programs/options.rs)
+  - [Options Offer](src/programs/option_offer.rs)
+
+- State management (each behind a feature flag, enabled by default; sources
+  embedded from each module's `source_simf/` directory):
+  - [Simple Storage](src/state_management/simple_storage) — `simple-storage`
+  - [Bytes32 Taproot Storage](src/state_management/bytes32_tr_storage) — `bytes32-tr-storage`
+  - [Array Taproot Storage](src/state_management/array_tr_storage) — `array-tr-storage`
 
 > [!NOTE]
 > Sparse Merkle Tree Storage was removed from the crate. The implementation
@@ -19,9 +29,10 @@ Current contract modules in this crate:
 > For more details, see
 > [PR #72](https://github.com/BlockstreamResearch/simplicity-contracts/pull/72).
 
-- Finance:
-  - [Options](src/programs/options.rs)
-  - [Options Offer](src/programs/option_offer.rs)
+## Testing
+
+Unit tests run with `cargo test --lib`. The scenarios in [`tests/`](tests)
+require a local regtest environment and are driven by `simplex test`.
 
 ## License
 

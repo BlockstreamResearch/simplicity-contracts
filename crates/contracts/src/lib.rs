@@ -1,5 +1,11 @@
+//! Reference Simplicity contract templates and helpers for Elements/Liquid.
+//!
+//! - [`programs`]: finance contracts (options, option offer) built on the
+//!   Simplex program API, with sources generated into [`artifacts`].
+//! - [`state_management`]: standalone storage contract examples, each behind a
+//!   feature flag.
+//! - [`simplicityhl_core`]: shared compile/execute/taproot helpers.
 #![warn(clippy::all, clippy::pedantic)]
-extern crate core;
 #[rustfmt::skip]
 #[allow(clippy::all, clippy::pedantic, clippy::nursery, clippy::cargo)]
 pub mod artifacts;

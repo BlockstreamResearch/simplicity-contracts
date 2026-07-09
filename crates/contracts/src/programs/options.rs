@@ -1,3 +1,6 @@
+//! Covered-call options contract with five spending branches: `Fund`,
+//! `Exercise`, `Settlement`, `Expiry`, and `Cancel`.
+
 use simplex::either::{Left, Right};
 use simplex::program::Program;
 use simplex::provider::SimplicityNetwork;

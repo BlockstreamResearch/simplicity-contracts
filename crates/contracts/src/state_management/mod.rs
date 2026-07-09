@@ -1,3 +1,4 @@
+//! Standalone storage contract examples, each behind a feature flag.
 #[cfg(feature = "array-tr-storage")]
 pub mod array_tr_storage;
 #[cfg(feature = "bytes32-tr-storage")]

@@ -6,9 +6,14 @@
 
 use std::collections::HashMap;
 
-use crate::common::filters::{AmountFilter, filter_signer_utxos_by_asset_and_amount};
+use crate::common::filters::{
+    AmountFilter, filter_signer_utxos_by_asset_and_amount, require_covenant_utxo,
+};
 use crate::common::issuance::issue_asset;
-use crate::common::signer::{ensure_exact_signer_utxo, split_first_signer_utxo};
+use crate::common::signer::{
+    ensure_exact_signer_utxo, finalize_and_broadcast, get_lbtc_utxo, split_first_signer_utxo,
+};
+use crate::common::{locked_input, locktime_from, offset_timestamp};
 
 use anyhow::Context;
 use contracts::programs::options::{
@@ -27,9 +32,17 @@ use simplex::simplicityhl::elements::{
 };
 use simplex::simplicityhl::simplicity::hashes::Hash;
 use simplex::transaction::partial_input::IssuanceInput;
-use simplex::transaction::{PartialInput, PartialOutput, UTXO};
+use simplex::transaction::{
+    FinalTransaction, PartialInput, PartialOutput, ProgramInput, RequiredSignature, UTXO,
+};
+
 const OPTION_ISSUANCE_CONTRACT_HASH: [u8; 32] = [1; 32];
 const GRANTOR_ISSUANCE_CONTRACT_HASH: [u8; 32] = [2; 32];
+
+/// Standard options contract sizing shared by the regtest scenarios.
+pub const TOTAL_COLLATERAL_AMOUNT: u64 = 1_000;
+pub const EXPECTED_SETTLEMENT_AMOUNT: u64 = 500;
+pub const CONTRACT_COUNT: u64 = 10;
 
 pub struct PreparedOptionsState {
     pub options: Options,
@@ -540,6 +553,112 @@ pub fn fund_options(
     })
 }
 
+/// Prepare, create, and fund an options contract with the standard sizing
+/// ([`TOTAL_COLLATERAL_AMOUNT`], [`EXPECTED_SETTLEMENT_AMOUNT`],
+/// [`CONTRACT_COUNT`]).
+pub fn setup_funded_options(
+    context: &simplex::TestContext,
+    start_delta_timestamp: i32,
+    expiry_delta_timestamp: i32,
+) -> anyhow::Result<FundedOptionsState> {
+    let prepared = prepare_options(
+        context,
+        TOTAL_COLLATERAL_AMOUNT,
+        EXPECTED_SETTLEMENT_AMOUNT,
+        CONTRACT_COUNT,
+        start_delta_timestamp,
+        expiry_delta_timestamp,
+    )?;
+    let created = create_options(context, prepared)?;
+    fund_options(context, created, TOTAL_COLLATERAL_AMOUNT, CONTRACT_COUNT)
+}
+
+/// Build a covenant input spending `utxo` on the given options branch.
+#[must_use]
+pub fn options_program_input(options: &Options, branch: OptionsBranch) -> ProgramInput {
+    ProgramInput::new(
+        Box::new(options.get_program().clone()),
+        Box::new(Options::get_witness(branch)),
+    )
+}
+
+/// Fetch the covenant UTXO holding the full locked collateral.
+pub fn require_locked_collateral(
+    context: &simplex::TestContext,
+    funded: &FundedOptionsState,
+) -> anyhow::Result<UTXO> {
+    require_covenant_utxo(
+        context,
+        &funded.options.get_script_pubkey(),
+        funded.options.parameters.collateral_asset_id,
+        TOTAL_COLLATERAL_AMOUNT,
+        "missing locked collateral covenant utxo",
+    )
+}
+
+/// Exercise the full collateral of a contract funded via
+/// [`setup_funded_options`].
+///
+/// Burns all option tokens, locks the expected settlement amount in the
+/// covenant, and pays the collateral to the default signer.
+pub fn exercise_options_fully(
+    context: &simplex::TestContext,
+    funded: &FundedOptionsState,
+) -> anyhow::Result<Txid> {
+    let parameters = &funded.options.parameters;
+    let option_token_input =
+        ensure_exact_signer_utxo(context, parameters.option_token_asset, CONTRACT_COUNT)?;
+    let settlement_input = ensure_exact_signer_utxo(
+        context,
+        parameters.settlement_asset_id,
+        EXPECTED_SETTLEMENT_AMOUNT,
+    )?;
+    let locktime = locktime_from(parameters.start_time)?;
+    let locked_collateral = require_locked_collateral(context, funded)?;
+
+    let mut ft = FinalTransaction::new();
+    ft.add_program_input(
+        locked_input(locked_collateral, locktime),
+        options_program_input(
+            &funded.options,
+            OptionsBranch::Exercise {
+                is_change_needed: false,
+                amount_to_burn: CONTRACT_COUNT,
+                collateral_amount: TOTAL_COLLATERAL_AMOUNT,
+                settlement_amount: EXPECTED_SETTLEMENT_AMOUNT,
+            },
+        ),
+        RequiredSignature::None,
+    );
+    for input in [
+        option_token_input,
+        settlement_input,
+        get_lbtc_utxo(context)?,
+    ] {
+        ft.add_input(
+            locked_input(input, locktime),
+            RequiredSignature::NativeEcdsa,
+        );
+    }
+    ft.add_output(PartialOutput::new(
+        Script::new_op_return(b"burn"),
+        CONTRACT_COUNT,
+        parameters.option_token_asset,
+    ));
+    ft.add_output(PartialOutput::new(
+        funded.options.get_script_pubkey(),
+        EXPECTED_SETTLEMENT_AMOUNT,
+        parameters.settlement_asset_id,
+    ));
+    ft.add_output(PartialOutput::new(
+        signer_script(context),
+        TOTAL_COLLATERAL_AMOUNT,
+        parameters.collateral_asset_id,
+    ));
+
+    finalize_and_broadcast(context, &ft)
+}
+
 fn issuance_ids(
     issuance_outpoint: OutPoint,
     contract_hash_bytes: [u8; 32],
@@ -554,21 +673,6 @@ fn issuance_ids(
         AssetId::reissuance_token_from_entropy(issuance_entropy, false),
         issuance_entropy.to_byte_array(),
     )
-}
-
-fn offset_timestamp(tip_timestamp: u64, delta_timestamp: i32) -> anyhow::Result<u32> {
-    let tip_timestamp = u32::try_from(tip_timestamp)
-        .map_err(|_| anyhow::anyhow!("tip timestamp {tip_timestamp} exceeds u32 range"))?;
-
-    if delta_timestamp < 0 {
-        tip_timestamp
-            .checked_sub(delta_timestamp.unsigned_abs())
-            .ok_or_else(|| anyhow::anyhow!("timestamp underflow"))
-    } else {
-        tip_timestamp
-            .checked_add(delta_timestamp.unsigned_abs())
-            .ok_or_else(|| anyhow::anyhow!("timestamp overflow"))
-    }
 }
 
 fn signer_script(context: &simplex::TestContext) -> Script {
